@@ -27,11 +27,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onMobileClose={() => setMobileSidebarOpen(false)}
       />
       <div className="lg:ml-24">
-        <header className="sticky top-0 z-30 flex h-14 items-center border-b border-gray-100 bg-white px-4 lg:hidden">
+        <header className="sticky top-0 z-30 flex min-h-[56px] items-center border-b border-gray-200 bg-white px-4 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 active:bg-gray-100"
             aria-label="Open menu"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

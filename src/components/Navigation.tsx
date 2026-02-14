@@ -21,8 +21,8 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-3 left-3 right-3 z-50 flex items-center justify-around rounded-2xl border border-white/20 bg-white/80 py-2 shadow-lg backdrop-blur-lg lg:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 20px)" }}
+      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around rounded-t-2xl border-t border-white/20 bg-white/80 py-2 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-lg lg:hidden"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       role="navigation"
       aria-label="Main navigation"
     >
