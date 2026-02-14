@@ -11,7 +11,13 @@ Use GitHub Actions to build the APK in the cloud and download it.
    git commit -m "Initial commit"
    ```
 
-2. **Push to GitHub**:
+2. **Add GitHub Secrets** (required for Supabase):
+   - Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+   - Add these repository secrets:
+     - `SUPABASE_URL` — your Supabase project URL (e.g. `https://xxx.supabase.co`)
+     - `SUPABASE_ANON_KEY` — your Supabase anon/public key
+
+3. **Push to GitHub**:
    - Create a repo at [github.com/new](https://github.com/new)
    - Add remote and push:
    ```bash
@@ -20,7 +26,7 @@ Use GitHub Actions to build the APK in the cloud and download it.
    git push -u origin main
    ```
 
-3. **Build & download APK**:
+4. **Build & download APK**:
    - Go to your repo → **Actions** tab
    - The workflow runs automatically on push
    - Or click **Build APK** → **Run workflow** to run manually
