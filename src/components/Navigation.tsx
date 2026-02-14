@@ -47,15 +47,17 @@ export function BottomNav() {
   );
 }
 
-export function RailNav({ userInitials }: { userInitials?: string }) {
+interface RailNavProps {
+  userInitials?: string;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export function RailNav({ userInitials, mobileOpen = false, onMobileClose }: RailNavProps) {
   const pathname = usePathname();
 
-  return (
-    <aside
-      className="fixed left-4 top-4 z-40 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center rounded-2xl bg-white py-6 shadow-xl dark:bg-slate-900 lg:flex"
-      role="navigation"
-      aria-label="Side navigation"
-    >
+  const sidebarContent = (
+    <>
       {userInitials && (
         <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-600 dark:bg-primary-900 dark:text-primary-300">
           {userInitials}
@@ -68,6 +70,7 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
             <Link
               key={item.href}
               href={item.href + (item.href === "/dashboard" ? "/" : "/")}
+              onClick={onMobileClose}
               className={`flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 ${
                 active
                   ? "bg-gradient-to-r from-primary-500/15 to-primary-500/5 text-primary-600"
@@ -85,6 +88,7 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
       </div>
       <Link
         href="/logout/"
+        onClick={onMobileClose}
         className="mt-auto flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-gray-500"
         title="Log out"
       >
@@ -93,6 +97,29 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
         </span>
         <span className="text-xs font-medium">Log out</span>
       </Link>
-    </aside>
+    </>
+  );
+
+  const sidebarClass =
+    "fixed left-4 top-4 z-50 flex h-[calc(100vh-2rem)] w-20 flex-col items-center rounded-2xl bg-white py-6 shadow-xl dark:bg-slate-900";
+
+  return (
+    <>
+      {mobileOpen && (
+        <button
+          type="button"
+          onClick={onMobileClose}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          aria-label="Close menu"
+        />
+      )}
+      <aside
+        className={`${sidebarClass} ${mobileOpen ? "flex lg:hidden" : "hidden lg:flex"}`}
+        role="navigation"
+        aria-label="Side navigation"
+      >
+        {sidebarContent}
+      </aside>
+    </>
   );
 }
