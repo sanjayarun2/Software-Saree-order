@@ -3,16 +3,14 @@
 @tailwind utilities;
 
 :root {
-  /* Design system tokens */
-  --primary: 340 70% 60%;
+  --primary: 239 84% 67%;
   --primary-foreground: 0 0% 100%;
-  --bento-bg: #f8fafc;
+  --bento-bg: #f9fafb;
   --bento-card: #ffffff;
-  --bento-border: #e2e8f0;
-  --foreground: #0f172a;
-  --muted: #64748b;
-  --muted-foreground: #94a3b8;
-  --destructive: 0 84% 60%;
+  --bento-border: #f3f4f6;
+  --foreground: #111827;
+  --muted: #6b7280;
+  --muted-foreground: #9ca3af;
   --radius: 16px;
 }
 
@@ -42,20 +40,16 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
-/* Minimum touch target for accessibility */
-button,
-a[role="button"],
-input[type="submit"],
-input[type="button"],
+/* Minimum touch target for primary actions only (nav, submit buttons) */
 [data-touch-target] {
   min-height: 50px;
   min-width: 50px;
 }
 
-/* Bento card style */
+/* Bento card: white, subtle border, 16px corners */
 .bento-card {
   background: var(--bento-card);
-  border-radius: var(--radius);
+  border-radius: 16px;
   border: 1px solid var(--bento-border);
-  padding: 1rem;
+  padding: 1.25rem;
 }

@@ -9,6 +9,8 @@ interface BentoCardProps {
 
 export function BentoCard({ children, className = "" }: BentoCardProps) {
   return (
-    <div className={`bento-card rounded-bento ${className}`}>{children}</div>
+    <div className={`bento-card rounded-[16px] border border-gray-100 bg-white ${className}`}>
+      {children}
+    </div>
   );
 }

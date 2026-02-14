@@ -29,6 +29,7 @@ npm install
 
 1. Create a project at [supabase.com](https://supabase.com)
 2. In SQL Editor, run the contents of `supabase/schema.sql`
+   - For existing projects, also run `supabase/migrations/add_quantity.sql` to add the optional quantity column
 3. Copy `.env.example` to `.env.local` and add your Supabase URL and anon key:
 
 ```

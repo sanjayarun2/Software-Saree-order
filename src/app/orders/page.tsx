@@ -8,10 +8,20 @@ import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { OrderListSkeleton } from "@/components/ui/SkeletonLoader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash } from "@/components/ui/OrderIcons";
+import { downloadOrderPdf, downloadOrdersPdf } from "@/lib/pdf-utils";
+import { useSearch } from "@/lib/search-context";
+import { getCachedOrders, setCachedOrders } from "@/lib/orders-cache";
 import type { Order, OrderStatus } from "@/lib/db-types";
+
+function getAddressSummary(text: string, maxLen = 45): string {
+  const first = (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "";
+  return first.length > maxLen ? `${first.slice(0, maxLen)}…` : first;
+}
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
+  const { query } = useSearch();
   const router = useRouter();
   const [status, setStatus] = useState<OrderStatus>("PENDING");
   const [fromDate, setFromDate] = useState("");
@@ -27,8 +37,13 @@ export default function OrdersPage() {
 
   const fetchOrders = React.useCallback(async () => {
     if (!user) return;
-    setLoading(true);
     setError(null);
+    // Cache-first: load from cache immediately
+    const cached = getCachedOrders(user.id, status, fromDate, toDate, allOrders) as Order[] | null;
+    if (cached?.length !== undefined) {
+      setOrders(cached);
+    }
+    setLoading(true);
     try {
       const dateColumn = status === "PENDING" ? "booking_date" : "despatch_date";
       let query = supabase
@@ -46,14 +61,28 @@ export default function OrdersPage() {
 
       const { data, error: err } = await query;
       if (err) throw err;
-      setOrders((data as Order[]) ?? []);
+      const list = (data as Order[]) ?? [];
+      setOrders(list);
+      setCachedOrders(user.id, status, fromDate, toDate, allOrders, list);
     } catch (e) {
       setError((e as Error).message || "Failed to load orders");
-      setOrders([]);
+      if (!cached?.length) setOrders([]);
     } finally {
       setLoading(false);
     }
   }, [user, status, allOrders, fromDate, toDate]);
+
+  const filteredOrders = React.useMemo(() => {
+    // Ensure only orders matching current tab (PENDING/DISPATCHED) are shown
+    let list = orders.filter((o) => o.status === status);
+    if (!query.trim()) return list;
+    const q = query.trim().toLowerCase();
+    return list.filter(
+      (o) =>
+        (o.recipient_details || "").toLowerCase().includes(q) ||
+        (o.sender_details || "").toLowerCase().includes(q)
+    );
+  }, [orders, query, status]);
 
   useEffect(() => {
     if (user) fetchOrders();
@@ -132,14 +161,14 @@ export default function OrdersPage() {
                   status === "DESPATCHED" ? "bg-primary-500 text-white" : "bg-slate-100 dark:bg-slate-700"
                 }`}
               >
-                DESPATCHED
+                DISPATCHED
               </button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  {status === "PENDING" ? "Booking From date" : "Despatch From date"}
+                  {status === "PENDING" ? "Booking From date" : "Dispatch From date"}
                 </label>
                 <input
                   type="date"
@@ -150,7 +179,7 @@ export default function OrdersPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  {status === "PENDING" ? "Booking To date" : "Despatch To date"}
+                  {status === "PENDING" ? "Booking To date" : "Dispatch To date"}
                 </label>
                 <input
                   type="date"
@@ -190,68 +219,79 @@ export default function OrdersPage() {
           <OrderListSkeleton />
         ) : (
           <div className="space-y-4">
-            {orders.length === 0 ? (
+            {filteredOrders.length === 0 ? (
               <BentoCard>
-                <p className="text-center text-slate-500">No orders found.</p>
+                <p className="text-center text-slate-500">
+                  {orders.length === 0 ? "No orders found." : "No matching orders."}
+                </p>
               </BentoCard>
             ) : (
-              orders.map((order, i) => (
-                <BentoCard key={order.id} className="flex flex-wrap items-center justify-between gap-4">
+              filteredOrders.map((order, i) => (
+                <BentoCard key={order.id} className="flex items-center justify-between gap-4 py-4">
                   <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 font-medium text-primary-600 dark:bg-primary-900 dark:text-primary-300">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-primary-50 text-sm font-semibold text-primary-600">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium">
-                        Booking: {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                      <p className="truncate text-base font-medium text-gray-900">
+                        {getAddressSummary(order.recipient_details)}
                       </p>
-                      {order.status === "DESPATCHED" && order.despatch_date && (
-                        <p className="text-xs text-slate-500">
-                          Despatched: {new Date(order.despatch_date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })}
-                        </p>
-                      )}
-                      <p className="truncate text-sm text-slate-500">TO: {order.recipient_details}</p>
-                      <p className="truncate text-sm text-slate-500">FROM: {order.sender_details}</p>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        <span className="text-sm text-gray-500">
+                          {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
+                        </span>
+                        {(order.quantity != null && Number(order.quantity) >= 1) && (
+                          <span className="text-sm text-gray-600">
+                            Qty: {Number(order.quantity)}
+                          </span>
+                        )}
+                        {order.status === "DESPATCHED" && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            Dispatched
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex shrink-0 items-center gap-1">
                     <Link
                       href={`/edit-order/?id=${order.id}`}
-                      className="flex min-h-touch min-w-touch items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                      title="Edit order"
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-gray-100 text-gray-600 transition hover:bg-primary-100 hover:text-primary-600"
+                      title="Edit"
                     >
-                      ✏️
+                      <IconEdit className="h-5 w-5" />
                     </Link>
                     {order.status === "PENDING" && (
                       <button
                         onClick={() => handleMarkAsDespatched(order)}
-                        className="flex min-h-touch items-center gap-1 rounded-bento bg-green-100 px-3 py-2 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300"
-                        title="Mark as Despatched"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-600 transition hover:bg-emerald-200"
+                        title="Dispatch"
                       >
-                        Despatch
+                        <IconDispatch className="h-5 w-5" />
                       </button>
                     )}
                     {order.status === "DESPATCHED" && (
                       <button
                         onClick={() => handleMoveToPending(order)}
-                        className="flex min-h-touch items-center gap-1 rounded-bento bg-amber-100 px-3 py-2 text-sm font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-                        title="Move back to Pending (undo despatch)"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 text-amber-600 transition hover:bg-amber-200"
+                        title="Move to Pending"
                       >
-                        Move to Pending
+                        <IconUndo className="h-5 w-5" />
                       </button>
                     )}
                     <button
-                      className="flex min-h-touch min-w-touch items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-                      title="View PDF"
+                      onClick={() => downloadOrderPdf(order)}
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-gray-100 text-gray-600 transition hover:bg-gray-200"
+                      title="Download PDF"
                     >
-                      PDF
+                      <IconPdf className="h-5 w-5" />
                     </button>
                     <button
                       onClick={() => handleDelete(order.id)}
-                      className="flex min-h-touch min-w-touch items-center justify-center rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100"
                       title="Delete"
                     >
-                      🗑
+                      <IconTrash className="h-5 w-5" />
                     </button>
                   </div>
                 </BentoCard>
@@ -261,10 +301,12 @@ export default function OrdersPage() {
         )}
 
         <button
-          className="fixed bottom-24 right-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-500 text-white shadow-lg md:bottom-8 md:right-8"
-          title="Export PDF"
+          onClick={() => downloadOrdersPdf(filteredOrders)}
+          disabled={filteredOrders.length === 0}
+          className="fixed bottom-24 right-4 flex h-14 w-14 items-center justify-center rounded-[16px] bg-primary-500 text-white shadow-lg transition hover:bg-primary-600 disabled:opacity-50 md:bottom-8 md:right-8"
+          title="Download all as PDF"
         >
-          PDF
+          <IconPdf className="h-6 w-6" />
         </button>
       </div>
     </ErrorBoundary>

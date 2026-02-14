@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   courier_name TEXT NOT NULL DEFAULT 'Professional',
   booking_date DATE NOT NULL,
   despatch_date DATE,
+  quantity INTEGER,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'DESPATCHED')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

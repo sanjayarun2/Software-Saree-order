@@ -39,7 +39,7 @@ function SuggestionChips({
   );
 }
 
-export default function EditOrderPage() {
+function EditOrderContent() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,6 +50,7 @@ export default function EditOrderPage() {
   const [bookedBy, setBookedBy] = useState("");
   const [bookedMobile, setBookedMobile] = useState("");
   const [courier, setCourier] = useState("Professional");
+  const [quantity, setQuantity] = useState<number | "">("");
   const [bookingDate, setBookingDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
@@ -83,6 +84,7 @@ export default function EditOrderPage() {
         setBookedBy(o.booked_by ?? "");
         setBookedMobile(o.booked_mobile_no ?? "");
         setCourier(o.courier_name ?? "Professional");
+        setQuantity(o.quantity != null && o.quantity !== "" ? Number(o.quantity) || 1 : 1);
         setBookingDate(o.booking_date?.slice(0, 10) ?? "");
       });
   }, [user, orderId]);
@@ -131,6 +133,7 @@ export default function EditOrderPage() {
           booked_mobile_no: bookedMobile,
           courier_name: courier,
           booking_date: bookingDate,
+          quantity: quantity === "" ? null : Number(quantity),
           updated_at: new Date().toISOString(),
         })
         .eq("id", orderId)
@@ -221,10 +224,40 @@ export default function EditOrderPage() {
               <p className="text-right text-xs text-slate-500">{sender.length}/600</p>
             </div>
 
-            <details className="rounded-bento border p-4">
-              <summary className="cursor-pointer font-medium">Product Images</summary>
-              <p className="mt-2 text-sm text-slate-500">Add Product Images | View order Images (coming soon)</p>
-            </details>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Saree Qty (optional)</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => (q === "" ? 0 : Math.max(0, q - 1)))}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg border text-gray-600 hover:bg-gray-50"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  value={quantity}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setQuantity(v === "" ? "" : Math.max(0, parseInt(v, 10) || 0));
+                  }}
+                  className="h-10 w-16 rounded-lg border px-2 text-center [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => (q === "" ? 1 : q + 1))}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg border text-gray-600 hover:bg-gray-50"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-bento border border-gray-100 bg-gray-50 p-4">
+              <p className="text-sm font-medium text-gray-700">Product Images</p>
+              <p className="mt-1 text-sm text-gray-500">We&apos;re working on it. Coming soon.</p>
+            </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium">Booked By</label>
@@ -295,5 +328,13 @@ export default function EditOrderPage() {
         </BentoCard>
       </div>
     </ErrorBoundary>
+  );
+}
+
+export default function EditOrderPage() {
+  return (
+    <React.Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" /></div>}>
+      <EditOrderContent />
+    </React.Suspense>
   );
 }

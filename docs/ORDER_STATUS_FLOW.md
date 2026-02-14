@@ -5,30 +5,30 @@
 | Status | Meaning | despatch_date | User Action |
 |--------|---------|---------------|-------------|
 | **PENDING** | Order booked, not yet sent to courier | `null` | Order is in pipeline, awaiting packing/dispatch |
-| **DESPATCHED** | Order sent/shipped to courier | Set when dispatched | Order has left premises |
+| **DISPATCHED** | Order sent/shipped to courier | Set when dispatched (stored as despatch_date in DB) | Order has left premises |
 
 ## State Transition
 
 ```
 [Add New Order] → PENDING ←→ DESPATCHED
        ↓              ↑
-[Mark as Despatched]  |
+[Mark as Dispatched]  |
        ↓              |
    DESPATCHED ────────┘
 [Move to Pending] (undo)
 ```
 
-- **PENDING → DESPATCHED**: User clicks "Despatch". Sets `despatch_date = today`, `status = DESPATCHED`.
-- **DESPATCHED → PENDING**: User clicks "Move to Pending" (e.g. clicked Despatch by mistake). Sets `despatch_date = null`, `status = PENDING`.
+- **PENDING → DISPATCHED**: User clicks "Dispatch". Sets `despatch_date = today`, `status = DESPATCHED`.
+- **DISPATCHED → PENDING**: User clicks "Move to Pending" (e.g. clicked Dispatch by mistake). Sets `despatch_date = null`, `status = PENDING`.
 
 ## Filter Logic
 
 | Tab | Date Field Used | "All Orders" checked | "All Orders" unchecked |
 |-----|-----------------|----------------------|-------------------------|
 | **PENDING** | `booking_date` | All PENDING orders | PENDING where booking_date in [From, To] |
-| **DESPATCHED** | `despatch_date` | All DESPATCHED orders | DESPATCHED where despatch_date in [From, To] |
+| **DISPATCHED** | `despatch_date` | All DISPATCHED orders | DISPATCHED where despatch_date in [From, To] |
 
-- **Dynamic labels**: PENDING tab shows "Booking From date" / "Booking To date" (filters by `booking_date`). DESPATCHED tab shows "Despatch From date" / "Despatch To date" (filters by `despatch_date`).
+- **Dynamic labels**: PENDING tab shows "Booking From date" / "Booking To date" (filters by `booking_date`). DISPATCHED tab shows "Dispatch From date" / "Dispatch To date" (filters by `despatch_date`).
 
 ## Data Model
 

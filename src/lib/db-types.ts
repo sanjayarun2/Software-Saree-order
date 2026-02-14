@@ -10,6 +10,7 @@ export interface Order {
   booking_date: string;
   despatch_date: string | null;
   status: OrderStatus;
+  quantity?: number | null;
   created_at: string;
   updated_at: string;
   user_id: string;
@@ -24,4 +25,5 @@ export interface OrderInsert {
   booking_date: string;
   status: OrderStatus;
   user_id: string;
+  quantity?: number | null;
 }

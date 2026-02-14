@@ -5,11 +5,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
+  { href: "/dashboard", label: "Home", icon: "🏠" },
   { href: "/orders", label: "Orders", icon: "📋" },
   { href: "/add-order", label: "Add Order", icon: "➕" },
-  { href: "/reports", label: "Reports", icon: "📄" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
+];
+
+const NAV_ITEMS_DESKTOP = [
+  ...NAV_ITEMS,
+  { href: "/reports", label: "Reports", icon: "📄" },
 ];
 
 export function BottomNav() {
@@ -17,21 +21,21 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-900 md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-gray-100 bg-white py-3 md:hidden"
       role="navigation"
       aria-label="Main navigation"
     >
-      {NAV_ITEMS.slice(0, 4).map((item) => {
+      {NAV_ITEMS.map((item) => {
         const active = pathname === item.href || pathname?.startsWith(item.href + "/");
         return (
           <Link
             key={item.href}
-            href={item.href}
-            className={`flex min-h-touch min-w-touch flex-col items-center justify-center gap-0.5 rounded-bento px-3 py-2 ${
-              active ? "text-primary-500" : "text-slate-500"
+            href={item.href + "/"}
+            className={`flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-[16px] px-3 py-2 ${
+              active ? "text-primary-500" : "text-gray-500"
             }`}
           >
-            <span className="text-xl" aria-hidden>
+            <span className="text-2xl" aria-hidden>
               {item.icon}
             </span>
             <span className="text-xs font-medium">{item.label}</span>
@@ -57,14 +61,14 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
         </div>
       )}
       <div className="flex flex-1 flex-col gap-2">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS_DESKTOP.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
-              href={item.href}
-              className={`flex min-h-touch min-w-touch flex-col items-center justify-center gap-0.5 rounded-bento px-2 py-2 ${
-                active ? "text-primary-500" : "text-slate-500"
+              href={item.href + (item.href === "/dashboard" ? "/" : "/")}
+              className={`flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 ${
+                active ? "text-primary-500" : "text-gray-500"
               }`}
               title={item.label}
             >
@@ -77,8 +81,8 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
         })}
       </div>
       <Link
-        href="/logout"
-        className="mt-auto flex min-h-touch min-w-touch flex-col items-center justify-center gap-0.5 rounded-bento px-2 py-2 text-slate-500"
+        href="/logout/"
+        className="mt-auto flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 text-gray-500"
         title="Log out"
       >
         <span className="text-2xl" aria-hidden>

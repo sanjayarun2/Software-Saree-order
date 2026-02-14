@@ -6,51 +6,29 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
+import { AutocompleteTextarea } from "@/components/ui/AutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useToast } from "@/lib/toast-context";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
 import type { OrderInsert, Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
 
-function SuggestionChips({
-  items,
-  onSelect,
-  label,
-}: {
-  items: string[];
-  onSelect: (v: string) => void;
-  label: string;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div className="mt-1 flex flex-wrap gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      {items.map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => onSelect(item)}
-          className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700 hover:bg-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:hover:bg-primary-800/50"
-        >
-          {item.length > 40 ? `${item.slice(0, 40)}…` : item}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function AddOrderPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [recipient, setRecipient] = useState("");
   const [sender, setSender] = useState("");
   const [bookedBy, setBookedBy] = useState("");
   const [bookedMobile, setBookedMobile] = useState("");
   const [courier, setCourier] = useState("Professional");
+  const [quantity, setQuantity] = useState<number | "">(1);
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<OrderSuggestions | null>(null);
+  const defaultSenderSet = React.useRef(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login/");
@@ -65,7 +43,14 @@ export default function AddOrderPage() {
       .order("created_at", { ascending: false })
       .limit(100)
       .then(({ data }) => {
-        if (data) setSuggestions(buildSuggestionsFromOrders(data as Order[]));
+        if (data) {
+          const s = buildSuggestionsFromOrders(data as Order[]);
+          setSuggestions(s);
+          if (!defaultSenderSet.current && s.senders.length > 0) {
+            defaultSenderSet.current = true;
+            setSender(s.senders[0]);
+          }
+        }
       });
   }, [user]);
 
@@ -80,7 +65,9 @@ export default function AddOrderPage() {
     if (!suggestions) return [];
     const trimmed = recipient.trim();
     if (trimmed && suggestions.recipientSenderPairs.has(trimmed)) {
-      return suggestions.recipientSenderPairs.get(trimmed) ?? suggestions.senders;
+      const paired = suggestions.recipientSenderPairs.get(trimmed) ?? [];
+      const rest = suggestions.senders.filter((s) => !paired.includes(s));
+      return [...paired, ...rest];
     }
     return suggestions.senders;
   }, [suggestions, recipient]);
@@ -100,9 +87,11 @@ export default function AddOrderPage() {
         booking_date: bookingDate,
         status: "PENDING",
         user_id: user.id,
+        quantity: quantity === "" ? 1 : Number(quantity),
       };
       const { error: err } = await supabase.from("orders").insert(insert);
       if (err) throw err;
+      toast("Order saved");
       router.replace("/orders/");
     } catch (e) {
       setError((e as Error).message || "Save failed");
@@ -113,84 +102,123 @@ export default function AddOrderPage() {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      <div className="mx-auto max-w-2xl space-y-8 p-6 md:p-8">
+        <div className="h-8 w-64 animate-pulse rounded-[16px] bg-gray-200" />
+        <div className="space-y-6 rounded-[16px] border border-gray-100 bg-white p-8">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="space-y-2">
+              <div className="h-5 w-32 animate-pulse rounded bg-gray-200" />
+              <div className="h-14 w-full animate-pulse rounded-[16px] bg-gray-100" />
+            </div>
+          ))}
+          <div className="h-14 w-full animate-pulse rounded-[16px] bg-gray-200" />
+        </div>
       </div>
     );
   }
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-6">
+      <div className="mx-auto max-w-2xl space-y-8 p-6 md:p-8">
         <div className="flex items-center gap-4">
-          <Link href="/orders/" className="min-h-touch min-w-touch flex items-center justify-center">
-            ←
+          <Link
+            href="/orders/"
+            className="flex min-h-[50px] min-w-[50px] items-center justify-center rounded-[16px] text-gray-600"
+            aria-label="Back to Orders"
+          >
+            ← Back
           </Link>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
             Add New Order
           </h1>
         </div>
 
-        <BentoCard>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <BentoCard className="p-6 md:p-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+              <p className="rounded-[16px] border border-red-100 bg-red-50 p-4 text-base text-red-700">
                 {error}
               </p>
             )}
 
             <div>
-              <label className="mb-1 block text-sm font-medium">TO (Recipient)</label>
-              <SuggestionChips
-                items={suggestions?.recipients ?? []}
-                label="Recent:"
-                onSelect={setRecipient}
-              />
-              <textarea
+              <label className="mb-2 block text-base font-medium text-gray-900">TO (Recipient)</label>
+              <AutocompleteTextarea
                 value={recipient}
-                onChange={(e) => setRecipient(e.target.value.slice(0, 600))}
+                onChange={setRecipient}
+                suggestions={suggestions?.recipients ?? []}
+                placeholder="Start typing for suggestions from past orders"
                 maxLength={600}
                 rows={3}
-                placeholder="Recipient address and details"
-                className="mt-1 w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
-                required
+                className="min-h-[50px] w-full rounded-[16px] border border-gray-100 bg-white px-4 py-3 text-base text-gray-900"
+                id="recipient"
               />
-              <p className="text-right text-xs text-slate-500">{recipient.length}/600</p>
+              <p className="mt-1 text-right text-sm text-gray-500">{recipient.length}/600</p>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">FROM (Sender)</label>
-              <SuggestionChips
-                items={senderSuggestions}
-                label={recipient.trim() ? "Used with this recipient:" : "Recent:"}
-                onSelect={setSender}
-              />
-              <textarea
+              <label className="mb-2 block text-base font-medium text-gray-900">FROM (Sender)</label>
+              <AutocompleteTextarea
                 value={sender}
-                onChange={(e) => setSender(e.target.value.slice(0, 600))}
+                onChange={setSender}
+                suggestions={senderSuggestions}
+                placeholder="Start typing for suggestions from past orders"
                 maxLength={600}
                 rows={3}
-                placeholder="Sender address and details"
-                className="mt-1 w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
-                required
+                className="min-h-[50px] w-full rounded-[16px] border border-gray-100 bg-white px-4 py-3 text-base text-gray-900"
+                id="sender"
               />
-              <p className="text-right text-xs text-slate-500">{sender.length}/600</p>
+              <p className="mt-1 text-right text-sm text-gray-500">{sender.length}/600</p>
             </div>
 
-            <details className="rounded-bento border p-4">
-              <summary className="cursor-pointer font-medium">Product Images</summary>
-              <p className="mt-2 text-sm text-slate-500">Add Product Images | View order Images (coming soon)</p>
-            </details>
+            <div>
+              <label className="mb-2 block text-base font-medium text-gray-900">Product Details</label>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Saree Qty</label>
+                <div className="flex items-center rounded-[16px] border border-gray-100 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => (q === "" ? 0 : Math.max(0, q - 1)))}
+                    className="flex h-10 w-10 items-center justify-center text-gray-600 hover:bg-gray-50"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    value={quantity}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setQuantity(v === "" ? "" : Math.max(0, parseInt(v, 10) || 0));
+                    }}
+                    className="h-10 w-16 border-0 text-center text-base [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => (q === "" ? 1 : q + 1))}
+                    className="flex h-10 w-10 items-center justify-center text-gray-600 hover:bg-gray-50"
+                  >
+                    +
+                  </button>
+                </div>
+                <span className="text-sm text-gray-500">(optional)</span>
+              </div>
+            </div>
+
+            <div className="rounded-[16px] border border-gray-100 bg-gray-50 p-4">
+              <p className="text-sm font-medium text-gray-700">Product Images</p>
+              <p className="mt-1 text-sm text-gray-500">We&apos;re working on it. Coming soon.</p>
+            </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Booked By</label>
+              <label className="mb-2 block text-base font-medium text-gray-900">Booked By</label>
               <input
                 type="text"
                 list="booked-by-list"
                 value={bookedBy}
                 onChange={(e) => setBookedBy(e.target.value)}
                 placeholder="Name (tap for suggestions)"
-                className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                className="min-h-[50px] w-full rounded-[16px] border border-gray-100 bg-white px-4 py-3 text-base text-gray-900"
               />
               <datalist id="booked-by-list">
                 {(suggestions?.bookedBy ?? []).map((b) => (
@@ -200,14 +228,14 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Booked Mobile No</label>
+              <label className="mb-2 block text-base font-medium text-gray-900">Booked Mobile No</label>
               <input
                 type="tel"
                 list="mobile-list"
                 value={bookedMobile}
                 onChange={(e) => setBookedMobile(e.target.value)}
                 placeholder="Mobile number (tap for suggestions)"
-                className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                className="min-h-[50px] w-full rounded-[16px] border border-gray-100 bg-white px-4 py-3 text-base text-gray-900"
               />
               <datalist id="mobile-list">
                 {(suggestions?.bookedMobile ?? []).map((m) => (
@@ -217,35 +245,35 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Courier Name</label>
+              <label className="mb-2 block text-base font-medium text-gray-900">Courier Name</label>
               <select
                 value={courier}
                 onChange={(e) => setCourier(e.target.value)}
-                className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                className="min-h-[50px] w-full rounded-[16px] border border-gray-100 bg-white px-4 py-3 text-base text-gray-900"
               >
                 {courierOptions.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
               {suggestions?.couriers.length ? (
-                <p className="mt-0.5 text-xs text-slate-500">Recently used couriers shown first</p>
+                <p className="mt-1 text-sm text-gray-500">Recently used couriers shown first</p>
               ) : null}
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Booking date</label>
+              <label className="mb-2 block text-base font-medium text-gray-900">Booking date</label>
               <input
                 type="date"
                 value={bookingDate}
                 onChange={(e) => setBookingDate(e.target.value)}
-                className="w-full rounded-bento border px-4 py-2"
+                className="min-h-[50px] w-full rounded-[16px] border border-gray-100 bg-white px-4 py-3 text-base text-gray-900"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full min-h-touch rounded-bento bg-primary-500 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
+              className="min-h-[50px] w-full rounded-[16px] bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
             >
               {loading ? "Saving…" : "Save"}
             </button>
