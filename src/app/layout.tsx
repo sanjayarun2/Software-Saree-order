@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Saree Order App",
+  title: "Saree Order Book",
   description: "Book and manage saree orders",
   icons: { icon: "/icon.svg" },
 };

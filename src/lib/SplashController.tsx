@@ -15,8 +15,9 @@ export function SplashController({ children }: { children: React.ReactNode }) {
     if (hidRef.current) return;
     if (!loading) {
       hidRef.current = true;
-      const cap = (typeof window !== "undefined" && (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor);
-      if (cap?.isNativePlatform?.()) {
+      const w = typeof window !== "undefined" ? (window as { Capacitor?: { isNativePlatform?: () => boolean } }) : null;
+      const cap = w?.Capacitor;
+      if (typeof cap?.isNativePlatform === "function" && cap.isNativePlatform()) {
         import("@capacitor/splash-screen")
           .then(({ SplashScreen }) => SplashScreen.hide())
           .catch(() => {});

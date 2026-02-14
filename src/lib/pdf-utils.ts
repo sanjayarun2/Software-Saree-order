@@ -17,85 +17,104 @@ function getAddressSummary(text: string, maxLen = 60): string {
   return first.length > maxLen ? `${first.slice(0, maxLen)}…` : first;
 }
 
+// A4: 210mm x 297mm. Divide height into 4 sections for pasting labels.
+const A4_W = 210;
+const A4_H = 297;
+const SECTIONS_PER_PAGE = 4;
+const SECTION_H = A4_H / SECTIONS_PER_PAGE;
+const MARGIN = 8;
+const COL_W = (A4_W - MARGIN * 4) / 3; // 3 columns: TO | Thanks | FROM
+
+function drawOrderLabel(
+  doc: { setFont: (f: string, s: string) => void; setFontSize: (n: number) => void; text: (s: string, x: number, y: number, o?: { align?: string }) => void; splitTextToSize: (s: string, w: number) => string[] },
+  order: Order,
+  sectionTop: number
+) {
+  const leftX = MARGIN;
+  const centerX = MARGIN + COL_W + MARGIN;
+  const rightX = MARGIN + (COL_W + MARGIN) * 2;
+  const maxW = COL_W - 4;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("TO (Recipient)", leftX, sectionTop + 6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const toLines = doc.splitTextToSize(order.recipient_details || "-", maxW);
+  toLines.slice(0, 6).forEach((line, i) => doc.text(line, leftX, sectionTop + 12 + i * 4));
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text("Thanks for your order!", centerX + COL_W / 2, sectionTop + SECTION_H / 2 - 4, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text("We appreciate your trust.", centerX + COL_W / 2, sectionTop + SECTION_H / 2 + 4, { align: "center" });
+  doc.text(`Date: ${new Date(order.booking_date).toLocaleDateString("en-GB")}`, centerX + COL_W / 2, sectionTop + SECTION_H / 2 + 12, { align: "center" });
+  if (order.quantity != null) {
+    doc.text(`Qty: ${order.quantity}`, centerX + COL_W / 2, sectionTop + SECTION_H / 2 + 20, { align: "center" });
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("FROM (Ours)", rightX, sectionTop + 6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const fromLines = doc.splitTextToSize(order.sender_details || "-", maxW);
+  fromLines.slice(0, 6).forEach((line, i) => doc.text(line, rightX, sectionTop + 12 + i * 4));
+}
+
+function drawSectionBorder(
+  doc: { setDrawColor: (r: number, g?: number, b?: number) => void; setLineWidth: (w: number) => void; rect: (x: number, y: number, w: number, h: number) => void },
+  sectionTop: number
+) {
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.rect(MARGIN, sectionTop, A4_W - MARGIN * 2, SECTION_H);
+}
+
 export function downloadOrderPdf(order: Order) {
   if (typeof window === "undefined") return;
   import("jspdf").then(({ default: jsPDF }) => {
-    const doc = new jsPDF();
-    const yStart = 20;
-    let y = yStart;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
 
-    doc.setFontSize(18);
-    doc.text("Order Details", 20, y);
-    y += 12;
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Booking: ${new Date(order.booking_date).toLocaleDateString("en-GB")}`, 20, y);
-    y += 7;
-    if (order.status === "DESPATCHED" && order.despatch_date) {
-      doc.text(`Dispatched: ${new Date(order.despatch_date).toLocaleDateString("en-GB")}`, 20, y);
-      y += 7;
+    // One A4, 4 sections - fill all 4 with same order for pasting on 4 sarees
+    for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
+      drawSectionBorder(d, i * SECTION_H);
+      drawOrderLabel(d, order, i * SECTION_H);
     }
-    if (order.quantity != null) {
-      doc.text(`Qty: ${order.quantity}`, 20, y);
-      y += 7;
-    }
-    y += 3;
 
-    doc.setFont("helvetica", "bold");
-    doc.text("TO (Recipient):", 20, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    const toLines = doc.splitTextToSize(order.recipient_details || "-", 170);
-    doc.text(toLines, 20, y);
-    y += toLines.length * 5 + 5;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("FROM (Sender):", 20, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    const fromLines = doc.splitTextToSize(order.sender_details || "-", 170);
-    doc.text(fromLines, 20, y);
-    y += fromLines.length * 5 + 5;
-
-    doc.text(`Booked By: ${order.booked_by || "-"}`, 20, y);
-    y += 6;
-    doc.text(`Mobile: ${order.booked_mobile_no || "-"}`, 20, y);
-    y += 6;
-    doc.text(`Courier: ${order.courier_name || "-"}`, 20, y);
-
-    doc.save(`order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`);
+    doc.save(`saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`);
   });
 }
 
 export function downloadOrdersPdf(orders: Order[]) {
   if (typeof window === "undefined" || orders.length === 0) return;
   import("jspdf").then(({ default: jsPDF }) => {
-    const doc = new jsPDF();
-    let y = 20;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
 
-    doc.setFontSize(16);
-    doc.text("Orders Report", 20, y);
-    y += 10;
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
+    let page = 0;
+    let slot = 0;
 
     for (let i = 0; i < orders.length; i++) {
-      const o = orders[i];
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
+      if (slot === 0 && page > 0) doc.addPage([A4_W, A4_H], "p");
+      const sectionTop = slot * SECTION_H;
+      drawSectionBorder(d, sectionTop);
+      drawOrderLabel(d, orders[i], sectionTop);
+      slot++;
+      if (slot >= SECTIONS_PER_PAGE) {
+        slot = 0;
+        page++;
       }
-      doc.setFont("helvetica", "bold");
-      doc.text(`${i + 1}. ${getAddressSummary(o.recipient_details)}`, 20, y);
-      y += 6;
-      doc.setFont("helvetica", "normal");
-      doc.text(`   Booking: ${new Date(o.booking_date).toLocaleDateString("en-GB")} | ${o.status} | Courier: ${o.courier_name}`, 20, y);
-      y += 8;
     }
 
-    doc.save(`orders-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+    while (slot > 0 && slot < SECTIONS_PER_PAGE) {
+      drawSectionBorder(d, slot * SECTION_H);
+      slot++;
+    }
+
+    doc.save(`saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`);
   });
 }
 
@@ -161,7 +180,7 @@ export function downloadBusinessReportPdf(
       new Date(o.booking_date).toLocaleDateString("en-GB"),
       getAddressSummary(o.recipient_details, 35),
       getAddressSummary(o.sender_details, 35),
-      o.quantity != null && o.quantity !== "" ? String(Number(o.quantity) || 1) : "-",
+      o.quantity != null ? String(Number(o.quantity) || 1) : "-",
       o.courier_name || "-",
       o.status === "DESPATCHED" ? "Dispatched" : "Pending",
     ]);

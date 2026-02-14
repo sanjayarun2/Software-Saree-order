@@ -39,9 +39,14 @@ export default function OrdersPage() {
     if (!user) return;
     setError(null);
     // Cache-first: load from cache immediately
-    const cached = getCachedOrders(user.id, status, fromDate, toDate, allOrders) as Order[] | null;
-    if (cached?.length !== undefined) {
-      setOrders(cached);
+    let cached: Order[] | null = null;
+    try {
+      cached = getCachedOrders(user.id, status, fromDate, toDate, allOrders) as Order[] | null;
+      if (cached && Array.isArray(cached)) {
+        setOrders(cached);
+      }
+    } catch {
+      // Ignore cache errors
     }
     setLoading(true);
     try {

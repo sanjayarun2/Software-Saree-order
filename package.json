@@ -9,7 +9,9 @@
     "lint": "next lint",
     "cap:sync": "npm run build && npx cap sync",
     "cap:android": "npx cap open android",
-    "android": "npm run cap:sync && npm run cap:android"
+    "android": "npm run cap:sync && npm run cap:android",
+    "apk:build": "npm run build && npx cap sync",
+    "apk": "npm run apk:build && cd android && gradlew.bat assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",

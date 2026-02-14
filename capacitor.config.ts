@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.sareeorder.app",
-  appName: "Saree Order App",
+  appName: "Saree Order Book",
   webDir: "out",
   server: {
     androidScheme: "https",

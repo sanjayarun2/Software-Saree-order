@@ -94,7 +94,7 @@ export default function ReportsPage() {
 
   const getOrderQty = (o: Order): number => {
     const q = o.quantity;
-    if (q == null || q === "") return 1;
+    if (q == null) return 1;
     const n = Number(q);
     return isNaN(n) || n < 1 ? 1 : n;
   };

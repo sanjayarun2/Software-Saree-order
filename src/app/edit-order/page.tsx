@@ -84,7 +84,7 @@ function EditOrderContent() {
         setBookedBy(o.booked_by ?? "");
         setBookedMobile(o.booked_mobile_no ?? "");
         setCourier(o.courier_name ?? "Professional");
-        setQuantity(o.quantity != null && o.quantity !== "" ? Number(o.quantity) || 1 : 1);
+        setQuantity(o.quantity != null ? Number(o.quantity) || 1 : 1);
         setBookingDate(o.booking_date?.slice(0, 10) ?? "");
       });
   }, [user, orderId]);
