@@ -22,7 +22,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around rounded-t-2xl border-t border-white/20 bg-white/80 py-2 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-lg lg:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around rounded-t-2xl border-t border-gray-200/80 bg-white/90 py-2 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-lg dark:border-slate-700/80 dark:bg-slate-900/95 dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] lg:hidden"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       role="navigation"
       aria-label="Main navigation"
@@ -33,8 +33,8 @@ export function BottomNav() {
           <Link
             key={item.href}
             href={item.href + "/"}
-            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 ${
-              active ? "text-primary-500" : "text-gray-500"
+            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 transition-colors ${
+              active ? "text-primary-500" : "text-gray-500 dark:text-gray-400"
             }`}
           >
             <span className="text-[22px] leading-none" aria-hidden>
@@ -87,10 +87,10 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
           <button
             type="button"
             onClick={() => setTheme("light")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal transition-colors ${
               theme === "light"
-                ? "bg-gray-800 text-white dark:bg-slate-700 dark:text-gray-300"
-                : "text-gray-600 dark:text-gray-400"
+                ? "bg-primary-500 text-white shadow-sm dark:bg-primary-600"
+                : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
             }`}
           >
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -101,10 +101,10 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
           <button
             type="button"
             onClick={() => setTheme("dark")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal transition-colors ${
               theme === "dark"
-                ? "bg-slate-200 text-gray-900 dark:bg-slate-500 dark:text-white"
-                : "text-gray-600 dark:text-gray-400"
+                ? "bg-primary-500 text-white shadow-sm dark:bg-primary-600"
+                : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
             }`}
           >
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -146,8 +146,12 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
           }`}
           title="Log out"
         >
-          <span className={`${isMobile ? "text-xl" : "text-2xl"}`} aria-hidden>
-            🚪
+          <span className={`${isMobile ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"}`} aria-hidden>
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
           </span>
           <span className={isMobile ? "text-base font-normal" : "text-xs font-medium"}>
             Log out

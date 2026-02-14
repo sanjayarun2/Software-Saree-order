@@ -129,8 +129,8 @@ export default function ReportsPage() {
     sareesChangePercent,
   };
 
-  const handleDownloadPdf = () => {
-    downloadBusinessReportPdf(orders, stats, user?.email ?? undefined);
+  const handleDownloadPdf = async () => {
+    await downloadBusinessReportPdf(orders, stats, user?.email ?? undefined);
   };
 
   if (authLoading) {

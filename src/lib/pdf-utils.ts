@@ -2,6 +2,50 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Order } from "./db-types";
 
+async function savePdfNative(blob: Blob, filename: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return false;
+    const { Filesystem, Directory } = await import("@capacitor/filesystem");
+    const { Share } = await import("@capacitor/share");
+    const reader = new FileReader();
+    const base64 = await new Promise<string>((res, rej) => {
+      reader.onload = () => {
+        const data = (reader.result as string) || "";
+        res(data.includes(",") ? data.split(",")[1] ?? "" : data);
+      };
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    });
+    const path = `saree-pdf-${Date.now()}.pdf`;
+    await Filesystem.writeFile({
+      path,
+      data: base64,
+      directory: Directory.Cache,
+    });
+    const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache });
+    await Share.share({
+      title: filename.replace(/\.pdf$/i, ""),
+      text: "Saree order PDF",
+      url: uri,
+      dialogTitle: "Share PDF",
+    });
+    try {
+      await Filesystem.deleteFile({ path, directory: Directory.Cache });
+    } catch {
+      /* ignore */
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function savePdfWeb(doc: jsPDF, filename: string): void {
+  doc.save(filename);
+}
+
 export interface ReportStats {
   periodLabel: string;
   from: string;
@@ -74,7 +118,7 @@ function drawSectionBorder(
   doc.rect(MARGIN, sectionTop, A4_W - MARGIN * 2, SECTION_H);
 }
 
-export function downloadOrderPdf(order: Order) {
+export async function downloadOrderPdf(order: Order) {
   if (typeof window === "undefined") return;
   try {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -83,13 +127,16 @@ export function downloadOrderPdf(order: Order) {
       drawSectionBorder(d, i * SECTION_H);
       drawOrderLabel(d, order, i * SECTION_H);
     }
-    doc.save(`saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`);
+    const filename = `saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`;
+    const blob = doc.output("blob");
+    const shared = await savePdfNative(blob, filename);
+    if (!shared) savePdfWeb(doc, filename);
   } catch (e) {
     console.error("PDF download failed:", e);
   }
 }
 
-export function downloadOrdersPdf(orders: Order[]) {
+export async function downloadOrdersPdf(orders: Order[]) {
   if (typeof window === "undefined" || orders.length === 0) return;
   try {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -114,13 +161,16 @@ export function downloadOrdersPdf(orders: Order[]) {
       slot++;
     }
 
-    doc.save(`saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`);
+    const filename = `saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const blob = doc.output("blob");
+    const shared = await savePdfNative(blob, filename);
+    if (!shared) savePdfWeb(doc, filename);
   } catch (e) {
     console.error("PDF download failed:", e);
   }
 }
 
-export function downloadBusinessReportPdf(
+export async function downloadBusinessReportPdf(
   orders: Order[],
   stats: ReportStats,
   userEmail?: string
@@ -215,8 +265,12 @@ export function downloadBusinessReportPdf(
     doc.text("Use for IT filing, GST records, or submission to auditor as supporting document.", margin, y);
 
     const filename = `saree-sales-report-${stats.from}-to-${stats.to}.pdf`;
-    doc.save(filename);
+    const blob = doc.output("blob");
+    const shared = await savePdfNative(blob, filename);
+    if (!shared) savePdfWeb(doc, filename);
   } catch (e) {
     console.error("PDF download failed:", e);
   }
 }
+
+// Make downloadBusinessReportPdf async (was sync, callers must await)

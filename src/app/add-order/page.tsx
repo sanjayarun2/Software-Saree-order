@@ -119,7 +119,7 @@ export default function AddOrderPage() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-2xl space-y-6 px-4 py-4 lg:space-y-8 lg:px-10 lg:py-8">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 lg:text-2xl">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 lg:text-2xl">
           Add New Order
         </h1>
 
@@ -132,7 +132,7 @@ export default function AddOrderPage() {
             )}
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">TO (Recipient)</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">TO (Recipient)</label>
               <AutocompleteTextarea
                 value={recipient}
                 onChange={setRecipient}
@@ -140,14 +140,14 @@ export default function AddOrderPage() {
                 placeholder="Start typing for suggestions from past orders"
                 maxLength={600}
                 rows={3}
-                className="min-h-[44px] w-full rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-900 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3 md:text-base"
+                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
                 id="recipient"
               />
-              <p className="mt-1 text-right text-sm text-gray-500">{recipient.length}/600</p>
+              <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{recipient.length}/600</p>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">FROM (Sender)</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">FROM (Sender)</label>
               <AutocompleteTextarea
                 value={sender}
                 onChange={setSender}
@@ -155,17 +155,17 @@ export default function AddOrderPage() {
                 placeholder="Start typing for suggestions from past orders"
                 maxLength={600}
                 rows={3}
-                className="min-h-[44px] w-full rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-900 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3 md:text-base"
+                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
                 id="sender"
               />
-              <p className="mt-1 text-right text-sm text-gray-500">{sender.length}/600</p>
+              <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{sender.length}/600</p>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">Product Details</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Product Details</label>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Saree Qty</label>
-                <div className="flex items-center rounded-[16px] border border-gray-100 bg-white">
+                <label className="text-base text-gray-600 dark:text-gray-400">Saree Qty</label>
+                <div className="flex items-center rounded-[16px] border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-800">
                   <button
                     type="button"
                     onClick={() => setQuantity((q) => (q === "" ? 0 : Math.max(0, q - 1)))}
@@ -181,7 +181,7 @@ export default function AddOrderPage() {
                       const v = e.target.value;
                       setQuantity(v === "" ? "" : Math.max(0, parseInt(v, 10) || 0));
                     }}
-                    className="h-10 w-16 border-0 text-center text-sm [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="h-10 w-16 border-0 bg-transparent text-center text-base text-gray-900 dark:text-gray-100 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <button
                     type="button"
@@ -191,19 +191,19 @@ export default function AddOrderPage() {
                     +
                   </button>
                 </div>
-                <span className="text-sm text-gray-500">(optional)</span>
+                <span className="text-base text-gray-500 dark:text-gray-400">(optional)</span>
               </div>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">Booked By</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Booked By</label>
               <input
                 type="text"
                 list="booked-by-list"
                 value={bookedBy}
                 onChange={(e) => setBookedBy(e.target.value)}
                 placeholder="Name (tap for suggestions)"
-                className="min-h-[44px] w-full rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-900 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3 md:text-base"
+                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
               <datalist id="booked-by-list">
                 {(suggestions?.bookedBy ?? []).map((b) => (
@@ -213,14 +213,14 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">Booked Mobile No</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Booked Mobile No</label>
               <input
                 type="tel"
                 list="mobile-list"
                 value={bookedMobile}
                 onChange={(e) => setBookedMobile(e.target.value)}
                 placeholder="Mobile number (tap for suggestions)"
-                className="min-h-[44px] w-full rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-900 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3 md:text-base"
+                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
               <datalist id="mobile-list">
                 {(suggestions?.bookedMobile ?? []).map((m) => (
@@ -230,35 +230,35 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">Courier Name</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Courier Name</label>
               <select
                 value={courier}
                 onChange={(e) => setCourier(e.target.value)}
-                className="min-h-[44px] w-full rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-900 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3 md:text-base"
+                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               >
                 {courierOptions.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
               {suggestions?.couriers.length ? (
-                <p className="mt-1 text-sm text-gray-500">Recently used couriers shown first</p>
+                <p className="mt-1 text-base text-gray-500 dark:text-gray-400">Recently used couriers shown first</p>
               ) : null}
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">Booking date</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Booking date</label>
               <input
                 type="date"
                 value={bookingDate}
                 onChange={(e) => setBookingDate(e.target.value)}
-                className="min-h-[44px] w-full rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-900 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3 md:text-base"
+                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="min-h-[44px] w-full rounded-xl bg-primary-500 px-4 py-3 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-50 md:min-h-[50px] md:rounded-[16px] md:text-base"
+              className="min-h-[44px] w-full rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 md:min-h-[50px] md:rounded-[16px]"
             >
               {loading ? "Saving…" : "Save"}
             </button>
