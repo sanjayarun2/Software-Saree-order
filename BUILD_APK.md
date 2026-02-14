@@ -1,6 +1,36 @@
 # How to Build APK for Saree Order Book
 
-## App Icon
+## Option A: Build via GitHub (No Java/Android needed)
+
+Use GitHub Actions to build the APK in the cloud and download it.
+
+1. **Initialize Git** (if not already):
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit"
+   ```
+
+2. **Push to GitHub**:
+   - Create a repo at [github.com/new](https://github.com/new)
+   - Add remote and push:
+   ```bash
+   git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+   git branch -M main
+   git push -u origin main
+   ```
+
+3. **Build & download APK**:
+   - Go to your repo → **Actions** tab
+   - The workflow runs automatically on push
+   - Or click **Build APK** → **Run workflow** to run manually
+   - When finished, open the workflow run → **Artifacts** → download `saree-order-book-apk.zip` and extract `app-debug.apk`
+
+---
+
+## Option B: Build locally
+
+### App Icon
 
 The icon is in `public/icon.svg` (book + saree design). To use it as the Android app icon:
 
