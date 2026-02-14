@@ -4,7 +4,6 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { BottomNav, RailNav } from "./Navigation";
-import { TopSearchBar } from "./TopSearchBar";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 const NO_NAV_ROUTES = ["/login", "/register", "/forgot-password"];
@@ -23,8 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <ErrorBoundary>
       <RailNav userInitials={initials} />
       <div className="md:ml-20">
-        <TopSearchBar />
-        <main className="min-h-screen pb-24 md:pb-6">{children}</main>
+        <main className="min-h-screen pb-28 md:pb-6">{children}</main>
       </div>
       <BottomNav />
     </ErrorBoundary>

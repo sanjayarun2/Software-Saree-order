@@ -21,7 +21,8 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-gray-100 bg-white py-3 md:hidden"
+      className="fixed bottom-3 left-3 right-3 z-50 flex items-center justify-around rounded-2xl border border-gray-100 bg-white py-2 shadow-lg md:hidden"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       role="navigation"
       aria-label="Main navigation"
     >
@@ -31,14 +32,14 @@ export function BottomNav() {
           <Link
             key={item.href}
             href={item.href + "/"}
-            className={`flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-[16px] px-3 py-2 ${
+            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-2 ${
               active ? "text-primary-500" : "text-gray-500"
             }`}
           >
-            <span className="text-2xl" aria-hidden>
+            <span className="text-xl" aria-hidden>
               {item.icon}
             </span>
-            <span className="text-xs font-medium">{item.label}</span>
+            <span className="text-[10px] font-medium md:text-xs">{item.label}</span>
           </Link>
         );
       })}

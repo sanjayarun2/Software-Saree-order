@@ -20,41 +20,41 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 p-6 md:p-8">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:space-y-10 md:p-8">
+      <div className="space-y-0.5">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 md:text-2xl">
           Dashboard
         </h1>
-        <p className="text-base text-gray-600">
+        <p className="text-sm text-gray-600 md:text-base">
           Welcome back{user?.email ? `, ${user.email.split("@")[0]}` : ""}.
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         <Link href="/orders/" className="block">
-          <BentoCard className="flex min-h-[50px] cursor-pointer flex-col items-center justify-center gap-4 py-8 transition hover:shadow-md">
-            <span className="text-4xl" aria-hidden>📋</span>
+          <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
+            <span className="text-3xl md:text-4xl" aria-hidden>📋</span>
             <div className="text-center">
-              <p className="text-lg font-semibold text-gray-900">Orders</p>
-              <p className="text-base text-gray-500">View bookings</p>
+              <p className="text-base font-semibold text-gray-900 md:text-lg">Orders</p>
+              <p className="text-sm text-gray-500 md:text-base">View bookings</p>
             </div>
           </BentoCard>
         </Link>
         <Link href="/add-order/" className="block">
-          <BentoCard className="flex min-h-[50px] cursor-pointer flex-col items-center justify-center gap-4 py-8 transition hover:shadow-md">
-            <span className="text-4xl" aria-hidden>➕</span>
+          <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
+            <span className="text-3xl md:text-4xl" aria-hidden>➕</span>
             <div className="text-center">
-              <p className="text-lg font-semibold text-gray-900">Add Order</p>
-              <p className="text-base text-gray-500">Create booking</p>
+              <p className="text-base font-semibold text-gray-900 md:text-lg">Add Order</p>
+              <p className="text-sm text-gray-500 md:text-base">Create booking</p>
             </div>
           </BentoCard>
         </Link>
         <Link href="/reports/" className="block">
-          <BentoCard className="flex min-h-[50px] cursor-pointer flex-col items-center justify-center gap-4 py-8 transition hover:shadow-md">
-            <span className="text-4xl" aria-hidden>📄</span>
+          <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
+            <span className="text-3xl md:text-4xl" aria-hidden>📄</span>
             <div className="text-center">
-              <p className="text-lg font-semibold text-gray-900">Reports</p>
-              <p className="text-base text-gray-500">Export PDF</p>
+              <p className="text-base font-semibold text-gray-900 md:text-lg">Reports</p>
+              <p className="text-sm text-gray-500 md:text-base">Export PDF</p>
             </div>
           </BentoCard>
         </Link>
