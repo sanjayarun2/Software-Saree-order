@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
@@ -29,6 +30,7 @@ export default function OrdersPage() {
     setLoading(true);
     setError(null);
     try {
+      const dateColumn = status === "PENDING" ? "booking_date" : "despatch_date";
       let query = supabase
         .from("orders")
         .select("*")
@@ -38,8 +40,8 @@ export default function OrdersPage() {
 
       if (!allOrders && fromDate && toDate) {
         query = query
-          .gte("despatch_date", fromDate)
-          .lte("despatch_date", toDate);
+          .gte(dateColumn, fromDate)
+          .lte(dateColumn, toDate);
       }
 
       const { data, error: err } = await query;
@@ -65,6 +67,36 @@ export default function OrdersPage() {
       setOrders((prev) => prev.filter((o) => o.id !== id));
     } catch (e) {
       setError((e as Error).message || "Delete failed");
+    }
+  };
+
+  const handleMarkAsDespatched = async (order: Order) => {
+    if (order.status !== "PENDING") return;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const { error: err } = await supabase
+        .from("orders")
+        .update({ status: "DESPATCHED", despatch_date: today, updated_at: new Date().toISOString() })
+        .eq("id", order.id);
+      if (err) throw err;
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+    } catch (e) {
+      setError((e as Error).message || "Failed to mark as despatched");
+    }
+  };
+
+  const handleMoveToPending = async (order: Order) => {
+    if (order.status !== "DESPATCHED") return;
+    if (!confirm("Move this order back to Pending?")) return;
+    try {
+      const { error: err } = await supabase
+        .from("orders")
+        .update({ status: "PENDING", despatch_date: null, updated_at: new Date().toISOString() })
+        .eq("id", order.id);
+      if (err) throw err;
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+    } catch (e) {
+      setError((e as Error).message || "Failed to move to pending");
     }
   };
 
@@ -106,21 +138,25 @@ export default function OrdersPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium">Despatch From date</label>
+                <label className="mb-1 block text-sm font-medium">
+                  {status === "PENDING" ? "Booking From date" : "Despatch From date"}
+                </label>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full rounded-bento border px-4 py-2"
+                  className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Despatch To date</label>
+                <label className="mb-1 block text-sm font-medium">
+                  {status === "PENDING" ? "Booking To date" : "Despatch To date"}
+                </label>
                 <input
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-full rounded-bento border px-4 py-2"
+                  className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
                 />
               </div>
             </div>
@@ -160,7 +196,7 @@ export default function OrdersPage() {
               </BentoCard>
             ) : (
               orders.map((order, i) => (
-                <BentoCard key={order.id} className="flex items-center justify-between gap-4">
+                <BentoCard key={order.id} className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex min-w-0 flex-1 items-center gap-4">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 font-medium text-primary-600 dark:bg-primary-900 dark:text-primary-300">
                       {i + 1}
@@ -169,13 +205,43 @@ export default function OrdersPage() {
                       <p className="font-medium">
                         Booking: {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })}
                       </p>
+                      {order.status === "DESPATCHED" && order.despatch_date && (
+                        <p className="text-xs text-slate-500">
+                          Despatched: {new Date(order.despatch_date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                        </p>
+                      )}
                       <p className="truncate text-sm text-slate-500">TO: {order.recipient_details}</p>
                       <p className="truncate text-sm text-slate-500">FROM: {order.sender_details}</p>
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">
+                    <Link
+                      href={`/edit-order/?id=${order.id}`}
+                      className="flex min-h-touch min-w-touch items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                      title="Edit order"
+                    >
+                      ✏️
+                    </Link>
+                    {order.status === "PENDING" && (
+                      <button
+                        onClick={() => handleMarkAsDespatched(order)}
+                        className="flex min-h-touch items-center gap-1 rounded-bento bg-green-100 px-3 py-2 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                        title="Mark as Despatched"
+                      >
+                        Despatch
+                      </button>
+                    )}
+                    {order.status === "DESPATCHED" && (
+                      <button
+                        onClick={() => handleMoveToPending(order)}
+                        className="flex min-h-touch items-center gap-1 rounded-bento bg-amber-100 px-3 py-2 text-sm font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                        title="Move back to Pending (undo despatch)"
+                      >
+                        Move to Pending
+                      </button>
+                    )}
                     <button
-                      className="flex min-h-touch min-w-touch items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                      className="flex min-h-touch min-w-touch items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
                       title="View PDF"
                     >
                       PDF

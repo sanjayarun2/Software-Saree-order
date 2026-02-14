@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
-import type { OrderInsert, Order } from "@/lib/db-types";
+import type { Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
 
@@ -39,22 +39,53 @@ function SuggestionChips({
   );
 }
 
-export default function AddOrderPage() {
+export default function EditOrderPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const orderId = searchParams.get("id");
+
   const [recipient, setRecipient] = useState("");
   const [sender, setSender] = useState("");
   const [bookedBy, setBookedBy] = useState("");
   const [bookedMobile, setBookedMobile] = useState("");
   const [courier, setCourier] = useState("Professional");
-  const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bookingDate, setBookingDate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<OrderSuggestions | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login/");
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!user || !orderId) {
+      setFetchLoading(false);
+      return;
+    }
+    supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data, error: err }) => {
+        setFetchLoading(false);
+        if (err || !data) {
+          setError("Order not found");
+          return;
+        }
+        const o = data as Order;
+        setRecipient(o.recipient_details ?? "");
+        setSender(o.sender_details ?? "");
+        setBookedBy(o.booked_by ?? "");
+        setBookedMobile(o.booked_mobile_no ?? "");
+        setCourier(o.courier_name ?? "Professional");
+        setBookingDate(o.booking_date?.slice(0, 10) ?? "");
+      });
+  }, [user, orderId]);
 
   useEffect(() => {
     if (!user) return;
@@ -87,34 +118,47 @@ export default function AddOrderPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !orderId) return;
     setError(null);
     setLoading(true);
     try {
-      const insert: OrderInsert = {
-        recipient_details: recipient,
-        sender_details: sender,
-        booked_by: bookedBy,
-        booked_mobile_no: bookedMobile,
-        courier_name: courier,
-        booking_date: bookingDate,
-        status: "PENDING",
-        user_id: user.id,
-      };
-      const { error: err } = await supabase.from("orders").insert(insert);
+      const { error: err } = await supabase
+        .from("orders")
+        .update({
+          recipient_details: recipient,
+          sender_details: sender,
+          booked_by: bookedBy,
+          booked_mobile_no: bookedMobile,
+          courier_name: courier,
+          booking_date: bookingDate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", orderId)
+        .eq("user_id", user.id);
       if (err) throw err;
       router.replace("/orders/");
     } catch (e) {
-      setError((e as Error).message || "Save failed");
+      setError((e as Error).message || "Update failed");
     } finally {
       setLoading(false);
     }
   };
 
-  if (authLoading) {
+  if (authLoading || fetchLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!orderId || error === "Order not found") {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4 p-6">
+        <p className="text-slate-600 dark:text-slate-400">Order not found.</p>
+        <Link href="/orders/" className="text-primary-600 hover:underline">
+          ← Back to Orders
+        </Link>
       </div>
     );
   }
@@ -127,7 +171,7 @@ export default function AddOrderPage() {
             ←
           </Link>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            Add New Order
+            Edit Order
           </h1>
         </div>
 
@@ -186,13 +230,13 @@ export default function AddOrderPage() {
               <label className="mb-1 block text-sm font-medium">Booked By</label>
               <input
                 type="text"
-                list="booked-by-list"
+                list="booked-by-list-edit"
                 value={bookedBy}
                 onChange={(e) => setBookedBy(e.target.value)}
                 placeholder="Name (tap for suggestions)"
                 className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
               />
-              <datalist id="booked-by-list">
+              <datalist id="booked-by-list-edit">
                 {(suggestions?.bookedBy ?? []).map((b) => (
                   <option key={b} value={b} />
                 ))}
@@ -203,13 +247,13 @@ export default function AddOrderPage() {
               <label className="mb-1 block text-sm font-medium">Booked Mobile No</label>
               <input
                 type="tel"
-                list="mobile-list"
+                list="mobile-list-edit"
                 value={bookedMobile}
                 onChange={(e) => setBookedMobile(e.target.value)}
                 placeholder="Mobile number (tap for suggestions)"
                 className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
               />
-              <datalist id="mobile-list">
+              <datalist id="mobile-list-edit">
                 {(suggestions?.bookedMobile ?? []).map((m) => (
                   <option key={m} value={m} />
                 ))}
@@ -227,9 +271,6 @@ export default function AddOrderPage() {
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              {suggestions?.couriers.length ? (
-                <p className="mt-0.5 text-xs text-slate-500">Recently used couriers shown first</p>
-              ) : null}
             </div>
 
             <div>
@@ -238,7 +279,8 @@ export default function AddOrderPage() {
                 type="date"
                 value={bookingDate}
                 onChange={(e) => setBookingDate(e.target.value)}
-                className="w-full rounded-bento border px-4 py-2"
+                className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                required
               />
             </div>
 
@@ -247,7 +289,7 @@ export default function AddOrderPage() {
               disabled={loading}
               className="w-full min-h-touch rounded-bento bg-primary-500 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
             >
-              {loading ? "Saving…" : "Save"}
+              {loading ? "Updating…" : "Update Order"}
             </button>
           </form>
         </BentoCard>

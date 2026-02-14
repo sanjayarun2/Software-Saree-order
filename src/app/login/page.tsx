@@ -127,6 +127,11 @@ export default function LoginPage() {
               Register
             </Link>
           </p>
+          <p className="text-center">
+            <Link href="/check-connection/" className="text-xs text-slate-500 hover:underline">
+              Check Supabase connection
+            </Link>
+          </p>
         </div>
       </div>
     </ErrorBoundary>
