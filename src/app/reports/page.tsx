@@ -143,11 +143,11 @@ export default function ReportsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
           Sales Reports
         </h1>
-        <p className="text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-slate-600 dark:text-slate-400 lg:text-base">
           Dispatched orders only, by dispatch date. View analytics and download PDF for auditors or IT filing.
         </p>
 

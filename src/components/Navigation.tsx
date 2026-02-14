@@ -21,8 +21,8 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-3 left-3 right-3 z-50 flex items-center justify-around rounded-2xl border border-gray-100 bg-white py-2 shadow-lg md:hidden"
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      className="fixed bottom-3 left-3 right-3 z-50 flex items-center justify-around rounded-2xl border border-white/20 bg-white/80 py-2 shadow-lg backdrop-blur-lg lg:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 20px)" }}
       role="navigation"
       aria-label="Main navigation"
     >
@@ -32,14 +32,14 @@ export function BottomNav() {
           <Link
             key={item.href}
             href={item.href + "/"}
-            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-2 ${
+            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 ${
               active ? "text-primary-500" : "text-gray-500"
             }`}
           >
-            <span className="text-xl" aria-hidden>
+            <span className="text-[22px] leading-none" aria-hidden>
               {item.icon}
             </span>
-            <span className="text-[10px] font-medium md:text-xs">{item.label}</span>
+            <span className="text-[10px] font-medium">{item.label}</span>
           </Link>
         );
       })}
@@ -52,7 +52,7 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
 
   return (
     <aside
-      className="fixed left-0 top-0 z-40 hidden h-full w-20 flex-col items-center border-r border-slate-200 bg-white py-6 dark:border-slate-700 dark:bg-slate-900 md:flex"
+      className="fixed left-0 top-0 z-40 hidden h-screen w-20 flex-col items-center bg-white/70 py-6 shadow-[5px_0_15px_rgba(0,0,0,0.05)] backdrop-blur-xl lg:flex"
       role="navigation"
       aria-label="Side navigation"
     >
@@ -68,8 +68,10 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
             <Link
               key={item.href}
               href={item.href + (item.href === "/dashboard" ? "/" : "/")}
-              className={`flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 ${
-                active ? "text-primary-500" : "text-gray-500"
+              className={`flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 ${
+                active
+                  ? "bg-gradient-to-r from-primary-500/15 to-primary-500/5 text-primary-600"
+                  : "text-gray-500"
               }`}
               title={item.label}
             >
@@ -83,7 +85,7 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
       </div>
       <Link
         href="/logout/"
-        className="mt-auto flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 text-gray-500"
+        className="mt-auto flex min-h-[50px] min-w-[50px] flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-gray-500"
         title="Log out"
       >
         <span className="text-2xl" aria-hidden>

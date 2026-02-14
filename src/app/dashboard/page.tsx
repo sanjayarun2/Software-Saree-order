@@ -20,7 +20,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:space-y-10 md:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:space-y-10 lg:px-10 lg:py-8">
       <div className="space-y-0.5">
         <h1 className="text-xl font-bold tracking-tight text-gray-900 md:text-2xl">
           Dashboard

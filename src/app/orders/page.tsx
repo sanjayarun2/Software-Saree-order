@@ -144,8 +144,8 @@ export default function OrdersPage() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
           Booking Details
         </h1>
 
@@ -234,21 +234,19 @@ export default function OrdersPage() {
               filteredOrders.map((order, i) => (
                 <BentoCard key={order.id} className="flex items-center justify-between gap-4 py-4">
                   <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-primary-50 text-sm font-semibold text-primary-600">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600">
                       {i + 1}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-medium text-gray-900">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="truncate text-sm font-medium text-gray-900 lg:text-base">
                         {getAddressSummary(order.recipient_details)}
                       </p>
-                      <div className="mt-0.5 flex items-center gap-2">
-                        <span className="text-sm text-gray-500">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500">
+                        <span className="tabular-nums">
                           {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
                         </span>
                         {(order.quantity != null && Number(order.quantity) >= 1) && (
-                          <span className="text-sm text-gray-600">
-                            Qty: {Number(order.quantity)}
-                          </span>
+                          <span>Qty: {Number(order.quantity)}</span>
                         )}
                         {order.status === "DESPATCHED" && (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">

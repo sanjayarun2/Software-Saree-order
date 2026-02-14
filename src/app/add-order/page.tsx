@@ -118,8 +118,8 @@ export default function AddOrderPage() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-2xl space-y-8 p-6 md:p-8">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 md:text-2xl">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-4 lg:space-y-8 lg:px-10 lg:py-8">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 lg:text-2xl">
           Add New Order
         </h1>
 
