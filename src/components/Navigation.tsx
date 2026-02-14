@@ -58,16 +58,19 @@ export function RailNav({ userInitials, mobileOpen = false, onMobileClose }: Rai
 
   const navItemActive =
     "bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-300";
-  const navItemInactive = "text-gray-600 dark:text-gray-400";
+  const navItemInactive =
+    "text-gray-700 dark:text-gray-300 font-normal";
 
   const sidebarContent = (isMobile: boolean) => (
     <>
       {userInitials && (
-        <div className="mb-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-600 dark:bg-primary-900 dark:text-primary-300">
-          {userInitials}
+        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xl font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300">
+            {userInitials}
+          </div>
         </div>
       )}
-      <div className="flex flex-1 flex-col gap-1">
+      <div className="flex flex-1 flex-col gap-0.5">
         {NAV_ITEMS_DESKTOP.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(item.href + "/");
           return (
@@ -75,32 +78,38 @@ export function RailNav({ userInitials, mobileOpen = false, onMobileClose }: Rai
               key={item.href}
               href={item.href + (item.href === "/dashboard" ? "/" : "/")}
               onClick={onMobileClose}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 ${
-                isMobile ? "min-h-[48px]" : "min-h-[50px] min-w-[50px] flex-col justify-center gap-1 px-2"
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${
+                isMobile ? "min-h-[52px]" : "min-h-[50px] min-w-[50px] flex-col justify-center gap-1 px-2 py-2"
               } ${active ? navItemActive : navItemInactive}`}
               title={item.label}
             >
               <span className={`${isMobile ? "text-xl" : "text-2xl"}`} aria-hidden>
                 {item.icon}
               </span>
-              <span className="text-sm font-medium">{item.label}</span>
+              <span className={isMobile ? "text-base font-normal" : "text-xs font-medium"}>
+                {item.label}
+              </span>
             </Link>
           );
         })}
       </div>
-      <Link
-        href="/logout/"
-        onClick={onMobileClose}
-        className={`mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 ${navItemInactive} ${
-          isMobile ? "min-h-[48px]" : "min-h-[50px] min-w-[50px] flex-col justify-center gap-1 px-2"
-        }`}
-        title="Log out"
-      >
-        <span className={`${isMobile ? "text-xl" : "text-2xl"}`} aria-hidden>
-          🚪
-        </span>
-        <span className="text-sm font-medium">Log out</span>
-      </Link>
+      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+        <Link
+          href="/logout/"
+          onClick={onMobileClose}
+          className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
+            isMobile ? "min-h-[52px]" : "min-h-[50px] min-w-[50px] flex-col justify-center gap-1 px-2 py-2"
+          }`}
+          title="Log out"
+        >
+          <span className={`${isMobile ? "text-xl" : "text-2xl"}`} aria-hidden>
+            🚪
+          </span>
+          <span className={isMobile ? "text-base font-normal" : "text-xs font-medium"}>
+            Log out
+          </span>
+        </Link>
+      </div>
     </>
   );
 
@@ -110,13 +119,13 @@ export function RailNav({ userInitials, mobileOpen = false, onMobileClose }: Rai
         <button
           type="button"
           onClick={onMobileClose}
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
           aria-label="Close menu"
         />
       )}
       {/* Mobile sidebar: flush left, rounded right, wider, floating shadow */}
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-full w-[min(288px,85%)] flex-col rounded-r-3xl bg-white py-6 pl-4 pr-6 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:bg-slate-900 ${
+        className={`fixed left-0 top-0 z-[60] flex h-full w-[min(288px,85%)] flex-col rounded-r-3xl bg-white py-6 pl-4 pr-6 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:bg-slate-900 ${
           mobileOpen ? "flex lg:hidden" : "hidden"
         }`}
         role="navigation"
