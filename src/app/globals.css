@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Design system tokens */
+  --primary: 340 70% 60%;
+  --primary-foreground: 0 0% 100%;
+  --bento-bg: #f8fafc;
+  --bento-card: #ffffff;
+  --bento-border: #e2e8f0;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --muted-foreground: #94a3b8;
+  --destructive: 0 84% 60%;
+  --radius: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bento-bg: #0f172a;
+    --bento-card: #1e293b;
+    --bento-border: #334155;
+    --foreground: #f8fafc;
+    --muted-foreground: #94a3b8;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--bento-bg);
+  color: var(--foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Minimum touch target for accessibility */
+button,
+a[role="button"],
+input[type="submit"],
+input[type="button"],
+[data-touch-target] {
+  min-height: 50px;
+  min-width: 50px;
+}
+
+/* Bento card style */
+.bento-card {
+  background: var(--bento-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--bento-border);
+  padding: 1rem;
+}
