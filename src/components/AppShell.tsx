@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary>
       <RailNav userInitials={initials} />
-      <div className="lg:ml-20">
+      <div className="lg:ml-24">
         <main className="min-h-screen pb-28 lg:pb-6">{children}</main>
       </div>
       <BottomNav />

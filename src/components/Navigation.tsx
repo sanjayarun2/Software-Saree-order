@@ -52,7 +52,7 @@ export function RailNav({ userInitials }: { userInitials?: string }) {
 
   return (
     <aside
-      className="fixed left-0 top-0 z-40 hidden h-screen w-20 flex-col items-center bg-white/70 py-6 shadow-[5px_0_15px_rgba(0,0,0,0.05)] backdrop-blur-xl lg:flex"
+      className="fixed left-4 top-4 z-40 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center rounded-2xl bg-white py-6 shadow-xl dark:bg-slate-900 lg:flex"
       role="navigation"
       aria-label="Side navigation"
     >
