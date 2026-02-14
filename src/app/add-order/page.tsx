@@ -132,7 +132,7 @@ export default function AddOrderPage() {
             )}
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">TO (Recipient)</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">TO (Recipient)</label>
               <AutocompleteTextarea
                 value={recipient}
                 onChange={setRecipient}
@@ -147,7 +147,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">FROM (Sender)</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">FROM (Sender)</label>
               <AutocompleteTextarea
                 value={sender}
                 onChange={setSender}
@@ -162,7 +162,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">Product Details</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Product Details</label>
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600">Saree Qty</label>
                 <div className="flex items-center rounded-[16px] border border-gray-100 bg-white">
@@ -181,7 +181,7 @@ export default function AddOrderPage() {
                       const v = e.target.value;
                       setQuantity(v === "" ? "" : Math.max(0, parseInt(v, 10) || 0));
                     }}
-                    className="h-10 w-16 border-0 text-center text-base [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="h-10 w-16 border-0 text-center text-sm [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <button
                     type="button"
@@ -195,13 +195,8 @@ export default function AddOrderPage() {
               </div>
             </div>
 
-            <div className="rounded-[16px] border border-gray-100 bg-gray-50 p-4">
-              <p className="text-sm font-medium text-gray-700">Product Images</p>
-              <p className="mt-1 text-sm text-gray-500">We&apos;re working on it. Coming soon.</p>
-            </div>
-
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">Booked By</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Booked By</label>
               <input
                 type="text"
                 list="booked-by-list"
@@ -218,7 +213,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">Booked Mobile No</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Booked Mobile No</label>
               <input
                 type="tel"
                 list="mobile-list"
@@ -235,7 +230,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">Courier Name</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Courier Name</label>
               <select
                 value={courier}
                 onChange={(e) => setCourier(e.target.value)}
@@ -251,7 +246,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-900 md:mb-2 md:text-base">Booking date</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Booking date</label>
               <input
                 type="date"
                 value={bookingDate}

@@ -21,14 +21,9 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:space-y-10 lg:px-10 lg:py-8">
-      <div className="space-y-0.5">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 md:text-2xl">
-          Dashboard
-        </h1>
-        <p className="text-sm text-gray-600 md:text-base">
-          Welcome back{user?.email ? `, ${user.email.split("@")[0]}` : ""}.
-        </p>
-      </div>
+      <h1 className="text-xl font-bold tracking-tight text-gray-900 md:text-2xl">
+        Dashboard
+      </h1>
 
       <div className="grid gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         <Link href="/orders/" className="block">

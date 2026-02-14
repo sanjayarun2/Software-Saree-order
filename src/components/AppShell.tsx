@@ -23,6 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <ErrorBoundary>
       <RailNav
         userInitials={initials}
+        userEmail={user?.email}
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
       />

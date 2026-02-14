@@ -1,3 +1,5 @@
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import type { Order } from "./db-types";
 
 export interface ReportStats {
@@ -74,26 +76,24 @@ function drawSectionBorder(
 
 export function downloadOrderPdf(order: Order) {
   if (typeof window === "undefined") return;
-  import("jspdf").then(({ default: jsPDF }) => {
+  try {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
-
-    // One A4, 4 sections - fill all 4 with same order for pasting on 4 sarees
     for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
       drawSectionBorder(d, i * SECTION_H);
       drawOrderLabel(d, order, i * SECTION_H);
     }
-
     doc.save(`saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`);
-  });
+  } catch (e) {
+    console.error("PDF download failed:", e);
+  }
 }
 
 export function downloadOrdersPdf(orders: Order[]) {
   if (typeof window === "undefined" || orders.length === 0) return;
-  import("jspdf").then(({ default: jsPDF }) => {
+  try {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
-
     let page = 0;
     let slot = 0;
 
@@ -115,7 +115,9 @@ export function downloadOrdersPdf(orders: Order[]) {
     }
 
     doc.save(`saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`);
-  });
+  } catch (e) {
+    console.error("PDF download failed:", e);
+  }
 }
 
 export function downloadBusinessReportPdf(
@@ -124,7 +126,7 @@ export function downloadBusinessReportPdf(
   userEmail?: string
 ) {
   if (typeof window === "undefined") return;
-  Promise.all([import("jspdf"), import("jspdf-autotable")]).then(([{ default: jsPDF }, { autoTable }]) => {
+  try {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 20;
@@ -214,5 +216,7 @@ export function downloadBusinessReportPdf(
 
     const filename = `saree-sales-report-${stats.from}-to-${stats.to}.pdf`;
     doc.save(filename);
-  });
+  } catch (e) {
+    console.error("PDF download failed:", e);
+  }
 }

@@ -76,9 +76,6 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               LOGIN
             </h1>
-            <p className="mt-2 text-slate-600 dark:text-slate-400">
-              Saree Order App
-            </p>
           </div>
 
           <BentoCard>
@@ -142,7 +139,7 @@ export default function LoginPage() {
                   name="mobile"
                   type="tel"
                   list="mobile-suggestions"
-                  placeholder="e.g. +91 9876543210 or 9876543210"
+                  placeholder="Mobile number"
                   value={mobile}
                   onChange={(e) => setMobile(e.target.value)}
                   inputMode="tel"
@@ -154,7 +151,6 @@ export default function LoginPage() {
                     <option key={m} value={m} />
                   ))}
                 </datalist>
-                <p className="mt-1 text-xs text-slate-500">Optional. With or without country code.</p>
               </div>
 
               <Link

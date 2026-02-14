@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { ThemeProvider } from "@/lib/theme-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { SearchProvider } from "@/lib/search-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -29,15 +30,17 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
         <ErrorBoundary>
-          <AuthProvider>
-            <SplashController>
-              <ToastProvider>
-                <SearchProvider>
-                  <AppShell>{children}</AppShell>
-                </SearchProvider>
-              </ToastProvider>
-            </SplashController>
-          </AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <SplashController>
+                <ToastProvider>
+                  <SearchProvider>
+                    <AppShell>{children}</AppShell>
+                  </SearchProvider>
+                </ToastProvider>
+              </SplashController>
+            </AuthProvider>
+          </ThemeProvider>
         </ErrorBoundary>
       </body>
     </html>

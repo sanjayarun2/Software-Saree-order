@@ -283,11 +283,13 @@ export default function OrdersPage() {
                       </button>
                     )}
                     <button
+                      type="button"
                       onClick={() => downloadOrderPdf(order)}
-                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-gray-100 text-gray-600 transition hover:bg-gray-200"
+                      className="flex h-10 min-w-[44px] items-center justify-center gap-1.5 rounded-[12px] bg-gray-100 px-2 text-gray-600 transition hover:bg-gray-200"
                       title="Download PDF"
                     >
-                      <IconPdf className="h-5 w-5" />
+                      <IconPdf className="h-5 w-5 shrink-0" />
+                      <span className="text-xs font-medium">PDF</span>
                     </button>
                     <button
                       onClick={() => handleDelete(order.id)}
@@ -304,12 +306,14 @@ export default function OrdersPage() {
         )}
 
         <button
+          type="button"
           onClick={() => downloadOrdersPdf(filteredOrders)}
           disabled={filteredOrders.length === 0}
-          className="fixed bottom-24 right-4 flex h-14 w-14 items-center justify-center rounded-[16px] bg-primary-500 text-white shadow-lg transition hover:bg-primary-600 disabled:opacity-50 md:bottom-8 md:right-8"
+          className="fixed bottom-24 right-4 z-50 flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50 md:bottom-8 md:right-8"
           title="Download all as PDF"
         >
-          <IconPdf className="h-6 w-6" />
+          <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
+          <span className="text-sm font-medium">PDF</span>
         </button>
       </div>
     </ErrorBoundary>
