@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { BottomNav, RailNav } from "./Navigation";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-const NO_NAV_ROUTES = ["/login", "/register", "/forgot-password"];
+const NO_NAV_ROUTES = ["/login", "/register", "/forgot-password", "/verify-success"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();

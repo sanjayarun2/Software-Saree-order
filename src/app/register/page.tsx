@@ -34,17 +34,22 @@ export default function RegisterPage() {
       return;
     }
     const trimmedMobile = mobile.trim();
-    if (trimmedMobile && newUser) {
+    if (trimmedMobile) {
       saveMobile(trimmedMobile);
-      try {
-        await supabase
-          .from("user_profiles")
-          .upsert(
-            { user_id: newUser.id, mobile: trimmedMobile, updated_at: new Date().toISOString() },
-            { onConflict: "user_id" }
-          );
-      } catch {
-        /* ignore */
+      if (newUser) {
+        try {
+          await supabase
+            .from("user_profiles")
+            .upsert(
+              { user_id: newUser.id, mobile: trimmedMobile, updated_at: new Date().toISOString() },
+              { onConflict: "user_id" }
+            );
+        } catch {
+          /* RLS may block: no session until email confirmed - save for later */
+        }
+      }
+      if (typeof window !== "undefined") {
+        localStorage.setItem("saree_pending_mobile", trimmedMobile);
       }
     }
     if (typeof window !== "undefined") localStorage.setItem("saree_app_returning", "1");

@@ -28,17 +28,18 @@ export function SplashController({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="fixed inset-0 z-[100] flex min-h-dvh flex-col items-center justify-center bg-[var(--bento-bg)]">
-        <div className="flex flex-col items-center gap-8 px-8">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl p-3 md:h-24 md:w-24 md:p-4">
+        <div className="flex flex-col items-center gap-6 px-8">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center md:h-16 md:w-16">
             <img
               src="/icon.svg"
               alt="Saree Order Book"
               className="h-full w-full object-contain"
-              width={96}
-              height={96}
+              width={64}
+              height={64}
+              fetchPriority="high"
             />
           </div>
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500 dark:border-primary-900 dark:border-t-primary-400" />
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500 dark:border-primary-900 dark:border-t-primary-400" />
         </div>
       </div>
     );

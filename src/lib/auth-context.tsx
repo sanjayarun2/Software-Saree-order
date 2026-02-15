@@ -58,6 +58,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         if (session?.user && typeof window !== "undefined") {
           localStorage.setItem("saree_app_returning", "1");
+          const pendingMobile = localStorage.getItem("saree_pending_mobile");
+          if (pendingMobile?.trim()) {
+            supabase
+              .from("user_profiles")
+              .upsert(
+                { user_id: session.user.id, mobile: pendingMobile.trim(), updated_at: new Date().toISOString() },
+                { onConflict: "user_id" }
+              )
+              .then(() => {
+                localStorage.removeItem("saree_pending_mobile");
+              })
+              .then(undefined, () => {});
+          }
         }
       }
     });
@@ -78,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const siteUrl = typeof window !== "undefined"
       ? (window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
       : (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000");
-    const redirectTo = `${siteUrl}/login/`;
+    const redirectTo = `${siteUrl}/verify-success/`;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
