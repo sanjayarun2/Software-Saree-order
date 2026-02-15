@@ -10,7 +10,7 @@ type AuthContextType = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null; user?: User }>;
   signOut: () => Promise<void>;
 };
 
@@ -56,6 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!cancelled) {
         setSession(session);
         setUser(session?.user ?? null);
+        if (session?.user && typeof window !== "undefined") {
+          localStorage.setItem("saree_app_returning", "1");
+        }
       }
     });
 
@@ -76,12 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ? (window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
       : (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000");
     const redirectTo = `${siteUrl}/login/`;
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: redirectTo },
     });
-    return { error };
+    return { error, user: data?.user ?? undefined };
   };
 
   const signOut = async () => {

@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
+const RETURNING_KEY = "saree_app_returning";
+
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -11,7 +13,10 @@ export default function Home() {
   useEffect(() => {
     if (loading) return;
     if (user) router.replace("/dashboard/");
-    else router.replace("/register/");
+    else {
+      const returning = typeof window !== "undefined" && localStorage.getItem(RETURNING_KEY);
+      router.replace(returning ? "/login/" : "/register/");
+    }
   }, [user, loading, router]);
 
   return (

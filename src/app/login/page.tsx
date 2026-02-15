@@ -1,26 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mobile, setMobile] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const { signIn, user, loading: authLoading } = useAuth();
-
-  useEffect(() => {
-    setRecentMobiles(getRecentMobiles());
-  }, []);
   const router = useRouter();
 
   React.useEffect(() => {
@@ -36,25 +29,6 @@ export default function LoginPage() {
       setLoading(false);
       setError(err.message || "Login failed. Please try again.");
       return;
-    }
-    // Save mobile to user_profiles and localStorage (non-blocking)
-    const trimmedMobile = mobile.trim();
-    if (trimmedMobile) {
-      saveMobile(trimmedMobile);
-      try {
-        const { supabase } = await import("@/lib/supabase");
-        const { data: { user: signedInUser } } = await supabase.auth.getUser();
-        if (signedInUser) {
-          await supabase
-            .from("user_profiles")
-            .upsert(
-              { user_id: signedInUser.id, mobile: trimmedMobile, updated_at: new Date().toISOString() },
-              { onConflict: "user_id" }
-            );
-        }
-      } catch {
-        // Ignore - don't block redirect
-      }
     }
     setLoading(false);
     router.replace("/dashboard/");
@@ -130,29 +104,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="mobile" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Mobile Number
-                </label>
-                <input
-                  id="mobile"
-                  name="mobile"
-                  type="tel"
-                  list="mobile-suggestions"
-                  placeholder="Mobile number"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  inputMode="tel"
-                  autoComplete="tel"
-                  className="w-full rounded-bento border border-slate-300 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-                <datalist id="mobile-suggestions">
-                  {recentMobiles.map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-              </div>
-
               <Link
                 href="/forgot-password/"
                 className="block text-sm text-primary-600 hover:underline dark:text-primary-400"
@@ -174,11 +125,6 @@ export default function LoginPage() {
             Don&apos;t have an account?{" "}
             <Link href="/register/" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
               Register
-            </Link>
-          </p>
-          <p className="text-center">
-            <Link href="/check-connection/" className="text-xs text-slate-500 hover:underline">
-              Check Supabase connection
             </Link>
           </p>
         </div>

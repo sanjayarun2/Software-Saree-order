@@ -1,32 +1,53 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mobile, setMobile] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const { signUp } = useAuth();
-  const router = useRouter();
+
+  useEffect(() => {
+    setRecentMobiles(getRecentMobiles());
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error: err } = await signUp(email, password);
+    const { error: err, user: newUser } = await signUp(email, password);
     setLoading(false);
     if (err) {
       setError(err.message || "Registration failed. Please try again.");
       return;
     }
+    const trimmedMobile = mobile.trim();
+    if (trimmedMobile && newUser) {
+      saveMobile(trimmedMobile);
+      try {
+        await supabase
+          .from("user_profiles")
+          .upsert(
+            { user_id: newUser.id, mobile: trimmedMobile, updated_at: new Date().toISOString() },
+            { onConflict: "user_id" }
+          );
+      } catch {
+        /* ignore */
+      }
+    }
+    if (typeof window !== "undefined") localStorage.setItem("saree_app_returning", "1");
     setSuccess(true);
   };
 
@@ -93,12 +114,35 @@ export default function RegisterPage() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+                      className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? "🙈" : "👁"}
                     </button>
                   </div>
+                </div>
+
+                <div>
+                  <label htmlFor="mobile" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Mobile Number
+                  </label>
+                  <input
+                    id="mobile"
+                    name="mobile"
+                    type="tel"
+                    list="mobile-suggestions"
+                    placeholder="Mobile number"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className="w-full rounded-bento border border-slate-300 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <datalist id="mobile-suggestions">
+                    {recentMobiles.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <button
