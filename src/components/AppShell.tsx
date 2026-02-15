@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
       />
-      <div className="lg:ml-24">
+      <div className="lg:ml-64">
         <header className="sticky top-0 z-30 flex min-h-[56px] items-center border-b border-gray-200 bg-white px-4 dark:border-slate-700 dark:bg-slate-900 lg:hidden">
           <button
             type="button"

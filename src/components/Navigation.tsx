@@ -123,14 +123,14 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
               href={item.href + (item.href === "/dashboard" ? "/" : "/")}
               onClick={onMobileClose}
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${
-                isMobile ? "min-h-[52px]" : "min-h-[50px] min-w-[50px] flex-col justify-center gap-1 px-2 py-2"
+                isMobile ? "min-h-[52px]" : "min-h-[50px]"
               } ${active ? navItemActive : navItemInactive}`}
               title={item.label}
             >
-              <span className={`${isMobile ? "text-xl" : "text-2xl"}`} aria-hidden>
+              <span className={`${isMobile ? "text-xl" : "text-xl"}`} aria-hidden>
                 {item.icon}
               </span>
-              <span className={isMobile ? "text-base font-normal" : "text-xs font-medium"}>
+              <span className={isMobile ? "text-base font-normal" : "text-base font-normal"}>
                 {item.label}
               </span>
             </Link>
@@ -142,7 +142,7 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
           href="/logout/"
           onClick={onMobileClose}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
-            isMobile ? "min-h-[52px]" : "min-h-[50px] min-w-[50px] flex-col justify-center gap-1 px-2 py-2"
+            isMobile ? "min-h-[52px]" : "min-h-[50px]"
           }`}
           title="Log out"
         >
@@ -181,9 +181,9 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
       >
         {sidebarContent(true)}
       </aside>
-      {/* Desktop sidebar: floating panel with margins */}
+      {/* Desktop sidebar: fixed left, sufficient width, no overlap with content */}
       <aside
-        className={`fixed left-4 top-4 z-40 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center rounded-2xl bg-white py-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] dark:bg-slate-900 lg:flex`}
+        className={`fixed left-0 top-0 z-40 hidden h-full w-64 flex-col overflow-y-auto rounded-none border-r border-gray-200 bg-white py-6 pl-4 pr-4 shadow-none dark:border-slate-700 dark:bg-slate-900 lg:flex`}
         role="navigation"
         aria-label="Side navigation"
       >
