@@ -11,7 +11,7 @@ export default function Home() {
   useEffect(() => {
     if (loading) return;
     if (user) router.replace("/dashboard/");
-    else router.replace("/login/");
+    else router.replace("/register/");
   }, [user, loading, router]);
 
   return (

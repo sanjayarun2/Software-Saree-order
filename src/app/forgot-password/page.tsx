@@ -17,8 +17,11 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
     try {
+      const siteUrl = typeof window !== "undefined"
+        ? (window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
+        : (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000");
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/login/`,
+        redirectTo: `${siteUrl}/login/`,
       });
       if (err) throw err;
       setSent(true);

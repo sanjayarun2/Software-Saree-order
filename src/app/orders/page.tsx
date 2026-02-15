@@ -155,7 +155,7 @@ export default function OrdersPage() {
               <button
                 onClick={() => setStatus("PENDING")}
                 className={`min-h-touch flex-1 rounded-bento px-4 font-medium ${
-                  status === "PENDING" ? "bg-primary-500 text-white" : "bg-slate-100 dark:bg-slate-700"
+                  status === "PENDING" ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
                 }`}
               >
                 PENDING
@@ -163,7 +163,7 @@ export default function OrdersPage() {
               <button
                 onClick={() => setStatus("DESPATCHED")}
                 className={`min-h-touch flex-1 rounded-bento px-4 font-medium ${
-                  status === "DESPATCHED" ? "bg-primary-500 text-white" : "bg-slate-100 dark:bg-slate-700"
+                  status === "DESPATCHED" ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
                 }`}
               >
                 DISPATCHED
@@ -172,30 +172,30 @@ export default function OrdersPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium">
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   {status === "PENDING" ? "Booking From date" : "Dispatch From date"}
                 </label>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                  className="w-full rounded-bento border border-gray-300 px-4 py-2 text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   {status === "PENDING" ? "Booking To date" : "Dispatch To date"}
                 </label>
                 <input
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                  className="w-full rounded-bento border border-gray-300 px-4 py-2 text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>
 
-            <label className="flex min-h-touch items-center gap-2">
+            <label className="flex min-h-touch items-center gap-2 text-gray-700 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={allOrders}
@@ -226,7 +226,7 @@ export default function OrdersPage() {
           <div className="space-y-4">
             {filteredOrders.length === 0 ? (
               <BentoCard>
-                <p className="text-center text-slate-500">
+                <p className="text-center text-slate-500 dark:text-slate-400">
                   {orders.length === 0 ? "No orders found." : "No matching orders."}
                 </p>
               </BentoCard>
@@ -234,14 +234,14 @@ export default function OrdersPage() {
               filteredOrders.map((order, i) => (
                 <BentoCard key={order.id} className="flex items-center justify-between gap-4 py-4">
                   <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1 space-y-1">
-                      <p className="truncate text-sm font-medium text-gray-900 lg:text-base">
+                      <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100 lg:text-base">
                         {getAddressSummary(order.recipient_details)}
                       </p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 dark:text-slate-400">
                         <span className="tabular-nums">
                           {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
                         </span>
@@ -249,7 +249,7 @@ export default function OrdersPage() {
                           <span>Qty: {Number(order.quantity)}</span>
                         )}
                         {order.status === "DESPATCHED" && (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                             Dispatched
                           </span>
                         )}
@@ -259,7 +259,7 @@ export default function OrdersPage() {
                   <div className="flex shrink-0 items-center gap-1">
                     <Link
                       href={`/edit-order/?id=${order.id}`}
-                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-gray-100 text-gray-600 transition hover:bg-primary-100 hover:text-primary-600"
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-gray-100 text-gray-600 transition hover:bg-primary-100 hover:text-primary-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-primary-900/50 dark:hover:text-primary-300"
                       title="Edit"
                     >
                       <IconEdit className="h-5 w-5" />
@@ -267,7 +267,7 @@ export default function OrdersPage() {
                     {order.status === "PENDING" && (
                       <button
                         onClick={() => handleMarkAsDespatched(order)}
-                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-600 transition hover:bg-emerald-200"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-600 transition hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
                         title="Dispatch"
                       >
                         <IconDispatch className="h-5 w-5" />
@@ -276,7 +276,7 @@ export default function OrdersPage() {
                     {order.status === "DESPATCHED" && (
                       <button
                         onClick={() => handleMoveToPending(order)}
-                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 text-amber-600 transition hover:bg-amber-200"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 text-amber-600 transition hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
                         title="Move to Pending"
                       >
                         <IconUndo className="h-5 w-5" />
@@ -285,7 +285,7 @@ export default function OrdersPage() {
                     <button
                       type="button"
                       onClick={() => downloadOrderPdf(order)}
-                      className="flex h-10 min-w-[44px] items-center justify-center gap-1.5 rounded-[12px] bg-gray-100 px-2 text-gray-600 transition hover:bg-gray-200"
+                      className="flex h-10 min-w-[44px] items-center justify-center gap-1.5 rounded-[12px] bg-gray-100 px-2 text-gray-600 transition hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                       title="Download PDF"
                     >
                       <IconPdf className="h-5 w-5 shrink-0" />
@@ -293,7 +293,7 @@ export default function OrdersPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(order.id)}
-                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100"
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
                       title="Delete"
                     >
                       <IconTrash className="h-5 w-5" />

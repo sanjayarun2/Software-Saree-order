@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { capacitorStorage } from "./capacitor-storage";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+// Avoid "supabaseUrl is required" during static prerender (e.g. _not-found) when env is missing
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
 function isCapacitorNative(): boolean {
   if (typeof window === "undefined") return false;

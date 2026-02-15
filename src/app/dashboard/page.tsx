@@ -21,7 +21,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:space-y-10 lg:px-10 lg:py-8">
-      <h1 className="text-xl font-bold tracking-tight text-gray-900 md:text-2xl">
+      <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-slate-100 md:text-2xl">
         Dashboard
       </h1>
 
@@ -30,8 +30,8 @@ export default function DashboardPage() {
           <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
             <span className="text-3xl md:text-4xl" aria-hidden>📋</span>
             <div className="text-center">
-              <p className="text-base font-semibold text-gray-900 md:text-lg">Orders</p>
-              <p className="text-sm text-gray-500 md:text-base">View bookings</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-slate-100 md:text-lg">Orders</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400 md:text-base">View bookings</p>
             </div>
           </BentoCard>
         </Link>
@@ -39,8 +39,8 @@ export default function DashboardPage() {
           <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
             <span className="text-3xl md:text-4xl" aria-hidden>➕</span>
             <div className="text-center">
-              <p className="text-base font-semibold text-gray-900 md:text-lg">Add Order</p>
-              <p className="text-sm text-gray-500 md:text-base">Create booking</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-slate-100 md:text-lg">Add Order</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400 md:text-base">Create booking</p>
             </div>
           </BentoCard>
         </Link>
@@ -48,8 +48,8 @@ export default function DashboardPage() {
           <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
             <span className="text-3xl md:text-4xl" aria-hidden>📄</span>
             <div className="text-center">
-              <p className="text-base font-semibold text-gray-900 md:text-lg">Reports</p>
-              <p className="text-sm text-gray-500 md:text-base">Export PDF</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-slate-100 md:text-lg">Reports</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400 md:text-base">Export PDF</p>
             </div>
           </BentoCard>
         </Link>

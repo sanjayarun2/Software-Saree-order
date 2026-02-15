@@ -132,33 +132,33 @@ export default function AddOrderPage() {
             )}
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">TO (Recipient)</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">TO (customer address)</label>
               <AutocompleteTextarea
                 value={recipient}
                 onChange={setRecipient}
                 suggestions={suggestions?.recipients ?? []}
-                placeholder="Start typing for suggestions from past orders"
-                maxLength={600}
+                placeholder=""
+                maxLength={800}
                 rows={3}
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
                 id="recipient"
               />
-              <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{recipient.length}/600</p>
+              <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{recipient.length}/800</p>
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">FROM (Sender)</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">FROM (our address)</label>
               <AutocompleteTextarea
                 value={sender}
                 onChange={setSender}
                 suggestions={senderSuggestions}
-                placeholder="Start typing for suggestions from past orders"
-                maxLength={600}
+                placeholder=""
+                maxLength={800}
                 rows={3}
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
                 id="sender"
               />
-              <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{sender.length}/600</p>
+              <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{sender.length}/800</p>
             </div>
 
             <div>
@@ -202,7 +202,7 @@ export default function AddOrderPage() {
                 list="booked-by-list"
                 value={bookedBy}
                 onChange={(e) => setBookedBy(e.target.value)}
-                placeholder="Name (tap for suggestions)"
+                placeholder="Name"
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
               <datalist id="booked-by-list">
@@ -219,7 +219,7 @@ export default function AddOrderPage() {
                 list="mobile-list"
                 value={bookedMobile}
                 onChange={(e) => setBookedMobile(e.target.value)}
-                placeholder="Mobile number (tap for suggestions)"
+                placeholder="Mobile number"
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
               <datalist id="mobile-list">
