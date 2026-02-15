@@ -12,6 +12,12 @@ export default function Home() {
 
   useEffect(() => {
     if (loading) return;
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const fromEmailVerify = hash.includes("access_token") || hash.includes("type=email");
+    if (fromEmailVerify) {
+      router.replace("/verify-success/");
+      return;
+    }
     if (user) router.replace("/dashboard/");
     else {
       const returning = typeof window !== "undefined" && localStorage.getItem(RETURNING_KEY);

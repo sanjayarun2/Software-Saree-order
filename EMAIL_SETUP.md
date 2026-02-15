@@ -1,59 +1,54 @@
-# Email Deliverability (SPF, DKIM, DMARC)
+# Email & Verification Setup
 
-To reduce verification emails landing in Spam and improve deliverability:
+## 1. Verification Link → Show "Verified" + "Open App"
 
-## 1. Supabase Dashboard
+**Required:** Add these to **Supabase Dashboard → Authentication → URL Configuration → Redirect URLs** (one per line):
 
-### Auth URL Configuration
-- **Supabase Dashboard** → **Authentication** → **URL Configuration**
-- **Site URL**: Your production URL (e.g. `https://software-saree-order.vercel.app`)
-- **Redirect URLs**: Add:
-  - `https://software-saree-order.vercel.app/**`
-  - `https://software-saree-order.vercel.app/verify-success/**`
-  - `http://localhost:3000/**` (for local dev)
+```
+https://software-saree-order.vercel.app/**
+https://software-saree-order.vercel.app/verify-success/**
+http://localhost:3000/**
+```
 
-### Custom SMTP (Recommended for better deliverability)
+If `/verify-success/` is **not** in Redirect URLs, Supabase will redirect to the root (/) and the user may see the dashboard instead of the "Verified" page. Adding it fixes this.
+
+**Site URL:** `https://software-saree-order.vercel.app`
+
+---
+
+## 2. Email Going to Spam – How to Fix
+
+To reduce verification emails landing in Spam:
+
+### A. Use Custom SMTP (Best fix)
 - **Project Settings** → **Auth** → **SMTP Settings**
 - Enable **Custom SMTP** and use a verified provider (Resend, SendGrid, Postmark, etc.)
 - Use a **custom domain** for the "From" address (e.g. `noreply@yourdomain.com`)
 - Ensure the From address matches your domain
 
-### Email Templates
-- **Authentication** → **Email Templates**
-- Avoid spam-trigger words (FREE, ACT NOW, URGENT, etc.)
+### B. Add DNS Records (SPF, DKIM, DMARC)
+
+At your domain registrar, add:
+
+| Record | Type | Name | Value |
+|--------|------|------|-------|
+| SPF | TXT | @ | `v=spf1 include:_spf.supabase.co ~all` |
+| DKIM | TXT | (from SMTP provider) | Get from Resend/SendGrid |
+| DMARC | TXT | _dmarc | `v=DMARC1; p=none; rua=mailto:you@yourdomain.com` |
+
+### C. Edit Email Template
+
+- **Authentication** → **Email Templates** → **Confirm signup**
+- Remove words like: FREE, ACT NOW, URGENT, GUARANTEED
+- Use clear, professional wording
 - Keep HTML valid (no broken tags)
-- Use plain text or simple HTML
 
-## 2. DNS Records (for custom domain emails)
+### D. Checklist
 
-If using a custom domain for SMTP, add these DNS records at your domain registrar:
-
-### SPF Record
-```
-Type: TXT
-Name: @ (or your domain)
-Value: v=spf1 include:_spf.supabase.co ~all
-```
-(Adjust if using a different SMTP provider – e.g. Resend: `include:sendgrid.net`)
-
-### DKIM Record
-- Your SMTP provider (Resend, SendGrid, etc.) will provide DKIM records
-- Add the TXT record they give you (name and value)
-- Supabase: **Project Settings** → **Auth** → check for DKIM if using custom SMTP
-
-### DMARC Record (optional but recommended)
-```
-Type: TXT
-Name: _dmarc
-Value: v=DMARC1; p=none; rua=mailto:dmarc@yourdomain.com
-```
-(Change `p=quarantine` or `p=reject` once you're confident)
-
-## 3. Verify Configuration
-
-- Ensure the "From" email address is verified in your SMTP provider
-- Test sending from Supabase Dashboard
-- Check that emails land in Primary inbox after applying SPF/DKIM
+1. Enable Custom SMTP in Supabase with Resend/SendGrid
+2. Add SPF, DKIM, DMARC DNS records for your domain
+3. Add `https://software-saree-order.vercel.app/verify-success/**` to Redirect URLs
+4. Test registration and check inbox (not Spam)
 
 ## Reference
 
