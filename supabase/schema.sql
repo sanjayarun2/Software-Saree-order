@@ -37,11 +37,12 @@ CREATE POLICY "Users can update own orders" ON public.orders
 CREATE POLICY "Users can delete own orders" ON public.orders
   FOR DELETE USING (auth.uid() = user_id);
 
--- User profiles: mobile number per user (login screen)
+-- User profiles: mobile and email per user (login screen)
 CREATE TABLE IF NOT EXISTS public.user_profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
   mobile TEXT,
+  email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

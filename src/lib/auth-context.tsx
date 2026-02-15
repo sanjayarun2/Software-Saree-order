@@ -10,7 +10,7 @@ type AuthContextType = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null; user?: User }>;
+  signUp: (email: string, password: string, metadata?: { mobile?: string }) => Promise<{ error: Error | null; user?: User }>;
   signOut: () => Promise<void>;
 };
 
@@ -59,13 +59,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user && typeof window !== "undefined") {
           localStorage.setItem("saree_app_returning", "1");
           const pendingMobile = localStorage.getItem("saree_pending_mobile");
-          if (pendingMobile?.trim()) {
+          const payload: { user_id: string; mobile?: string; email?: string; updated_at: string } = {
+            user_id: session.user.id,
+            updated_at: new Date().toISOString(),
+          };
+          if (pendingMobile?.trim()) payload.mobile = pendingMobile.trim();
+          if (session.user.email) payload.email = session.user.email;
+          if (payload.mobile || payload.email) {
             supabase
               .from("user_profiles")
-              .upsert(
-                { user_id: session.user.id, mobile: pendingMobile.trim(), updated_at: new Date().toISOString() },
-                { onConflict: "user_id" }
-              )
+              .upsert(payload, { onConflict: "user_id" })
               .then(() => {
                 localStorage.removeItem("saree_pending_mobile");
               })
@@ -87,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, metadata?: { mobile?: string }) => {
     const siteUrl = typeof window !== "undefined"
       ? (window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
       : (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000");
@@ -95,7 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: redirectTo },
+      options: {
+        emailRedirectTo: redirectTo,
+        data: metadata ?? {},
+      },
     });
     return { error, user: data?.user ?? undefined };
   };

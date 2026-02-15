@@ -27,27 +27,15 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error: err, user: newUser } = await signUp(email, password);
+    const trimmedMobile = mobile.trim();
+    const { error: err, user: newUser } = await signUp(email, password, trimmedMobile ? { mobile: trimmedMobile } : undefined);
     setLoading(false);
     if (err) {
       setError(err.message || "Registration failed. Please try again.");
       return;
     }
-    const trimmedMobile = mobile.trim();
     if (trimmedMobile) {
       saveMobile(trimmedMobile);
-      if (newUser) {
-        try {
-          await supabase
-            .from("user_profiles")
-            .upsert(
-              { user_id: newUser.id, mobile: trimmedMobile, updated_at: new Date().toISOString() },
-              { onConflict: "user_id" }
-            );
-        } catch {
-          /* RLS may block: no session until email confirmed - save for later */
-        }
-      }
       if (typeof window !== "undefined") {
         localStorage.setItem("saree_pending_mobile", trimmedMobile);
       }

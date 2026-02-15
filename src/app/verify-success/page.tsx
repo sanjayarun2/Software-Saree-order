@@ -1,24 +1,31 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 const APP_SCHEME = "sareeorder://";
+const APP_PACKAGE = "com.sareeorder.app";
+const SITE_URL = "https://software-saree-order.vercel.app";
+
+function getOpenAppUrl(): string {
+  if (typeof window === "undefined") return "/dashboard/";
+  const appUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || SITE_URL;
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (isAndroid) {
+    const fallback = encodeURIComponent(appUrl);
+    return `intent://open#Intent;scheme=sareeorder;package=${APP_PACKAGE};S.browser_fallback_url=${fallback};end`;
+  }
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isIOS) return APP_SCHEME;
+  return "/dashboard/";
+}
 
 export default function VerifySuccessPage() {
-  const handleOpenApp = () => {
-    if (typeof window === "undefined") return;
-    const appUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "https://software-saree-order.vercel.app";
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
-      window.location.href = APP_SCHEME;
-      setTimeout(() => {
-        window.location.href = appUrl;
-      }, 500);
-    } else {
-      window.location.href = appUrl;
-    }
-  };
+  const [openAppUrl, setOpenAppUrl] = useState("/dashboard/");
+
+  useEffect(() => {
+    setOpenAppUrl(getOpenAppUrl());
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--bento-bg)] px-6">
@@ -32,13 +39,12 @@ export default function VerifySuccessPage() {
         <p className="text-center text-sm text-gray-600 dark:text-gray-400">
           Your email has been verified. You can now sign in to the app.
         </p>
-        <button
-          type="button"
-          onClick={handleOpenApp}
-          className="w-full rounded-xl bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600"
+        <a
+          href={openAppUrl}
+          className="block w-full rounded-xl bg-primary-500 px-4 py-3 text-center font-semibold text-white hover:bg-primary-600"
         >
           Open App
-        </button>
+        </a>
         <Link
           href="/login/"
           className="text-sm text-primary-600 hover:underline dark:text-primary-400"
