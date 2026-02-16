@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppLogo } from "@/components/AppLogo";
-import { getGmailDeepLinkUrl, openGmailApp } from "@/lib/gmail-deep-link";
 
 const APP_SCHEME = "sareeorder://";
 const APP_PACKAGE = "com.sareeorder.app";
@@ -83,16 +82,6 @@ export default function VerifySuccessPage() {
           >
             Open App
           </a>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              openGmailApp();
-            }}
-            className="block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-          >
-            Open Gmail
-          </button>
           <Link
             href="/login/"
             className="text-sm text-primary-600 hover:underline dark:text-primary-400"
