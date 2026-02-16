@@ -9,7 +9,7 @@ import { BentoCard } from "@/components/ui/BentoCard";
 import { OrderListSkeleton } from "@/components/ui/SkeletonLoader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash } from "@/components/ui/OrderIcons";
-import { downloadOrderPdf, downloadOrdersPdf } from "@/lib/pdf-utils";
+import { downloadOrdersPdf } from "@/lib/pdf-utils";
 import { useSearch } from "@/lib/search-context";
 import { getCachedOrders, setCachedOrders } from "@/lib/orders-cache";
 import type { Order, OrderStatus } from "@/lib/db-types";
@@ -282,15 +282,6 @@ export default function OrdersPage() {
                         <IconUndo className="h-5 w-5" />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => downloadOrderPdf(order)}
-                      className="flex h-10 min-w-[44px] items-center justify-center gap-1.5 rounded-[12px] bg-gray-100 px-2 text-gray-600 transition hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-                      title="Download PDF"
-                    >
-                      <IconPdf className="h-5 w-5 shrink-0" />
-                      <span className="text-xs font-medium">PDF</span>
-                    </button>
                     <button
                       onClick={() => handleDelete(order.id)}
                       className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
