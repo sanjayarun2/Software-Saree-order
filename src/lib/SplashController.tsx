@@ -33,10 +33,20 @@ export function SplashController({ children }: { children: React.ReactNode }) {
             <img
               src="/icon.svg"
               alt="Saree Order Book"
-              className="h-full w-full object-contain"
-              width={64}
-              height={64}
+              className="h-full w-full max-w-[80px] object-contain"
+              style={{
+                imageRendering: "auto",
+                WebkitImageRendering: "-webkit-optimize-contrast" as any,
+                shapeRendering: "geometricPrecision",
+                backfaceVisibility: "hidden",
+                transform: "translateZ(0)",
+                WebkitFontSmoothing: "antialiased",
+                MozOsxFontSmoothing: "grayscale",
+              } as React.CSSProperties}
+              width={128}
+              height={128}
               fetchPriority="high"
+              loading="eager"
             />
           </div>
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500 dark:border-primary-900 dark:border-t-primary-400" />

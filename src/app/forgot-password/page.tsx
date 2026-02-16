@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppLogo } from "@/components/AppLogo";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -36,13 +37,16 @@ export default function ForgotPasswordPage() {
     <ErrorBoundary>
       <div className="flex min-h-screen flex-col items-center justify-center p-4 md:p-6">
         <div className="w-full max-w-md space-y-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Forgot Password?
-            </h1>
-            <p className="mt-2 text-slate-600 dark:text-slate-400">
-              Enter your email to receive a reset link.
-            </p>
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AppLogo />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                Forgot Password?
+              </h1>
+              <p className="mt-2 text-slate-600 dark:text-slate-400">
+                Enter your email to receive a reset link.
+              </p>
+            </div>
           </div>
 
           <BentoCard>

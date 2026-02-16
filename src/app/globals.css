@@ -69,3 +69,18 @@ body {
     white-space: pre-wrap !important;
   }
 }
+
+/* High-quality SVG rendering for logos - prevents pixelation */
+img[src$=".svg"],
+img[src*="icon.svg"] {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: auto;
+  -webkit-image-rendering: -webkit-optimize-contrast;
+  -ms-interpolation-mode: nearest-neighbor;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  shape-rendering: geometricPrecision;
+}

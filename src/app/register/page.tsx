@@ -5,16 +5,9 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppLogo } from "@/components/AppLogo";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
-
-const GMAIL_APP_SCHEME = "googlegmail://";
-const GMAIL_WEB_URL = "https://mail.google.com";
-
-function getOpenGmailUrl(): string {
-  if (typeof window === "undefined") return GMAIL_WEB_URL;
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  return isMobile ? GMAIL_APP_SCHEME : GMAIL_WEB_URL;
-}
+import { getGmailDeepLinkUrl, openGmailApp } from "@/lib/gmail-deep-link";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -25,7 +18,7 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
-  const [openGmailUrl, setOpenGmailUrl] = useState(GMAIL_WEB_URL);
+  const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const { signUp } = useAuth();
 
   useEffect(() => {
@@ -33,7 +26,7 @@ export default function RegisterPage() {
   }, []);
 
   useEffect(() => {
-    setOpenGmailUrl(getOpenGmailUrl());
+    setOpenGmailUrl(getGmailDeepLinkUrl());
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,13 +67,16 @@ export default function RegisterPage() {
     <ErrorBoundary>
       <div className="flex min-h-screen flex-col items-center justify-center p-4 md:p-6">
         <div className="w-full max-w-md space-y-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              REGISTER
-            </h1>
-            <p className="mt-2 text-slate-600 dark:text-slate-400">
-              Create your account
-            </p>
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AppLogo />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                REGISTER
+              </h1>
+              <p className="mt-2 text-slate-600 dark:text-slate-400">
+                Create your account
+              </p>
+            </div>
           </div>
 
           <BentoCard>
@@ -89,14 +85,16 @@ export default function RegisterPage() {
                 <p className="rounded-bento bg-green-50 p-4 text-green-800 dark:bg-green-900/30 dark:text-green-200">
                   Check your inbox! We sent a verification link to <strong>{email}</strong>. If you don&apos;t see it, please check your Spam folder.
                 </p>
-                <a
-                  href={openGmailUrl}
-                  target={openGmailUrl.startsWith("http") ? "_blank" : undefined}
-                  rel={openGmailUrl.startsWith("http") ? "noopener noreferrer" : undefined}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openGmailApp();
+                  }}
                   className="block w-full rounded-bento border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Open Gmail
-                </a>
+                </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">

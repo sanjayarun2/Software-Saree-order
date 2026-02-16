@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppLogo } from "@/components/AppLogo";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -48,10 +49,13 @@ export default function LoginPage() {
     <ErrorBoundary>
       <div className="flex min-h-screen flex-col items-center justify-center p-4 md:p-6">
         <div className="w-full max-w-md space-y-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              LOGIN
-            </h1>
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AppLogo />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                LOGIN
+              </h1>
+            </div>
           </div>
 
           <BentoCard>
