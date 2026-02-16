@@ -1,33 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Saree Order: order form (document) + saree drape. Safe zone for adaptive icon. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportHeight="108"
-    android:viewportWidth="108">
-    <!-- Saree Order - order form + flowing drape, centered in safe zone -->
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Document / order form - white rounded rectangle -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M24,20 L84,20 L84,78 L24,78 Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+        android:pathData="M26,18 L82,18 Q88,18 88,24 L88,50 Q88,56 82,56 L26,56 Q20,56 20,50 L20,24 Q20,18 26,18 Z" />
+    <!-- Three lines = order fields (indigo) -->
     <path
         android:fillColor="#4F46E5"
-        android:pathData="M32,32 L76,32 L76,38 L32,38 Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+        android:pathData="M32,28 L76,28 L76,34 L32,34 Z" />
     <path
         android:fillColor="#4F46E5"
-        android:pathData="M32,46 L68,46 L68,52 L32,52 Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+        android:pathData="M32,40 L70,40 L70,46 L32,46 Z" />
     <path
         android:fillColor="#4F46E5"
-        android:pathData="M32,60 L60,60 L60,66 L32,66 Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+        android:pathData="M32,52 L60,52 L60,58 L32,58 Z" />
+    <!-- Saree drape - single flowing curved shape (pallu) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M22,90 C42,80 66,80 86,90 L80,98 C62,90 46,90 28,98 Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+        android:pathData="M22,58 L86,58 C86,72 54,90 22,72 Z" />
 </vector>

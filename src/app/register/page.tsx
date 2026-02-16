@@ -3,10 +3,18 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
+
+const GMAIL_APP_SCHEME = "googlegmail://";
+const GMAIL_WEB_URL = "https://mail.google.com";
+
+function getOpenGmailUrl(): string {
+  if (typeof window === "undefined") return GMAIL_WEB_URL;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return isMobile ? GMAIL_APP_SCHEME : GMAIL_WEB_URL;
+}
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -17,10 +25,15 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
+  const [openGmailUrl, setOpenGmailUrl] = useState(GMAIL_WEB_URL);
   const { signUp } = useAuth();
 
   useEffect(() => {
     setRecentMobiles(getRecentMobiles());
+  }, []);
+
+  useEffect(() => {
+    setOpenGmailUrl(getOpenGmailUrl());
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,9 +85,19 @@ export default function RegisterPage() {
 
           <BentoCard>
             {success ? (
-              <p className="rounded-bento bg-green-50 p-4 text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                Check your email to confirm your account.
-              </p>
+              <div className="space-y-4">
+                <p className="rounded-bento bg-green-50 p-4 text-green-800 dark:bg-green-900/30 dark:text-green-200">
+                  Check your inbox! We sent a verification link to <strong>{email}</strong>. If you don&apos;t see it, please check your Spam folder.
+                </p>
+                <a
+                  href={openGmailUrl}
+                  target={openGmailUrl.startsWith("http") ? "_blank" : undefined}
+                  rel={openGmailUrl.startsWith("http") ? "noopener noreferrer" : undefined}
+                  className="block w-full rounded-bento border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  Open Gmail
+                </a>
+              </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (

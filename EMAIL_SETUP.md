@@ -1,6 +1,19 @@
 # Email & Verification Setup
 
-## 1. Verification Link → Show "Verified" + "Open App"
+## 1. Verification Link → "Verification Successful" page (not homepage)
+
+**Why the link opens the homepage:** If the redirect URL is not in Supabase’s allow list, Supabase sends users to the **Site URL** (e.g. your homepage) instead of your app’s verification-success page.
+
+**In the app (already set):** `signUp` uses `emailRedirectTo: ${siteUrl}/verify-success/` so Supabase is told to send users to the Verification Successful page after they click the link. See `src/lib/auth-context.tsx`:
+
+```ts
+options: {
+  emailRedirectTo: `${siteUrl}/verify-success/`,
+  data: userMetadata,
+},
+```
+
+**In Supabase Dashboard:** Add the verification-success URL to the allow list so Supabase can redirect there.
 
 **Required:** Add these to **Supabase Dashboard → Authentication → URL Configuration → Redirect URLs** (one per line):
 
