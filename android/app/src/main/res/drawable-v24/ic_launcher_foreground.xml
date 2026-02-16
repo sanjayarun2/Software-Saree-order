@@ -1,26 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Saree Order: order form (document) + saree drape. Safe zone for adaptive icon. -->
+<!-- Saree Order: order form (document) + saree drape.
+     Foreground elements are inset so the icon doesn’t look over-zoomed
+     inside the adaptive icon mask. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Document / order form - white rounded rectangle -->
+    <!-- Document / order form - white rounded rectangle, inset from edges -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M26,18 L82,18 Q88,18 88,24 L88,50 Q88,56 82,56 L26,56 Q20,56 20,50 L20,24 Q20,18 26,18 Z" />
-    <!-- Three lines = order fields (indigo) -->
+        android:pathData="M30,22 L78,22 Q82,22 82,26 L82,50 Q82,54 78,54 L30,54 Q26,54 26,50 L26,26 Q26,22 30,22 Z" />
+
+    <!-- Three lines = order fields (indigo), slightly shorter for visual balance -->
     <path
         android:fillColor="#4F46E5"
-        android:pathData="M32,28 L76,28 L76,34 L32,34 Z" />
+        android:pathData="M34,30 L74,30 L74,34 L34,34 Z" />
     <path
         android:fillColor="#4F46E5"
-        android:pathData="M32,40 L70,40 L70,46 L32,46 Z" />
+        android:pathData="M34,38 L68,38 L68,42 L34,42 Z" />
     <path
         android:fillColor="#4F46E5"
-        android:pathData="M32,52 L60,52 L60,58 L32,58 Z" />
-    <!-- Saree drape - single flowing curved shape (pallu) -->
+        android:pathData="M34,46 L60,46 L60,50 L34,50 Z" />
+
+    <!-- Saree drape - curved band inset from edges so overall icon feels less zoomed -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M22,58 L86,58 C86,72 54,90 22,72 Z" />
+        android:pathData="M26,56 L82,56 C82,70 54,86 26,70 Z" />
 </vector>
