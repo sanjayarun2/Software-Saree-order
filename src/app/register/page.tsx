@@ -31,7 +31,20 @@ export default function RegisterPage() {
     const { error: err, user: newUser } = await signUp(email, password, trimmedMobile ? { mobile: trimmedMobile } : undefined);
     setLoading(false);
     if (err) {
-      setError(err.message || "Registration failed. Please try again.");
+      const msg = err.message || "";
+      const isAlreadyRegistered =
+        /already\s+(registered|exists?)/i.test(msg) ||
+        /user\s+already\s+registered/i.test(msg) ||
+        (newUser?.identities && newUser.identities.length === 0);
+      if (isAlreadyRegistered) {
+        setError("EMAIL_EXISTS");
+        return;
+      }
+      setError(msg || "Registration failed. Please try again.");
+      return;
+    }
+    if (newUser?.identities && newUser.identities.length === 0) {
+      setError("EMAIL_EXISTS");
       return;
     }
     if (trimmedMobile) {
@@ -65,9 +78,21 @@ export default function RegisterPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
-                  <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                    {error}
-                  </p>
+                  <div className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                    {error === "EMAIL_EXISTS" ? (
+                      <>
+                        <p className="font-medium">This email is already registered.</p>
+                        <p className="mt-1">
+                          <Link href="/login/" className="underline">Login</Link>
+                          {" or "}
+                          <Link href="/forgot-password/" className="underline">Forgot password</Link>
+                          {" to reset."}
+                        </p>
+                      </>
+                    ) : (
+                      <p>{error}</p>
+                    )}
+                  </div>
                 )}
 
                 <div>

@@ -7,6 +7,9 @@ const APP_SCHEME = "sareeorder://";
 const APP_PACKAGE = "com.sareeorder.app";
 const SITE_URL = "https://software-saree-order.vercel.app";
 
+const GMAIL_APP_SCHEME = "googlegmail://";
+const GMAIL_WEB_URL = "https://mail.google.com";
+
 function getOpenAppUrl(): string {
   if (typeof window === "undefined") return "/dashboard/";
   const appUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || SITE_URL;
@@ -20,11 +23,19 @@ function getOpenAppUrl(): string {
   return "/dashboard/";
 }
 
+function getOpenGmailUrl(): string {
+  if (typeof window === "undefined") return GMAIL_WEB_URL;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return isMobile ? GMAIL_APP_SCHEME : GMAIL_WEB_URL;
+}
+
 export default function VerifySuccessPage() {
   const [openAppUrl, setOpenAppUrl] = useState("/dashboard/");
+  const [openGmailUrl, setOpenGmailUrl] = useState(GMAIL_WEB_URL);
 
   useEffect(() => {
     setOpenAppUrl(getOpenAppUrl());
+    setOpenGmailUrl(getOpenGmailUrl());
   }, []);
 
   return (
@@ -44,6 +55,14 @@ export default function VerifySuccessPage() {
           className="block w-full rounded-xl bg-primary-500 px-4 py-3 text-center font-semibold text-white hover:bg-primary-600"
         >
           Open App
+        </a>
+        <a
+          href={openGmailUrl}
+          target={openGmailUrl.startsWith("http") ? "_blank" : undefined}
+          rel={openGmailUrl.startsWith("http") ? "noopener noreferrer" : undefined}
+          className="block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        >
+          Open Gmail
         </a>
         <Link
           href="/login/"

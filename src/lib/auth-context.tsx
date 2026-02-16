@@ -95,12 +95,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ? (window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
       : (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000");
     const redirectTo = `${siteUrl}/verify-success/`;
+    const userMetadata: Record<string, string> = {};
+    if (metadata?.mobile?.trim()) {
+      userMetadata.mobile = metadata.mobile.trim();
+      userMetadata.phone = metadata.mobile.trim();
+      userMetadata.mobile_number = metadata.mobile.trim();
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectTo,
-        data: metadata ?? {},
+        data: userMetadata,
       },
     });
     return { error, user: data?.user ?? undefined };

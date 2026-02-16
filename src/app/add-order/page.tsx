@@ -140,7 +140,7 @@ export default function AddOrderPage() {
                 placeholder=""
                 maxLength={800}
                 rows={3}
-                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
+                className="min-h-[44px] w-full whitespace-pre-wrap rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
                 id="recipient"
               />
               <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{recipient.length}/800</p>
@@ -155,7 +155,7 @@ export default function AddOrderPage() {
                 placeholder=""
                 maxLength={800}
                 rows={3}
-                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
+                className="min-h-[44px] w-full whitespace-pre-wrap rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
                 id="sender"
               />
               <p className="mt-1 text-right text-base text-gray-500 dark:text-gray-400">{sender.length}/800</p>

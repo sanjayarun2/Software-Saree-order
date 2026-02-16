@@ -15,7 +15,8 @@ BEGIN
     NEW.id,
     COALESCE(
       NEW.raw_user_meta_data->>'mobile',
-      NEW.raw_user_meta_data->>'mobile_number'
+      NEW.raw_user_meta_data->>'mobile_number',
+      NEW.raw_user_meta_data->>'phone'
     ),
     NEW.email,
     now()

@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
+  const resetSuccess = searchParams.get("reset") === "success";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -54,6 +56,11 @@ export default function LoginPage() {
 
           <BentoCard>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {resetSuccess && (
+                <p className="rounded-bento bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/30 dark:text-green-200">
+                  Password reset successfully. Sign in with your new password.
+                </p>
+              )}
               {error && (
                 <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
                   {error}

@@ -7,10 +7,11 @@
 ```
 https://software-saree-order.vercel.app/**
 https://software-saree-order.vercel.app/verify-success/**
+https://software-saree-order.vercel.app/reset-password/**
 http://localhost:3000/**
 ```
 
-If `/verify-success/` is **not** in Redirect URLs, Supabase will redirect to the root (/) and the user may see the dashboard instead of the "Verified" page. Adding it fixes this.
+If `/verify-success/` or `/reset-password/` is **not** in Redirect URLs, Supabase may redirect to the root (/) instead. Add them so password reset and verification work correctly.
 
 **Site URL:** `https://software-saree-order.vercel.app`
 
@@ -36,12 +37,28 @@ At your domain registrar, add:
 | DKIM | TXT | (from SMTP provider) | Get from Resend/SendGrid |
 | DMARC | TXT | _dmarc | `v=DMARC1; p=none; rua=mailto:you@yourdomain.com` |
 
-### C. Edit Email Template
+### C. Confirm signup email with “Open Gmail” link
 
-- **Authentication** → **Email Templates** → **Confirm signup**
-- Remove words like: FREE, ACT NOW, URGENT, GUARANTEED
-- Use clear, professional wording
-- Keep HTML valid (no broken tags)
+So the verification email includes a link that opens the Gmail app (on mobile) or Gmail in the browser (on desktop):
+
+1. **Supabase** → **Authentication** → **Email Templates** → **Confirm signup**
+2. In the **Message (HTML)** body, add the “Open Gmail” block below (e.g. after the main confirm button/link).
+
+**Snippet to add (paste before `</body>` or after the confirmation link):**
+
+```html
+<p style="margin-top: 24px;">Or open Gmail to find this email:</p>
+<p>
+  <a href="googlegmail://" style="display: inline-block; margin-right: 12px; color: #2563eb;">Open Gmail App</a>
+  <a href="https://mail.google.com" style="color: #2563eb;">Open Gmail (web)</a>
+</p>
+```
+
+- **Open Gmail App** uses `googlegmail://` so on mobile it can open the Gmail app.
+- **Open Gmail (web)** opens https://mail.google.com in the browser (desktop or fallback).
+
+3. Keep the main confirmation link (e.g. `{{ .ConfirmationURL }}`) in the template so users can still verify from the email.
+4. Remove words like: FREE, ACT NOW, URGENT, GUARANTEED. Keep HTML valid.
 
 ### D. Checklist
 

@@ -71,6 +71,22 @@ const SECTION_H = A4_H / SECTIONS_PER_PAGE;
 const MARGIN = 8;
 const COL_W = (A4_W - MARGIN * 4) / 3; // 3 columns: TO | Thanks | FROM
 
+/** Split address by user newlines first, then wrap long lines to fit width. Preserves formatting. */
+function getAddressLines(
+  doc: { splitTextToSize: (s: string, w: number) => string[] },
+  text: string,
+  maxW: number
+): string[] {
+  const raw = text || "-";
+  const paragraphs = raw.split(/\r?\n/);
+  const lines: string[] = [];
+  for (const p of paragraphs) {
+    const wrapped = doc.splitTextToSize(p.trim() || " ", maxW);
+    lines.push(...wrapped);
+  }
+  return lines;
+}
+
 function drawOrderLabel(
   doc: { setFont: (f: string, s: string) => void; setFontSize: (n: number) => void; text: (s: string, x: number, y: number, o?: { align?: string }) => void; splitTextToSize: (s: string, w: number) => string[] },
   order: Order,
@@ -80,14 +96,15 @@ function drawOrderLabel(
   const centerX = MARGIN + COL_W + MARGIN;
   const rightX = MARGIN + (COL_W + MARGIN) * 2;
   const maxW = COL_W - 4;
+  const lineHeight = 4;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.text("TO (Recipient)", leftX, sectionTop + 6);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  const toLines = doc.splitTextToSize(order.recipient_details || "-", maxW);
-  toLines.slice(0, 6).forEach((line, i) => doc.text(line, leftX, sectionTop + 12 + i * 4));
+  const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
+  toLines.slice(0, 6).forEach((line, i) => doc.text(line, leftX, sectionTop + 12 + i * lineHeight));
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
@@ -105,8 +122,8 @@ function drawOrderLabel(
   doc.text("FROM (Ours)", rightX, sectionTop + 6);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  const fromLines = doc.splitTextToSize(order.sender_details || "-", maxW);
-  fromLines.slice(0, 6).forEach((line, i) => doc.text(line, rightX, sectionTop + 12 + i * 4));
+  const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
+  fromLines.slice(0, 6).forEach((line, i) => doc.text(line, rightX, sectionTop + 12 + i * lineHeight));
 }
 
 function drawSectionBorder(

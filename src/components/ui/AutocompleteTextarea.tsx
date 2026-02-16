@@ -73,7 +73,8 @@ export function AutocompleteTextarea({
         id={id}
         value={value}
         onChange={(e) => {
-          const newVal = e.target.value.slice(0, maxLength);
+          const raw = e.target.value;
+          const newVal = raw.length > maxLength ? raw.slice(0, maxLength) : raw;
           onChange(newVal);
           const q = newVal.trim().toLowerCase();
           const matches = q

@@ -199,7 +199,7 @@ function EditOrderContent() {
                 maxLength={800}
                 rows={3}
                 placeholder="Recipient address and details"
-                className="mt-1 w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                className="mt-1 w-full whitespace-pre-wrap rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
                 required
               />
               <p className="text-right text-xs text-slate-500 dark:text-slate-400">{recipient.length}/800</p>
@@ -218,7 +218,7 @@ function EditOrderContent() {
                 maxLength={800}
                 rows={3}
                 placeholder="Sender address and details"
-                className="mt-1 w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
+                className="mt-1 w-full whitespace-pre-wrap rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
                 required
               />
               <p className="text-right text-xs text-slate-500 dark:text-slate-400">{sender.length}/800</p>

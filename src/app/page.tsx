@@ -13,6 +13,11 @@ export default function Home() {
   useEffect(() => {
     if (loading) return;
     const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const fromRecovery = hash.includes("type=recovery");
+    if (fromRecovery) {
+      router.replace("/reset-password/");
+      return;
+    }
     const fromEmailVerify = hash.includes("access_token") || hash.includes("type=email");
     if (fromEmailVerify) {
       router.replace("/verify-success/");
