@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
@@ -8,6 +8,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
 import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
+
+const OPEN_GMAIL_DEBOUNCE_MS = 600;
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -19,6 +21,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
+  const openGmailLastAt = useRef(0);
   const { signUp } = useAuth();
 
   useEffect(() => {
@@ -63,6 +66,33 @@ export default function RegisterPage() {
     setSuccess(true);
   };
 
+  const handleOpenGmail = () => {
+    if (typeof window === "undefined") return;
+    const now = Date.now();
+    if (now - openGmailLastAt.current < OPEN_GMAIL_DEBOUNCE_MS) return;
+    openGmailLastAt.current = now;
+
+    console.log("[GMAIL] Open Gmail button clicked");
+    console.log("[GMAIL] Current email:", email);
+    console.log("[GMAIL] User agent:", navigator.userAgent);
+
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    console.log("[GMAIL] Detected platform (isMobile):", { isMobile });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_registerOpenGmail`,runId:'pre-fix',hypothesisId:'H3',location:'register/page.tsx:OpenGmailClick',message:'Register Open Gmail clicked',data:{email,isMobile,userAgent:navigator.userAgent},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion agent log
+
+    if (isMobile) {
+      console.log("[GMAIL] Opening Gmail app via openGmailApp()");
+      openGmailApp();
+    } else {
+      const url = getGmailWebInboxUrlForEmail(email);
+      console.log("[GMAIL] Using web Gmail URL:", url);
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
     <ErrorBoundary>
       <div className="flex min-h-screen flex-col items-center justify-center p-4 md:p-6">
@@ -81,7 +111,7 @@ export default function RegisterPage() {
 
           <BentoCard>
             {success ? (
-              <div className="space-y-4">
+              <div className="relative z-10 space-y-4">
                 <p className="rounded-bento bg-green-50 p-4 text-green-800 dark:bg-green-900/30 dark:text-green-200">
                   Check your inbox! We sent a verification link to <strong>{email}</strong>. If you don&apos;t see it, please check your Spam folder.
                 </p>
@@ -89,34 +119,13 @@ export default function RegisterPage() {
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (typeof window === "undefined") {
-                      console.log("[GMAIL] Click ignored: window undefined (SSR)");
-                      return;
-                    }
-
-                    console.log("[GMAIL] Open Gmail button clicked");
-                    console.log("[GMAIL] Current email:", email);
-                    console.log("[GMAIL] User agent:", navigator.userAgent);
-
-                    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                    console.log("[GMAIL] Detected platform (isMobile):", { isMobile });
-
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_registerOpenGmail`,runId:'pre-fix',hypothesisId:'H3',location:'register/page.tsx:OpenGmailClick',message:'Register Open Gmail clicked',data:{email,isMobile,userAgent:navigator.userAgent},timestamp:Date.now()})}).catch(()=>{});
-                    // #endregion agent log
-
-                    if (isMobile) {
-                      // Mobile (Android / iOS): always try Gmail app via deep-link helper
-                      console.log("[GMAIL] Opening Gmail app via openGmailApp()");
-                      openGmailApp();
-                    } else {
-                      // Desktop: Open web inbox with email-specific URL (handles multiple accounts)
-                      const url = getGmailWebInboxUrlForEmail(email);
-                      console.log("[GMAIL] Using web Gmail URL:", url);
-                      window.open(url, "_blank", "noopener,noreferrer");
-                    }
+                    handleOpenGmail();
                   }}
-                  className="block w-full rounded-bento border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    handleOpenGmail();
+                  }}
+                  className="block w-full min-h-[48px] touch-manipulation cursor-pointer select-none rounded-bento border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 active:opacity-90 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Open Gmail
                 </button>
