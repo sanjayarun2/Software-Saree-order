@@ -16,6 +16,10 @@ export function getGmailDeepLinkUrl(): string {
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);
 
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_gmailDeepLink`,runId:'pre-fix',hypothesisId:'H1',location:'gmail-deep-link.ts:getGmailDeepLinkUrl',message:'GMAIL deep link platform detection',data:{userAgent:navigator.userAgent,isIOS,isAndroid},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion agent log
+
   if (isIOS) return GMAIL_APP_SCHEME;
   if (isAndroid) return GMAIL_ANDROID_INTENT;
   return GMAIL_WEB_URL;
@@ -41,6 +45,10 @@ export function openGmailApp(): void {
 
   const url = getGmailDeepLinkUrl();
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_openGmail`,runId:'pre-fix',hypothesisId:'H2',location:'gmail-deep-link.ts:openGmailApp',message:'openGmailApp called',data:{userAgent:navigator.userAgent,isMobile,url},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion agent log
 
   if (isMobile && (url.startsWith("googlegmail://") || url.startsWith("intent://"))) {
     // Let the OS handle the Gmail deep-link. If Gmail is not installed, the OS will handle gracefully.
