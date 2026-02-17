@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main, master]
+    # runs on every branch (main, push-updates, or any other)
   workflow_dispatch:
 
 jobs:
