@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
 import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
+import { useToast } from "@/lib/toast-context";
 
 const OPEN_GMAIL_DEBOUNCE_MS = 600;
 
@@ -23,6 +24,7 @@ export default function RegisterPage() {
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const openGmailLastAt = useRef(0);
   const { signUp } = useAuth();
+  const toast = useToast();
 
   useEffect(() => {
     setRecentMobiles(getRecentMobiles());
@@ -72,6 +74,7 @@ export default function RegisterPage() {
     if (now - openGmailLastAt.current < OPEN_GMAIL_DEBOUNCE_MS) return;
     openGmailLastAt.current = now;
 
+    toast("Opening Gmail… Please wait a moment.");
     console.log("[GMAIL] Open Gmail button clicked");
     console.log("[GMAIL] Current email:", email);
     console.log("[GMAIL] User agent:", navigator.userAgent);

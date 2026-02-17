@@ -33,11 +33,23 @@ export function getGmailWebInboxUrlForEmail(email?: string): string {
   return `https://mail.google.com/mail/?authuser=${authuser}&view=tl&search=inbox`;
 }
 
+const FALLBACK_DELAY_MS = 1800;
+
+/**
+ * Fallback: open Gmail inbox in system browser (working logic – do not remove).
+ * Used when primary (Gmail app intent/scheme) does not take the user out of the app.
+ */
+function openGmailInBrowser(email?: string): void {
+  const url = getGmailWebInboxUrlForEmail(email);
+  import("@capacitor/browser")
+    .then(({ Browser }) => Browser.open({ url }))
+    .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
+}
+
 /**
  * Opens Gmail. No Android/iOS permission is required.
- * - In Capacitor native app: opens Gmail web URL in the system browser (Chrome Custom Tabs / SFSafariViewController),
- *   so the OS can open the Gmail app or show the web inbox. WebView cannot open intent:// URLs itself.
- * - In browser/PWA: opens inbox in a new tab.
+ * - Primary (native mobile): try to open the Gmail app first via intent (Android) or googlegmail:// (iOS).
+ * - Fallback: if still in app after a short delay, open inbox in system browser (Capacitor Browser).
  */
 export function openGmailApp(email?: string): void {
   if (typeof window === "undefined") return;
@@ -50,11 +62,21 @@ export function openGmailApp(email?: string): void {
   fetch('http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_openGmail`,runId:'pre-fix',hypothesisId:'H2',location:'gmail-deep-link.ts:openGmailApp',message:'openGmailApp called',data:{userAgent:navigator.userAgent,isMobile,isNative},timestamp:Date.now()})}).catch(()=>{});
   // #endregion agent log
 
+  if (isNative && isMobile) {
+    const appUrl = getGmailDeepLinkUrl();
+    if (appUrl.startsWith("googlegmail://") || appUrl.startsWith("intent://")) {
+      window.location.href = appUrl;
+      setTimeout(() => {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          openGmailInBrowser(email);
+        }
+      }, FALLBACK_DELAY_MS);
+      return;
+    }
+  }
+
   if (isNative) {
-    const url = getGmailWebInboxUrlForEmail(email);
-    import("@capacitor/browser")
-      .then(({ Browser }) => Browser.open({ url }))
-      .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
+    openGmailInBrowser(email);
     return;
   }
 
