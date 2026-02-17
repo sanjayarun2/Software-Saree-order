@@ -35,88 +35,48 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
   }
   console.log(`[PDF] savePdfBlob called: ${filename}, blob size: ${blob.size} bytes`);
 
-  // Check if running in Capacitor native app
+  // Check if running in Capacitor native app (Android/iOS) or web
   const isNative = Capacitor.isNativePlatform();
   console.log(`[PDF] Platform: ${isNative ? 'Native (Capacitor)' : 'Web'}`);
 
-  if (isNative) {
-    try {
-      // Ask for storage permission on Android so we can write to Documents
-      try {
-        const permStatus = await Filesystem.checkPermissions();
-        console.log("[PDF] Filesystem permission status:", permStatus);
+  // One-time in-app consent (industry-style "allow download" prompt)
+  const consentKey = "saree_pdf_download_consent";
+  try {
+    const hasStorage = typeof window !== "undefined" && (window as any).localStorage;
+    const existingConsent =
+      hasStorage && (window as any).localStorage.getItem(consentKey as string);
 
-        const publicStorage = (permStatus as any).publicStorage ?? (permStatus as any).state;
-        if (publicStorage && publicStorage !== "granted") {
-          console.log("[PDF] Requesting filesystem permissions for public storage...");
-          const requested = await Filesystem.requestPermissions();
-          console.log("[PDF] Filesystem request result:", requested);
-          const requestedPublicStorage =
-            (requested as any).publicStorage ?? (requested as any).state;
-          if (requestedPublicStorage !== "granted") {
-            console.warn("[PDF] Public storage permission not granted, using web download fallback");
-            throw new Error("PUBLIC_STORAGE_PERMISSION_NOT_GRANTED");
-          }
-        }
-      } catch (permError) {
-        console.error("[PDF] Error while checking/requesting filesystem permissions:", permError);
-        // If we can't get permission, fall back to web method below
-        throw permError;
+    if (!existingConsent || existingConsent !== "yes") {
+      const message =
+        "Allow this app to download PDF files to your device?\n\n" +
+        "You can view them later from your Downloads folder.";
+      const ok = window.confirm(message);
+      if (!ok) {
+        console.log("[PDF] User declined download consent, aborting download");
+        return;
       }
-
-      // Use Capacitor Filesystem for native apps (Android/iOS)
-      console.log(`[PDF] Using Capacitor Filesystem to save file...`);
-
-      // Convert blob to base64
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-
-      console.log(`[PDF] Blob converted to base64, length: ${base64Data.length}`);
-
-      // Save to Documents directory (accessible to user)
-      const result = await Filesystem.writeFile({
-        path: filename,
-        data: base64Data,
-        directory: Directory.Documents,
-        recursive: true,
-      });
-
-      console.log(`[PDF] File saved successfully to: ${result.uri}`);
-
-      // Show success message (you can customize this)
-      if (typeof window !== "undefined" && (window as any).alert) {
-        alert(`PDF saved successfully!\n\nFile: ${filename}\nLocation: Documents folder`);
+      if (hasStorage) {
+        (window as any).localStorage.setItem(consentKey as string, "yes");
       }
-    } catch (error) {
-      console.error(`[PDF] Capacitor Filesystem save failed:`, error);
-      // Fallback to web method
-      console.log(`[PDF] Falling back to web download method...`);
-      try {
-        forceDownloadPdf(blob, filename);
-      } catch (fallbackError) {
-        console.error(`[PDF] All download methods failed:`, fallbackError);
-        const fallbackUrl = URL.createObjectURL(blob);
-        window.location.href = fallbackUrl;
-      }
+      console.log("[PDF] User granted download consent");
     }
-  } else {
-    // Web browser: use standard download method
-    try {
-      forceDownloadPdf(blob, filename);
-      console.log(`[PDF] Download method completed successfully`);
-    } catch (error) {
-      console.error(`[PDF] Download failed, using fallback:`, error);
-      const fallbackUrl = URL.createObjectURL(blob);
-      console.log(`[PDF] Fallback: navigating to blob URL`);
-      window.location.href = fallbackUrl;
+  } catch (consentError) {
+    console.warn("[PDF] Consent check failed, continuing with download anyway:", consentError);
+  }
+
+  // Use browser-style download everywhere (web + native WebView).
+  // This avoids fragile direct writes to /Documents that are blocked by new Android storage rules.
+  try {
+    if (isNative) {
+      console.log("[PDF] Native platform: using browser/WebView download (no direct Documents write)");
     }
+    forceDownloadPdf(blob, filename);
+    console.log("[PDF] Download method completed successfully");
+  } catch (error) {
+    console.error("[PDF] Download failed, using fallback:", error);
+    const fallbackUrl = URL.createObjectURL(blob);
+    console.log("[PDF] Fallback: navigating to blob URL");
+    window.location.href = fallbackUrl;
   }
 }
 
