@@ -24,7 +24,7 @@ export default function RegisterPage() {
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const openGmailLastAt = useRef(0);
   const { signUp } = useAuth();
-  const toast = useToast();
+  const { toast } = useToast();
 
   useEffect(() => {
     setRecentMobiles(getRecentMobiles());
