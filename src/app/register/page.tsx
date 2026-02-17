@@ -90,12 +90,27 @@ export default function RegisterPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     if (typeof window === "undefined") return;
-                    const url = getGmailWebInboxUrlForEmail(email);
-                    // On mobile, still use deep-link into Gmail app; on desktop use web inbox URL.
+                    
                     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                    const isAndroid = /Android/i.test(navigator.userAgent);
+                    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+                    
                     if (isMobile) {
-                      openGmailApp();
+                      // Mobile: Use deep-link to open Gmail app
+                      if (isAndroid) {
+                        // Android: Use intent to open Gmail app
+                        const intentUrl = "intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end";
+                        window.location.href = intentUrl;
+                      } else if (isIOS) {
+                        // iOS: Use custom scheme
+                        window.location.href = "googlegmail://";
+                      } else {
+                        // Fallback for other mobile
+                        openGmailApp();
+                      }
                     } else {
+                      // Desktop: Open web inbox with email-specific URL
+                      const url = getGmailWebInboxUrlForEmail(email);
                       window.open(url, "_blank", "noopener,noreferrer");
                     }
                   }}

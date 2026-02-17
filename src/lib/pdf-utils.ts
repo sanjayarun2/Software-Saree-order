@@ -1,37 +1,100 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 
 /** Force direct download to device: hidden <a download> with Blob URL (web & mobile browsers). */
 function forceDownloadPdf(blob: Blob, filename: string): void {
   if (typeof window === "undefined") return;
+  console.log(`[PDF] Starting download: ${filename}, size: ${blob.size} bytes`);
   const url = URL.createObjectURL(blob);
+  console.log(`[PDF] Blob URL created: ${url.substring(0, 50)}...`);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.rel = "noopener";
   a.style.display = "none";
   document.body.appendChild(a);
+  console.log(`[PDF] Anchor element created and appended, triggering click...`);
   // Use a direct click in the same user-gesture to avoid popup blockers.
   a.click();
   document.body.removeChild(a);
+  console.log(`[PDF] Download triggered successfully`);
   // Delay revocation slightly so mobile browsers have time to start the download.
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    console.log(`[PDF] Blob URL revoked`);
+  }, 500);
 }
 
 export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
-  if (typeof window === "undefined") return;
-  // Single, robust path for all environments (web, mobile browsers, and WebView):
-  // let the browser / WebView handle the download via <a download>.
-  // If that fails for any reason, fall back to navigating to the blob URL (preview),
-  // so the user can still share/save from the viewer.
-  try {
-    forceDownloadPdf(blob, filename);
-  } catch {
-    const fallbackUrl = URL.createObjectURL(blob);
-    window.location.href = fallbackUrl;
-    // We do not revoke the URL immediately here; the browser will handle it
-    // when the page is unloaded.
+  if (typeof window === "undefined") {
+    console.warn("[PDF] savePdfBlob called in SSR context, skipping");
+    return;
+  }
+  console.log(`[PDF] savePdfBlob called: ${filename}, blob size: ${blob.size} bytes`);
+  
+  // Check if running in Capacitor native app
+  const isNative = Capacitor.isNativePlatform();
+  console.log(`[PDF] Platform: ${isNative ? 'Native (Capacitor)' : 'Web'}`);
+  
+  if (isNative) {
+    // Use Capacitor Filesystem for native apps (Android/iOS)
+    try {
+      console.log(`[PDF] Using Capacitor Filesystem to save file...`);
+      
+      // Convert blob to base64
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      
+      console.log(`[PDF] Blob converted to base64, length: ${base64Data.length}`);
+      
+      // Save to Documents directory (accessible to user)
+      const result = await Filesystem.writeFile({
+        path: filename,
+        data: base64Data,
+        directory: Directory.Documents,
+        recursive: true,
+      });
+      
+      console.log(`[PDF] File saved successfully to: ${result.uri}`);
+      
+      // Show success message (you can customize this)
+      if (typeof window !== "undefined" && (window as any).alert) {
+        alert(`PDF saved successfully!\n\nFile: ${filename}\nLocation: Documents folder`);
+      }
+      
+    } catch (error) {
+      console.error(`[PDF] Capacitor Filesystem save failed:`, error);
+      // Fallback to web method
+      console.log(`[PDF] Falling back to web download method...`);
+      try {
+        forceDownloadPdf(blob, filename);
+      } catch (fallbackError) {
+        console.error(`[PDF] All download methods failed:`, fallbackError);
+        const fallbackUrl = URL.createObjectURL(blob);
+        window.location.href = fallbackUrl;
+      }
+    }
+  } else {
+    // Web browser: use standard download method
+    try {
+      forceDownloadPdf(blob, filename);
+      console.log(`[PDF] Download method completed successfully`);
+    } catch (error) {
+      console.error(`[PDF] Download failed, using fallback:`, error);
+      const fallbackUrl = URL.createObjectURL(blob);
+      console.log(`[PDF] Fallback: navigating to blob URL`);
+      window.location.href = fallbackUrl;
+    }
   }
 }
 
@@ -141,32 +204,54 @@ function drawSectionBorder(
 }
 
 export async function downloadOrderPdf(order: Order) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    console.warn("[PDF] downloadOrderPdf called in SSR context");
+    return;
+  }
+  console.log(`[PDF] downloadOrderPdf called for order: ${order.id}`);
   try {
+    console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
+    console.log(`[PDF] Drawing ${SECTIONS_PER_PAGE} sections...`);
     for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
       drawSectionBorder(d, i * SECTION_H);
       drawOrderLabel(d, order, i * SECTION_H);
     }
     const filename = `saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`;
+    console.log(`[PDF] Generating blob for filename: ${filename}`);
     const blob = doc.output("blob");
-    savePdfBlob(blob, filename);
+    console.log(`[PDF] Blob generated, size: ${blob.size} bytes`);
+    await savePdfBlob(blob, filename);
   } catch (e) {
-    console.error("PDF download failed:", e);
+    console.error("[PDF] downloadOrderPdf failed:", e);
+    throw e; // Re-throw so caller can handle
   }
 }
 
 export async function downloadOrdersPdf(orders: Order[]) {
-  if (typeof window === "undefined" || orders.length === 0) return;
+  if (typeof window === "undefined") {
+    console.warn("[PDF] downloadOrdersPdf called in SSR context");
+    return;
+  }
+  if (orders.length === 0) {
+    console.warn("[PDF] downloadOrdersPdf called with empty orders array");
+    return;
+  }
+  console.log(`[PDF] downloadOrdersPdf called for ${orders.length} orders`);
   try {
+    console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
     let page = 0;
     let slot = 0;
 
+    console.log(`[PDF] Drawing ${orders.length} orders...`);
     for (let i = 0; i < orders.length; i++) {
-      if (slot === 0 && page > 0) doc.addPage([A4_W, A4_H], "p");
+      if (slot === 0 && page > 0) {
+        console.log(`[PDF] Adding page ${page + 1}...`);
+        doc.addPage([A4_W, A4_H], "p");
+      }
       const sectionTop = slot * SECTION_H;
       drawSectionBorder(d, sectionTop);
       drawOrderLabel(d, orders[i], sectionTop);
@@ -183,10 +268,13 @@ export async function downloadOrdersPdf(orders: Order[]) {
     }
 
     const filename = `saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`;
+    console.log(`[PDF] Generating blob for filename: ${filename}`);
     const blob = doc.output("blob");
-    savePdfBlob(blob, filename);
+    console.log(`[PDF] Blob generated, size: ${blob.size} bytes, pages: ${page + 1}`);
+    await savePdfBlob(blob, filename);
   } catch (e) {
-    console.error("PDF download failed:", e);
+    console.error("[PDF] downloadOrdersPdf failed:", e);
+    throw e; // Re-throw so caller can handle
   }
 }
 

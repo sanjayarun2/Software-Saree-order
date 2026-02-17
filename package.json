@@ -11,7 +11,17 @@
     "cap:android": "npx cap open android",
     "android": "npm run cap:sync && npm run cap:android",
     "apk:build": "npm run build && npx cap sync",
-    "apk": "npm run apk:build && cd android && gradlew.bat assembleDebug"
+    "apk": "npm run apk:build && cd android && gradlew.bat assembleDebug",
+    "apk:auto": "powershell -ExecutionPolicy Bypass -File build-and-install.ps1",
+    "apk:install": "powershell -ExecutionPolicy Bypass -File download-and-install.ps1",
+    "debug": "powershell -ExecutionPolicy Bypass -File debug-app.ps1",
+    "debug:clear": "powershell -ExecutionPolicy Bypass -File debug-app.ps1 -Clear",
+    "debug:all": "powershell -ExecutionPolicy Bypass -File debug-app.ps1 -Filter:$false",
+    "test:pdf": "powershell -ExecutionPolicy Bypass -File test-pdf-feature.ps1",
+    "test:pdf:watch": "powershell -ExecutionPolicy Bypass -File test-pdf-download.ps1 -Watch",
+    "debug:webview": "powershell -ExecutionPolicy Bypass -File enable-webview-debug.ps1",
+    "monitor:pdf": "powershell -ExecutionPolicy Bypass -File monitor-pdf-issue.ps1",
+    "test:pdf:auto": "powershell -ExecutionPolicy Bypass -File auto-test-pdf.ps1"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",

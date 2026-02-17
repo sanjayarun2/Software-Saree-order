@@ -373,16 +373,24 @@ export default function OrdersPage() {
           <button
             type="button"
             onClick={async () => {
-              if (filteredOrders.length === 0 || downloadingPdf) return;
+              if (filteredOrders.length === 0 || downloadingPdf) {
+                console.log("[Orders] PDF button clicked but disabled (no orders or already downloading)");
+                return;
+              }
+              console.log(`[Orders] PDF button clicked, generating PDF for ${filteredOrders.length} orders`);
               setPdfFallbackUrl(null);
               setDownloadingPdf(true);
               try {
+                console.log("[Orders] Calling downloadOrdersPdf...");
                 await downloadOrdersPdf(filteredOrders);
+                console.log("[Orders] PDF download completed successfully");
               } catch (e) {
-                console.error("PDF download failed:", e);
-                alert("Failed to generate PDF. Please try again.");
+                console.error("[Orders] PDF download failed:", e);
+                const errorMsg = e instanceof Error ? e.message : "Unknown error";
+                alert(`Failed to generate PDF: ${errorMsg}\n\nCheck browser console for details.`);
               } finally {
                 setDownloadingPdf(false);
+                console.log("[Orders] PDF download state reset");
               }
             }}
             disabled={filteredOrders.length === 0 || downloadingPdf}
