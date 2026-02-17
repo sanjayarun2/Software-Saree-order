@@ -31,6 +31,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [pdfFallbackUrl, setPdfFallbackUrl] = useState<string | null>(null);
 
   const openWhatsAppForOrder = (order: Order) => {
     if (typeof window === "undefined") return;
@@ -368,29 +369,42 @@ export default function OrdersPage() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={async () => {
-            if (filteredOrders.length === 0 || downloadingPdf) return;
-            setDownloadingPdf(true);
-            try {
-              await downloadOrdersPdf(filteredOrders);
-            } catch (e) {
-              console.error("PDF download failed:", e);
-              alert("Failed to generate PDF. Please try again.");
-            } finally {
-              setDownloadingPdf(false);
-            }
-          }}
-          disabled={filteredOrders.length === 0 || downloadingPdf}
-          className="fixed bottom-24 right-4 z-50 flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50 md:bottom-8 md:right-8"
-          title="Download all as PDF"
-        >
-          <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
-          <span className="text-sm font-medium">
-            {downloadingPdf ? "Generating…" : "PDF"}
-          </span>
-        </button>
+        <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 md:bottom-8 md:right-8">
+          <button
+            type="button"
+            onClick={async () => {
+              if (filteredOrders.length === 0 || downloadingPdf) return;
+              setPdfFallbackUrl(null);
+              setDownloadingPdf(true);
+              try {
+                await downloadOrdersPdf(filteredOrders);
+              } catch (e) {
+                console.error("PDF download failed:", e);
+                alert("Failed to generate PDF. Please try again.");
+              } finally {
+                setDownloadingPdf(false);
+              }
+            }}
+            disabled={filteredOrders.length === 0 || downloadingPdf}
+            className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
+            title="Download all as PDF"
+          >
+            <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
+            <span className="text-sm font-medium">
+              {downloadingPdf ? "Generating…" : "PDF"}
+            </span>
+          </button>
+          {pdfFallbackUrl && (
+            <a
+              href={pdfFallbackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-bento bg-white/90 px-3 py-1 text-xs font-medium text-primary-700 shadow-sm dark:bg-slate-800/90 dark:text-primary-300"
+            >
+              If download didn&apos;t start, tap here and long‑press to save.
+            </a>
+          )}
+        </div>
       </div>
     </ErrorBoundary>
   );

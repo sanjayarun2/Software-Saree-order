@@ -12,6 +12,7 @@ function forceDownloadPdf(blob: Blob, filename: string): void {
   a.rel = "noopener";
   a.style.display = "none";
   document.body.appendChild(a);
+  // Use a direct click in the same user-gesture to avoid popup blockers.
   a.click();
   document.body.removeChild(a);
   // Delay revocation slightly so mobile browsers have time to start the download.
@@ -22,7 +23,16 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
   if (typeof window === "undefined") return;
   // Single, robust path for all environments (web, mobile browsers, and WebView):
   // let the browser / WebView handle the download via <a download>.
-  forceDownloadPdf(blob, filename);
+  // If that fails for any reason, fall back to navigating to the blob URL (preview),
+  // so the user can still share/save from the viewer.
+  try {
+    forceDownloadPdf(blob, filename);
+  } catch {
+    const fallbackUrl = URL.createObjectURL(blob);
+    window.location.href = fallbackUrl;
+    // We do not revoke the URL immediately here; the browser will handle it
+    // when the page is unloaded.
+  }
 }
 
 export interface ReportStats {
