@@ -28,6 +28,24 @@ function forceDownloadPdf(blob: Blob, filename: string): void {
   }, 500);
 }
 
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        // result is like "data:application/pdf;base64,AAAA..."
+        const base64 = result.split(",", 2)[1] ?? "";
+        resolve(base64);
+      } else {
+        reject(new Error("Failed to convert blob to base64"));
+      }
+    };
+    reader.onerror = (e) => reject(e);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
   if (typeof window === "undefined") {
     console.warn("[PDF] savePdfBlob called in SSR context, skipping");
@@ -64,14 +82,31 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
     console.warn("[PDF] Consent check failed, continuing with download anyway:", consentError);
   }
 
-  // Use browser-style download everywhere (web + native WebView).
-  // This avoids fragile direct writes to /Documents that are blocked by new Android storage rules.
+  // On native, first try saving via Capacitor Filesystem into Documents/SareeOrders.
+  // On web (and as fallback), use browser-style download.
   try {
     if (isNative) {
-      console.log("[PDF] Native platform: using browser/WebView download (no direct Documents write)");
+      console.log("[PDF] Native platform detected, trying Capacitor Filesystem save first...");
+      try {
+        const base64Data = await blobToBase64(blob);
+        console.log("[PDF] Blob converted to base64, length:", base64Data.length);
+        const path = `SareeOrders/${filename}`;
+        const result = await Filesystem.writeFile({
+          path,
+          data: base64Data,
+          directory: Directory.Documents,
+          recursive: true,
+        });
+        console.log("[PDF] Native save success. URI:", result.uri ?? "<no-uri>");
+        alert("PDF saved to your Documents / SareeOrders folder on this device.");
+        return;
+      } catch (nativeErr) {
+        console.error("[PDF] Native Filesystem save failed, falling back to browser-style download:", nativeErr);
+      }
+      console.log("[PDF] Falling back to WebView/browser download on native platform");
     }
     forceDownloadPdf(blob, filename);
-    console.log("[PDF] Download method completed successfully");
+    console.log("[PDF] Download method (anchor/blob) completed successfully");
   } catch (error) {
     console.error("[PDF] Download failed, using fallback:", error);
     const fallbackUrl = URL.createObjectURL(blob);
