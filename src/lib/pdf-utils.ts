@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Order } from "./db-types";
 
-/** Force direct download to device: no preview, no share menu. Same behaviour on Web, Android, iOS. */
+/** Force direct download to device: hidden <a download> with Blob URL (web & mobile browsers). */
 function forceDownloadPdf(blob: Blob, filename: string): void {
   if (typeof window === "undefined") return;
   const url = URL.createObjectURL(blob);
@@ -14,13 +14,52 @@ function forceDownloadPdf(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  // Delay revocation slightly so mobile browsers have time to start the download.
   setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
-/** Strict download: force direct download to device (no preview, no share). Same on Web, Android, iOS. */
-export function savePdfBlob(blob: Blob, filename: string): void {
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = (reader.result as string) || "";
+      resolve(data.includes(",") ? data.split(",")[1] ?? "" : data);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Strict save: on native (Capacitor) write the PDF into device storage (Documents).
+ * On normal browsers, fall back to hidden <a download> so it behaves as a real download.
+ * No Share sheet, no preview tab.
+ */
+export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
   if (typeof window === "undefined") return;
-  forceDownloadPdf(blob, filename);
+
+  let handledNatively = false;
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (Capacitor?.isNativePlatform?.()) {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const base64 = await blobToBase64(blob);
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      await Filesystem.writeFile({
+        path: safeName,
+        data: base64,
+        directory: Directory.Documents,
+      });
+      handledNatively = true;
+    }
+  } catch {
+    // Ignore native errors and fall back to browser download.
+    handledNatively = false;
+  }
+
+  if (!handledNatively) {
+    forceDownloadPdf(blob, filename);
+  }
 }
 
 export interface ReportStats {

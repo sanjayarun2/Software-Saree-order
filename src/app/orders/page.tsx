@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { OrderListSkeleton } from "@/components/ui/SkeletonLoader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash } from "@/components/ui/OrderIcons";
+import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { downloadOrdersPdf } from "@/lib/pdf-utils";
 import { useSearch } from "@/lib/search-context";
 import { getCachedOrders, setCachedOrders } from "@/lib/orders-cache";
@@ -30,6 +30,38 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const openWhatsAppForOrder = (order: Order) => {
+    if (typeof window === "undefined") return;
+    const booking = new Date(order.booking_date).toLocaleDateString("en-GB");
+    const despatch =
+      order.despatch_date != null
+        ? new Date(order.despatch_date).toLocaleDateString("en-GB")
+        : "Not dispatched";
+    const qty =
+      order.quantity != null && Number(order.quantity) >= 1
+        ? String(Number(order.quantity))
+        : "1";
+
+    const lines = [
+      "Thanks for your purchase 🙏",
+      "Please keep purchasing with us.",
+      "",
+      `Booking Date: ${booking}`,
+      `Dispatch Date: ${despatch}`,
+      `Courier: ${order.courier_name || "N/A"}`,
+      `Qty: ${qty}`,
+      "",
+      "Order Details:",
+      `TO: ${(order.recipient_details || "").trim()}`,
+      `FROM: ${(order.sender_details || "").trim()}`,
+    ];
+
+    const message = encodeURIComponent(lines.join("\n"));
+    const url = `https://wa.me/?text=${message}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login/");
@@ -299,13 +331,22 @@ export default function OrdersPage() {
                       </button>
                     )}
                     {order.status === "DESPATCHED" && (
-                      <button
-                        onClick={() => handleMoveToPending(order)}
-                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 text-amber-600 transition hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                        title="Move to Pending"
-                      >
-                        <IconUndo className="h-5 w-5" />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openWhatsAppForOrder(order)}
+                          className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                          title="Share via WhatsApp"
+                        >
+                          <IconWhatsApp className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveToPending(order)}
+                          className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 text-amber-600 transition hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                          title="Move to Pending"
+                        >
+                          <IconUndo className="h-5 w-5" />
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => handleDelete(order.id)}
@@ -323,13 +364,26 @@ export default function OrdersPage() {
 
         <button
           type="button"
-          onClick={() => downloadOrdersPdf(filteredOrders)}
-          disabled={filteredOrders.length === 0}
+          onClick={async () => {
+            if (filteredOrders.length === 0 || downloadingPdf) return;
+            setDownloadingPdf(true);
+            try {
+              await downloadOrdersPdf(filteredOrders);
+            } catch (e) {
+              console.error("PDF download failed:", e);
+              alert("Failed to generate PDF. Please try again.");
+            } finally {
+              setDownloadingPdf(false);
+            }
+          }}
+          disabled={filteredOrders.length === 0 || downloadingPdf}
           className="fixed bottom-24 right-4 z-50 flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50 md:bottom-8 md:right-8"
           title="Download all as PDF"
         >
           <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
-          <span className="text-sm font-medium">PDF</span>
+          <span className="text-sm font-medium">
+            {downloadingPdf ? "Generating…" : "PDF"}
+          </span>
         </button>
       </div>
     </ErrorBoundary>

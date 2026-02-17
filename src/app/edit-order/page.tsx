@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
+import { usePersistentField } from "@/lib/usePersistentField";
 import type { Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
@@ -56,6 +57,9 @@ function EditOrderContent() {
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<OrderSuggestions | null>(null);
+  // Persist edit fields keyed by order id so text is not lost when switching apps/tabs
+  const recipientField = usePersistentField(orderId ? `edit-order:${orderId}:recipient` : "edit-order:recipient", "");
+  const senderField = usePersistentField(orderId ? `edit-order:${orderId}:sender` : "edit-order:sender", "");
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login/");
@@ -79,15 +83,15 @@ function EditOrderContent() {
           return;
         }
         const o = data as Order;
-        setRecipient(o.recipient_details ?? "");
-        setSender(o.sender_details ?? "");
+        setRecipient(recipientField.value || o.recipient_details ?? "");
+        setSender(senderField.value || o.sender_details ?? "");
         setBookedBy(o.booked_by ?? "");
         setBookedMobile(o.booked_mobile_no ?? "");
         setCourier(o.courier_name ?? "Professional");
         setQuantity(o.quantity != null ? Number(o.quantity) || 1 : 1);
         setBookingDate(o.booking_date?.slice(0, 10) ?? "");
       });
-  }, [user, orderId]);
+  }, [user, orderId, recipientField.value, senderField.value]);
 
   useEffect(() => {
     if (!user) return;
@@ -139,6 +143,9 @@ function EditOrderContent() {
         .eq("id", orderId)
         .eq("user_id", user.id);
       if (err) throw err;
+      // Clear cached draft on successful save
+      recipientField.clear();
+      senderField.clear();
       router.replace("/orders/");
     } catch (e) {
       setError((e as Error).message || "Update failed");
@@ -195,7 +202,11 @@ function EditOrderContent() {
               />
               <textarea
                 value={recipient}
-                onChange={(e) => setRecipient(e.target.value.slice(0, 800))}
+                onChange={(e) => {
+                  const v = e.target.value.slice(0, 800);
+                  setRecipient(v);
+                  recipientField.setValue(v);
+                }}
                 maxLength={800}
                 rows={3}
                 placeholder="Recipient address and details"
@@ -214,7 +225,11 @@ function EditOrderContent() {
               />
               <textarea
                 value={sender}
-                onChange={(e) => setSender(e.target.value.slice(0, 800))}
+                onChange={(e) => {
+                  const v = e.target.value.slice(0, 800);
+                  setSender(v);
+                  senderField.setValue(v);
+                }}
                 maxLength={800}
                 rows={3}
                 placeholder="Sender address and details"

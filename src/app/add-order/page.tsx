@@ -9,6 +9,7 @@ import { AutocompleteTextarea } from "@/components/ui/AutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/lib/toast-context";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
+import { usePersistentField } from "@/lib/usePersistentField";
 import type { OrderInsert, Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
@@ -17,6 +18,11 @@ export default function AddOrderPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  // Persist important text fields so they survive app/tab switches
+  const recipientField = usePersistentField("add-order:recipient", "");
+  const senderField = usePersistentField("add-order:sender", "");
+  const bookedByField = usePersistentField("add-order:bookedBy", "");
+  const bookedMobileField = usePersistentField("add-order:bookedMobile", "");
   const [recipient, setRecipient] = useState("");
   const [sender, setSender] = useState("");
   const [bookedBy, setBookedBy] = useState("");
@@ -53,12 +59,25 @@ export default function AddOrderPage() {
       });
   }, [user]);
 
-  const courierOptions = useMemo(() => {
-    if (!suggestions?.couriers.length) return COURIERS;
-    const recent = suggestions.couriers.filter((c) => COURIERS.includes(c));
-    const rest = COURIERS.filter((c) => !recent.includes(c));
-    return [...recent, ...rest];
-  }, [suggestions]);
+  // Sync local persistent values into state after hooks are initialised
+  useEffect(() => {
+    setRecipient(recipientField.value);
+  }, [recipientField.value]);
+
+  useEffect(() => {
+    setSender(senderField.value);
+  }, [senderField.value]);
+
+  useEffect(() => {
+    setBookedBy(bookedByField.value);
+  }, [bookedByField.value]);
+
+  useEffect(() => {
+    setBookedMobile(bookedMobileField.value);
+  }, [bookedMobileField.value]);
+
+  // Keep courier list in fixed order; do not reorder by recent usage.
+  const courierOptions = useMemo(() => COURIERS, []);
 
   const senderSuggestions = useMemo(() => {
     if (!suggestions) return [];
@@ -91,6 +110,11 @@ export default function AddOrderPage() {
       const { error: err } = await supabase.from("orders").insert(insert);
       if (err) throw err;
       toast("Order saved");
+      // Clear cached draft on successful save
+      recipientField.clear();
+      senderField.clear();
+      bookedByField.clear();
+      bookedMobileField.clear();
       router.replace("/orders/");
     } catch (e) {
       setError((e as Error).message || "Save failed");
@@ -135,7 +159,10 @@ export default function AddOrderPage() {
               <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">TO (customer address)</label>
               <AutocompleteTextarea
                 value={recipient}
-                onChange={setRecipient}
+                onChange={(v) => {
+                  setRecipient(v);
+                  recipientField.setValue(v);
+                }}
                 suggestions={suggestions?.recipients ?? []}
                 placeholder=""
                 maxLength={800}
@@ -150,7 +177,10 @@ export default function AddOrderPage() {
               <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">FROM (our address)</label>
               <AutocompleteTextarea
                 value={sender}
-                onChange={setSender}
+                onChange={(v) => {
+                  setSender(v);
+                  senderField.setValue(v);
+                }}
                 suggestions={senderSuggestions}
                 placeholder=""
                 maxLength={800}
@@ -201,7 +231,10 @@ export default function AddOrderPage() {
                 type="text"
                 list="booked-by-list"
                 value={bookedBy}
-                onChange={(e) => setBookedBy(e.target.value)}
+                onChange={(e) => {
+                  setBookedBy(e.target.value);
+                  bookedByField.setValue(e.target.value);
+                }}
                 placeholder="Name"
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
@@ -218,7 +251,10 @@ export default function AddOrderPage() {
                 type="tel"
                 list="mobile-list"
                 value={bookedMobile}
-                onChange={(e) => setBookedMobile(e.target.value)}
+                onChange={(e) => {
+                  setBookedMobile(e.target.value);
+                  bookedMobileField.setValue(e.target.value);
+                }}
                 placeholder="Mobile number"
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
