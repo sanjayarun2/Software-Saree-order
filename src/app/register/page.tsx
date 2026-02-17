@@ -84,8 +84,8 @@ export default function RegisterPage() {
     // #endregion agent log
 
     if (isMobile) {
-      console.log("[GMAIL] Opening Gmail app via openGmailApp()");
-      openGmailApp();
+      console.log("[GMAIL] Opening Gmail via openGmailApp(email) (system browser / app)");
+      openGmailApp(email);
     } else {
       const url = getGmailWebInboxUrlForEmail(email);
       console.log("[GMAIL] Using web Gmail URL:", url);
