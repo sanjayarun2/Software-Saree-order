@@ -1,9 +1,8 @@
 /**
- * Gmail deep link utility: opens Gmail app on mobile, web on desktop, mailto: fallback.
+ * Gmail deep link utility: opens Gmail app on mobile, web on desktop.
  * - Android: Chrome Intent (intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end)
  * - iOS: googlegmail://
- * - Web: https://mail.google.com in a new tab
- * - Fallback: mailto: if the app doesn't open (e.g. after timeout on mobile)
+ * - Web: inbox URL in a new tab
  */
 const GMAIL_PACKAGE = "com.google.android.gm";
 const GMAIL_WEB_URL = "https://mail.google.com";
@@ -31,21 +30,11 @@ export function getGmailWebInboxUrlForEmail(email?: string): string {
   return `https://mail.google.com/mail/?authuser=${authuser}&view=tl&search=inbox`;
 }
 
-/** Opens default mail client via mailto: (no recipient; user picks app). Use as fallback when Gmail app didn't open. */
-export function openMailtoFallback(): void {
-  if (typeof window === "undefined") return;
-  window.open("mailto:", "_blank", "noopener,noreferrer");
-}
-
-/** Delay (ms) before opening mailto: fallback on mobile when Gmail app may be missing. */
-const GMAIL_FALLBACK_DELAY_MS = 2500;
-
 /**
  * Opens Gmail with strict platform detection.
  * - Android: Chrome Intent (intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end).
  * - iOS: googlegmail:// custom scheme.
  * - Web: https://mail.google.com in a new tab.
- * Fallback: on mobile, if the Gmail app doesn't open, opens mailto: after GMAIL_FALLBACK_DELAY_MS.
  */
 export function openGmailApp(): void {
   if (typeof window === "undefined") return;
@@ -54,9 +43,9 @@ export function openGmailApp(): void {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   if (isMobile && (url.startsWith("googlegmail://") || url.startsWith("intent://"))) {
+    // Let the OS handle the Gmail deep-link. If Gmail is not installed, the OS will handle gracefully.
     window.location.href = url;
-    setTimeout(() => openMailtoFallback(), GMAIL_FALLBACK_DELAY_MS);
-  } else {
-    window.open(url, "_blank", "noopener,noreferrer");
+    return;
   }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
