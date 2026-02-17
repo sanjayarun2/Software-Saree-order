@@ -99,34 +99,14 @@ export default function RegisterPage() {
                     console.log("[GMAIL] User agent:", navigator.userAgent);
 
                     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                    const isAndroid = /Android/i.test(navigator.userAgent);
-                    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-                    console.log("[GMAIL] Detected platform:", {
-                      isMobile,
-                      isAndroid,
-                      isIOS,
-                    });
+                    console.log("[GMAIL] Detected platform (isMobile):", { isMobile });
 
                     if (isMobile) {
-                      // Mobile: Use deep-link to open Gmail app
-                      if (isAndroid) {
-                        // Android: Use intent to open Gmail app
-                        const intentUrl = "intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end";
-                        console.log("[GMAIL] Using Android Gmail intent:", intentUrl);
-                        window.location.href = intentUrl;
-                      } else if (isIOS) {
-                        // iOS: Use custom scheme
-                        const iosUrl = "googlegmail://";
-                        console.log("[GMAIL] Using iOS Gmail URL:", iosUrl);
-                        window.location.href = iosUrl;
-                      } else {
-                        // Fallback for other mobile
-                        console.log("[GMAIL] Unknown mobile platform, calling openGmailApp()");
-                        openGmailApp();
-                      }
+                      // Mobile (Android / iOS): always try Gmail app via deep-link helper
+                      console.log("[GMAIL] Opening Gmail app via openGmailApp()");
+                      openGmailApp();
                     } else {
-                      // Desktop: Open web inbox with email-specific URL
+                      // Desktop: Open web inbox with email-specific URL (handles multiple accounts)
                       const url = getGmailWebInboxUrlForEmail(email);
                       console.log("[GMAIL] Using web Gmail URL:", url);
                       window.open(url, "_blank", "noopener,noreferrer");

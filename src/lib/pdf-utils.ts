@@ -82,11 +82,27 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
     console.warn("[PDF] Consent check failed, continuing with download anyway:", consentError);
   }
 
-  // On native, first try saving via Capacitor Filesystem into Documents/SareeOrders.
-  // On web (and as fallback), use browser-style download.
+  // On native:
+  //   1) First, try browser-style download so Android/Chrome DownloadManager can
+  //      show a status-bar notification when supported.
+  //   2) Then, save via Capacitor Filesystem into Documents/SareeOrders so there
+  //      is always a reliable local copy with a clear alert.
+  // On web:
+  //   - Only use browser-style download.
   try {
     if (isNative) {
-      console.log("[PDF] Native platform detected, trying Capacitor Filesystem save first...");
+      console.log("[PDF] Native platform detected, starting with browser-style download for notification...");
+
+      // Step 1: best-effort browser-style download for notification.
+      try {
+        forceDownloadPdf(blob, filename);
+        console.log("[PDF] Browser-style download (notification) triggered on native.");
+      } catch (anchorErr) {
+        console.warn("[PDF] Browser-style download failed on native, continuing to filesystem save:", anchorErr);
+      }
+
+      // Step 2: reliable native save into Documents/SareeOrders.
+      console.log("[PDF] Now trying Capacitor Filesystem save to Documents/SareeOrders...");
       try {
         const base64Data = await blobToBase64(blob);
         console.log("[PDF] Blob converted to base64, length:", base64Data.length);
