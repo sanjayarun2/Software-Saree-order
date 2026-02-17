@@ -164,7 +164,7 @@ export default function AddOrderPage() {
             <div>
               <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Product Details</label>
               <div className="flex items-center gap-2">
-                <label className="text-base text-gray-600 dark:text-gray-400">Saree Qty</label>
+                <label className="text-base text-gray-600 dark:text-gray-400">Qty</label>
                 <div className="flex items-center rounded-[16px] border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-800">
                   <button
                     type="button"

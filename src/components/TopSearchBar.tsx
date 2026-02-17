@@ -13,7 +13,7 @@ export function TopSearchBar() {
         </svg>
         <input
           type="search"
-          placeholder="Search by address..."
+          placeholder="Search by mobile, name or consignment..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-[44px] flex-1 rounded-xl border border-gray-100 bg-gray-50 px-3 text-sm text-gray-800 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 md:min-h-[50px] md:rounded-[16px] md:px-4 md:text-base"

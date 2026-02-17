@@ -21,10 +21,11 @@ options: {
 https://software-saree-order.vercel.app/**
 https://software-saree-order.vercel.app/verify-success/**
 https://software-saree-order.vercel.app/reset-password/**
+https://software-saree-order.vercel.app/update-password/**
 http://localhost:3000/**
 ```
 
-If `/verify-success/` or `/reset-password/` is **not** in Redirect URLs, Supabase may redirect to the root (/) instead. Add them so password reset and verification work correctly.
+If `/verify-success/`, `/reset-password/`, or `/update-password/` is **not** in Redirect URLs, Supabase may redirect to the root (/) instead. Add them so password reset and verification work correctly.
 
 **Site URL:** `https://software-saree-order.vercel.app`
 
@@ -50,7 +51,16 @@ At your domain registrar, add:
 | DKIM | TXT | (from SMTP provider) | Get from Resend/SendGrid |
 | DMARC | TXT | _dmarc | `v=DMARC1; p=none; rua=mailto:you@yourdomain.com` |
 
-### C. Confirm signup email with “Open Gmail” link
+### C. Dual-language (English + Tamil) confirm signup template
+
+Use a UTF-8 HTML template so verification emails show both languages. Copy the full HTML from **`docs/email-template-confirm-signup-dual-language.html`** into **Supabase** → **Authentication** → **Email Templates** → **Confirm signup** → **Message (HTML)**.
+
+- **English:** “Click the link below to verify your account.”
+- **Tamil:** “உங்கள் கணக்கைச் சரிபார்க்க கீழே உள்ள இணைப்பைக் கிளிக் செய்யவும்.”
+
+Ensure emails are sent as UTF-8 (default when the template has `charset="UTF-8"`).
+
+### D. Confirm signup email with “Open Gmail” link
 
 So the verification email includes a link that opens the Gmail app (on mobile) or Gmail in the browser (on desktop):
 
@@ -73,7 +83,16 @@ So the verification email includes a link that opens the Gmail app (on mobile) o
 3. Keep the main confirmation link (e.g. `{{ .ConfirmationURL }}`) in the template so users can still verify from the email.
 4. Remove words like: FREE, ACT NOW, URGENT, GUARANTEED. Keep HTML valid.
 
-### D. Checklist
+### E. Dual-language (English + Tamil) Reset Password template
+
+In **Supabase** → **Authentication** → **Email Templates** → **Reset password**:
+
+- **Subject:** `Reset your password / உங்கள் கடவுச்சொல்லை மாற்றவும்`
+- **Message (HTML):** copy from **`docs/email-template-reset-password-dual-language.html`**
+
+Body text: **English** — “We received a request to reset your password. Click the link below to set a new password.” **Tamil** — “உங்கள் கடவுச்சொல்லை மாற்ற கோரிக்கை வந்துள்ளது. புதிய கடவுச்சொல்லை உருவாக்க கீழே உள்ள இணைப்பைக் கிளிக் செய்யவும்.” Use UTF-8 so Tamil renders correctly.
+
+### F. Checklist (summary)
 
 1. Enable Custom SMTP in Supabase with Resend/SendGrid
 2. Add SPF, DKIM, DMARC DNS records for your domain

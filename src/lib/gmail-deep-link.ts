@@ -1,45 +1,53 @@
 /**
- * Gmail deep link utility: opens Gmail app on mobile, falls back to mailto: or web.
+ * Gmail deep link utility: opens Gmail app on mobile, web on desktop, mailto: fallback.
+ * - Android: Chrome Intent (intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end)
  * - iOS: googlegmail://
- * - Android: intent:// with Gmail package
- * - Fallback: mailto: (opens default mail app) or mail.google.com
+ * - Web: https://mail.google.com in a new tab
+ * - Fallback: mailto: if the app doesn't open (e.g. after timeout on mobile)
  */
+const GMAIL_PACKAGE = "com.google.android.gm";
+const GMAIL_WEB_URL = "https://mail.google.com";
+const GMAIL_APP_SCHEME = "googlegmail://";
+/** Android intent to open Gmail app (no browser fallback in the intent; we handle fallback in JS) */
+const GMAIL_ANDROID_INTENT = `intent://#Intent;scheme=googlegmail;package=${GMAIL_PACKAGE};end`;
+
 export function getGmailDeepLinkUrl(): string {
-  if (typeof window === "undefined") return "https://mail.google.com";
-  
+  if (typeof window === "undefined") return GMAIL_WEB_URL;
+
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);
-  
-  if (isIOS) {
-    // iOS: googlegmail:// scheme
-    return "googlegmail://";
-  }
-  
-  if (isAndroid) {
-    // Android: intent:// with Gmail package and fallback
-    const fallback = encodeURIComponent("https://mail.google.com");
-    return `intent://#Intent;scheme=googlegmail;package=com.google.android.gm;S.browser_fallback_url=${fallback};end`;
-  }
-  
-  // Desktop: web Gmail
-  return "https://mail.google.com";
+
+  if (isIOS) return GMAIL_APP_SCHEME;
+  if (isAndroid) return GMAIL_ANDROID_INTENT;
+  return GMAIL_WEB_URL;
 }
 
+/** Opens default mail client via mailto: (no recipient; user picks app). Use as fallback when Gmail app didn't open. */
+export function openMailtoFallback(): void {
+  if (typeof window === "undefined") return;
+  window.open("mailto:", "_blank", "noopener,noreferrer");
+}
+
+/** Delay (ms) before opening mailto: fallback on mobile when Gmail app may be missing. */
+const GMAIL_FALLBACK_DELAY_MS = 2500;
+
 /**
- * Opens Gmail app with fallback handling.
- * On mobile, attempts deep link; if that fails, falls back to mailto: or web.
+ * Opens Gmail with strict platform detection.
+ * - Android: Chrome Intent (intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end).
+ * - iOS: googlegmail:// custom scheme.
+ * - Web: https://mail.google.com in a new tab.
+ * Fallback: on mobile, if the Gmail app doesn't open, opens mailto: after GMAIL_FALLBACK_DELAY_MS.
  */
 export function openGmailApp(): void {
   if (typeof window === "undefined") return;
-  
+
   const url = getGmailDeepLinkUrl();
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  
+
   if (isMobile && (url.startsWith("googlegmail://") || url.startsWith("intent://"))) {
-    // Mobile: try deep link (intent:// for Android includes fallback URL)
     window.location.href = url;
+    setTimeout(() => openMailtoFallback(), GMAIL_FALLBACK_DELAY_MS);
   } else {
-    // Desktop: open in new tab
     window.open(url, "_blank", "noopener,noreferrer");
   }
 }

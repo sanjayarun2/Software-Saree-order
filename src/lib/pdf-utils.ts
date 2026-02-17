@@ -2,48 +2,25 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Order } from "./db-types";
 
-async function savePdfNative(blob: Blob, filename: string): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (!Capacitor.isNativePlatform()) return false;
-    const { Filesystem, Directory } = await import("@capacitor/filesystem");
-    const { Share } = await import("@capacitor/share");
-    const reader = new FileReader();
-    const base64 = await new Promise<string>((res, rej) => {
-      reader.onload = () => {
-        const data = (reader.result as string) || "";
-        res(data.includes(",") ? data.split(",")[1] ?? "" : data);
-      };
-      reader.onerror = rej;
-      reader.readAsDataURL(blob);
-    });
-    const path = `saree-pdf-${Date.now()}.pdf`;
-    await Filesystem.writeFile({
-      path,
-      data: base64,
-      directory: Directory.Cache,
-    });
-    const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache });
-    await Share.share({
-      title: filename.replace(/\.pdf$/i, ""),
-      text: "Saree order PDF",
-      url: uri,
-      dialogTitle: "Share PDF",
-    });
-    try {
-      await Filesystem.deleteFile({ path, directory: Directory.Cache });
-    } catch {
-      /* ignore */
-    }
-    return true;
-  } catch {
-    return false;
-  }
+/** Force direct download to device: no preview, no share menu. Same behaviour on Web, Android, iOS. */
+function forceDownloadPdf(blob: Blob, filename: string): void {
+  if (typeof window === "undefined") return;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
-function savePdfWeb(doc: jsPDF, filename: string): void {
-  doc.save(filename);
+/** Strict download: force direct download to device (no preview, no share). Same on Web, Android, iOS. */
+export function savePdfBlob(blob: Blob, filename: string): void {
+  if (typeof window === "undefined") return;
+  forceDownloadPdf(blob, filename);
 }
 
 export interface ReportStats {
@@ -63,13 +40,23 @@ function getAddressSummary(text: string, maxLen = 60): string {
   return first.length > maxLen ? `${first.slice(0, maxLen)}…` : first;
 }
 
-// A4: 210mm x 297mm. Divide height into 4 sections for pasting labels.
+// A4: 210mm x 297mm. Four sections per page for parcel labels. Fixed values = same output on all devices.
 const A4_W = 210;
 const A4_H = 297;
 const SECTIONS_PER_PAGE = 4;
 const SECTION_H = A4_H / SECTIONS_PER_PAGE;
-const MARGIN = 8;
-const COL_W = (A4_W - MARGIN * 4) / 3; // 3 columns: TO | Thanks | FROM
+const MARGIN = 10;
+const COL_W = (A4_W - MARGIN * 4) / 3;
+
+// Typography (Helvetica only = identical on Mobile, Android, Web)
+const FONT_HEADING = "helvetica";
+const FONT_BODY = "helvetica";
+const SIZE_LABEL = 12;       // TO / FROM labels
+const SIZE_ADDRESS = 11;     // address lines (large for parcel)
+const SIZE_THANKS_TITLE = 13;
+const SIZE_THANKS_SUB = 10;
+const LINE_HEIGHT_ADDRESS = 5.5;
+const MAX_ADDRESS_LINES = 7;
 
 /** Split address by user newlines first, then wrap long lines to fit width. Preserves formatting. */
 function getAddressLines(
@@ -93,37 +80,43 @@ function drawOrderLabel(
   sectionTop: number
 ) {
   const leftX = MARGIN;
-  const centerX = MARGIN + COL_W + MARGIN;
+  const centerColStart = MARGIN + COL_W + MARGIN;
+  const centerX = centerColStart + COL_W / 2;
   const rightX = MARGIN + (COL_W + MARGIN) * 2;
   const maxW = COL_W - 4;
-  const lineHeight = 4;
+  const labelY = sectionTop + 8;
+  const addressStartY = sectionTop + 14;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("TO (Recipient)", leftX, sectionTop + 6);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  // TO (Recipient) — larger text, aligned for parcel
+  doc.setFont(FONT_HEADING, "bold");
+  doc.setFontSize(SIZE_LABEL);
+  doc.text("TO (Recipient)", leftX, labelY);
+  doc.setFont(FONT_BODY, "normal");
+  doc.setFontSize(SIZE_ADDRESS);
   const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
-  toLines.slice(0, 6).forEach((line, i) => doc.text(line, leftX, sectionTop + 12 + i * lineHeight));
+  toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
+    doc.text(line, leftX, addressStartY + i * LINE_HEIGHT_ADDRESS);
+  });
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.text("Thanks for your order!", centerX + COL_W / 2, sectionTop + SECTION_H / 2 - 4, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("We appreciate your trust.", centerX + COL_W / 2, sectionTop + SECTION_H / 2 + 4, { align: "center" });
-  doc.text(`Date: ${new Date(order.booking_date).toLocaleDateString("en-GB")}`, centerX + COL_W / 2, sectionTop + SECTION_H / 2 + 12, { align: "center" });
-  if (order.quantity != null) {
-    doc.text(`Qty: ${order.quantity}`, centerX + COL_W / 2, sectionTop + SECTION_H / 2 + 20, { align: "center" });
-  }
+  // Thanks for purchasing — modern, centred, professional
+  const thanksCenterY = sectionTop + SECTION_H / 2;
+  doc.setFont(FONT_HEADING, "bold");
+  doc.setFontSize(SIZE_THANKS_TITLE);
+  doc.text("Thanks for purchasing", centerX, thanksCenterY - 6, { align: "center" });
+  doc.setFont(FONT_BODY, "normal");
+  doc.setFontSize(SIZE_THANKS_SUB);
+  doc.text("We appreciate your trust.", centerX, thanksCenterY + 6, { align: "center" });
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("FROM (Ours)", rightX, sectionTop + 6);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  // FROM (Ours) — same large alignment as TO
+  doc.setFont(FONT_HEADING, "bold");
+  doc.setFontSize(SIZE_LABEL);
+  doc.text("FROM (Ours)", rightX, labelY);
+  doc.setFont(FONT_BODY, "normal");
+  doc.setFontSize(SIZE_ADDRESS);
   const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
-  fromLines.slice(0, 6).forEach((line, i) => doc.text(line, rightX, sectionTop + 12 + i * lineHeight));
+  fromLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
+    doc.text(line, rightX, addressStartY + i * LINE_HEIGHT_ADDRESS);
+  });
 }
 
 function drawSectionBorder(
@@ -146,8 +139,7 @@ export async function downloadOrderPdf(order: Order) {
     }
     const filename = `saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`;
     const blob = doc.output("blob");
-    const shared = await savePdfNative(blob, filename);
-    if (!shared) savePdfWeb(doc, filename);
+    savePdfBlob(blob, filename);
   } catch (e) {
     console.error("PDF download failed:", e);
   }
@@ -180,8 +172,7 @@ export async function downloadOrdersPdf(orders: Order[]) {
 
     const filename = `saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`;
     const blob = doc.output("blob");
-    const shared = await savePdfNative(blob, filename);
-    if (!shared) savePdfWeb(doc, filename);
+    savePdfBlob(blob, filename);
   } catch (e) {
     console.error("PDF download failed:", e);
   }
@@ -283,8 +274,7 @@ export async function downloadBusinessReportPdf(
 
     const filename = `saree-sales-report-${stats.from}-to-${stats.to}.pdf`;
     const blob = doc.output("blob");
-    const shared = await savePdfNative(blob, filename);
-    if (!shared) savePdfWeb(doc, filename);
+    savePdfBlob(blob, filename);
   } catch (e) {
     console.error("PDF download failed:", e);
   }

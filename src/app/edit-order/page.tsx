@@ -225,7 +225,7 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Saree Qty (optional)</label>
+              <label className="mb-1 block text-sm font-medium">Qty (optional)</label>
               <div className="flex items-center gap-2">
                 <button
                   type="button"

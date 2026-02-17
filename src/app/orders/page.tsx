@@ -21,7 +21,7 @@ function getAddressSummary(text: string, maxLen = 45): string {
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
-  const { query } = useSearch();
+  const { query, setQuery } = useSearch();
   const router = useRouter();
   const [status, setStatus] = useState<OrderStatus>("PENDING");
   const [fromDate, setFromDate] = useState("");
@@ -78,15 +78,23 @@ export default function OrdersPage() {
   }, [user, status, allOrders, fromDate, toDate]);
 
   const filteredOrders = React.useMemo(() => {
-    // Ensure only orders matching current tab (PENDING/DISPATCHED) are shown
     let list = orders.filter((o) => o.status === status);
-    if (!query.trim()) return list;
-    const q = query.trim().toLowerCase();
-    return list.filter(
-      (o) =>
-        (o.recipient_details || "").toLowerCase().includes(q) ||
-        (o.sender_details || "").toLowerCase().includes(q)
-    );
+    const raw = query.trim();
+    if (!raw) return list;
+    const q = raw.toLowerCase();
+    const digitsOnly = raw.replace(/\D/g, "");
+    return list.filter((o) => {
+      if (o.id && o.id.toLowerCase().includes(q)) return true;
+      if (o.booked_by && (o.booked_by as string).toLowerCase().includes(q)) return true;
+      if (o.recipient_details && (o.recipient_details as string).toLowerCase().includes(q)) return true;
+      if (o.sender_details && (o.sender_details as string).toLowerCase().includes(q)) return true;
+      if (digitsOnly.length >= 4 && o.booked_mobile_no) {
+        const mobileDigits = (o.booked_mobile_no as string).replace(/\D/g, "");
+        if (mobileDigits.includes(digitsOnly) || digitsOnly.includes(mobileDigits)) return true;
+      }
+      if (o.booked_mobile_no && (o.booked_mobile_no as string).toLowerCase().includes(q)) return true;
+      return false;
+    });
   }, [orders, query, status]);
 
   useEffect(() => {
@@ -148,6 +156,20 @@ export default function OrdersPage() {
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
           Booking Details
         </h1>
+
+        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 md:gap-3 md:px-4 md:py-3">
+          <svg className="h-4 w-4 shrink-0 text-gray-400 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="search"
+            placeholder="Search by mobile, name or consignment..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-h-[44px] flex-1 rounded-xl border-0 bg-transparent px-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder-slate-400 md:min-h-[48px] md:text-base"
+            aria-label="Search orders by mobile, name or consignment"
+          />
+        </div>
 
         <BentoCard>
           <div className="space-y-4">
@@ -242,6 +264,9 @@ export default function OrdersPage() {
                         {getAddressSummary(order.recipient_details)}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 dark:text-slate-400">
+                        {order.booked_by?.trim() ? (
+                          <span>Booked By ({order.booked_by.trim()})</span>
+                        ) : null}
                         <span className="tabular-nums">
                           {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
                         </span>
