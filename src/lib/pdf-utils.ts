@@ -18,48 +18,11 @@ function forceDownloadPdf(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = (reader.result as string) || "";
-      resolve(data.includes(",") ? data.split(",")[1] ?? "" : data);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * Strict save: on native (Capacitor) write the PDF into device storage (Documents).
- * On normal browsers, fall back to hidden <a download> so it behaves as a real download.
- * No Share sheet, no preview tab.
- */
 export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
   if (typeof window === "undefined") return;
-
-  let handledNatively = false;
-  try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (Capacitor?.isNativePlatform?.()) {
-      const { Filesystem, Directory } = await import("@capacitor/filesystem");
-      const base64 = await blobToBase64(blob);
-      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-      await Filesystem.writeFile({
-        path: safeName,
-        data: base64,
-        directory: Directory.Documents,
-      });
-      handledNatively = true;
-    }
-  } catch {
-    // Ignore native errors and fall back to browser download.
-    handledNatively = false;
-  }
-
-  if (!handledNatively) {
-    forceDownloadPdf(blob, filename);
-  }
+  // Single, robust path for all environments (web, mobile browsers, and WebView):
+  // let the browser / WebView handle the download via <a download>.
+  forceDownloadPdf(blob, filename);
 }
 
 export interface ReportStats {
