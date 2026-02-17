@@ -89,28 +89,46 @@ export default function RegisterPage() {
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
-                    if (typeof window === "undefined") return;
-                    
+                    if (typeof window === "undefined") {
+                      console.log("[GMAIL] Click ignored: window undefined (SSR)");
+                      return;
+                    }
+
+                    console.log("[GMAIL] Open Gmail button clicked");
+                    console.log("[GMAIL] Current email:", email);
+                    console.log("[GMAIL] User agent:", navigator.userAgent);
+
                     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
                     const isAndroid = /Android/i.test(navigator.userAgent);
                     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-                    
+
+                    console.log("[GMAIL] Detected platform:", {
+                      isMobile,
+                      isAndroid,
+                      isIOS,
+                    });
+
                     if (isMobile) {
                       // Mobile: Use deep-link to open Gmail app
                       if (isAndroid) {
                         // Android: Use intent to open Gmail app
                         const intentUrl = "intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end";
+                        console.log("[GMAIL] Using Android Gmail intent:", intentUrl);
                         window.location.href = intentUrl;
                       } else if (isIOS) {
                         // iOS: Use custom scheme
-                        window.location.href = "googlegmail://";
+                        const iosUrl = "googlegmail://";
+                        console.log("[GMAIL] Using iOS Gmail URL:", iosUrl);
+                        window.location.href = iosUrl;
                       } else {
                         // Fallback for other mobile
+                        console.log("[GMAIL] Unknown mobile platform, calling openGmailApp()");
                         openGmailApp();
                       }
                     } else {
                       // Desktop: Open web inbox with email-specific URL
                       const url = getGmailWebInboxUrlForEmail(email);
+                      console.log("[GMAIL] Using web Gmail URL:", url);
                       window.open(url, "_blank", "noopener,noreferrer");
                     }
                   }}

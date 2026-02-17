@@ -83,32 +83,43 @@ if (-not (Test-Path $apkPath)) {
 
 Write-Host "[OK] APK found: $apkPath" -ForegroundColor Green
 
+# Uninstall old app first (if exists)
+Write-Host ""
+Write-Host "[STEP 3/6] Uninstalling old app (if exists)..." -ForegroundColor Yellow
+& $adbCmd uninstall com.sareeorder.app 2>$null
+Write-Host "[OK] Old app uninstalled (if it existed)" -ForegroundColor Green
+
 # Install APK
 Write-Host ""
-Write-Host "[STEP 3/6] Installing APK..." -ForegroundColor Yellow
-& $adbCmd install -r $apkPath
+Write-Host "[STEP 4/6] Installing APK..." -ForegroundColor Yellow
+& $adbCmd install $apkPath
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Installation failed" -ForegroundColor Red
-    exit 1
+    Write-Host "Trying with -r flag..." -ForegroundColor Yellow
+    & $adbCmd install -r $apkPath
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Installation failed even with -r flag" -ForegroundColor Red
+        exit 1
+    }
 }
 Write-Host "[OK] APK installed successfully" -ForegroundColor Green
 
 # Enable WebView debugging
 Write-Host ""
-Write-Host "[STEP 4/6] Enabling WebView debugging..." -ForegroundColor Yellow
+Write-Host "[STEP 5/6] Enabling WebView debugging..." -ForegroundColor Yellow
 & $adbCmd shell "setprop debug.webview.provider com.google.android.webview" 2>$null
 & $adbCmd shell "setprop debug.webview.tracing 1" 2>$null
 Write-Host "[OK] WebView debugging enabled" -ForegroundColor Green
 
 # Clear logs
 Write-Host ""
-Write-Host "[STEP 5/6] Preparing log monitoring..." -ForegroundColor Yellow
+Write-Host "[STEP 6/6] Preparing log monitoring..." -ForegroundColor Yellow
 & $adbCmd logcat -c
 Write-Host "[OK] Logs cleared" -ForegroundColor Green
 
 # Start monitoring
 Write-Host ""
-Write-Host "[STEP 6/6] Starting monitoring..." -ForegroundColor Yellow
+Write-Host "Starting monitoring..." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Testing Instructions" -ForegroundColor Cyan
@@ -206,7 +217,7 @@ Write-Host ""
 
 # Analyze logs
 $pdfLogs = $allLogs | Select-String -Pattern ($pdfKeywords -join "|") -CaseSensitive:$false
-$errorLogs = $allLogs | Select-String -Pattern ($errorKeywords -join "|") -CaseSensitive:$false | Where-Object { $_ -match "saree|capacitor|webview|pdf" -CaseSensitive:$false }
+$errorLogs = $allLogs | Select-String -Pattern ($errorKeywords -join "|") | Select-String -Pattern "saree|capacitor|webview|pdf"
 $successLogs = $allLogs | Select-String -Pattern ($successKeywords -join "|") -CaseSensitive:$false
 $capacitorLogs = $allLogs | Select-String -Pattern "capacitor.*filesystem|filesystem.*write" -CaseSensitive:$false
 

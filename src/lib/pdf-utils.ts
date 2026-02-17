@@ -34,16 +34,39 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
     return;
   }
   console.log(`[PDF] savePdfBlob called: ${filename}, blob size: ${blob.size} bytes`);
-  
+
   // Check if running in Capacitor native app
   const isNative = Capacitor.isNativePlatform();
   console.log(`[PDF] Platform: ${isNative ? 'Native (Capacitor)' : 'Web'}`);
-  
+
   if (isNative) {
-    // Use Capacitor Filesystem for native apps (Android/iOS)
     try {
+      // Ask for storage permission on Android so we can write to Documents
+      try {
+        const permStatus = await Filesystem.checkPermissions();
+        console.log("[PDF] Filesystem permission status:", permStatus);
+
+        const publicStorage = (permStatus as any).publicStorage ?? (permStatus as any).state;
+        if (publicStorage && publicStorage !== "granted") {
+          console.log("[PDF] Requesting filesystem permissions for public storage...");
+          const requested = await Filesystem.requestPermissions();
+          console.log("[PDF] Filesystem request result:", requested);
+          const requestedPublicStorage =
+            (requested as any).publicStorage ?? (requested as any).state;
+          if (requestedPublicStorage !== "granted") {
+            console.warn("[PDF] Public storage permission not granted, using web download fallback");
+            throw new Error("PUBLIC_STORAGE_PERMISSION_NOT_GRANTED");
+          }
+        }
+      } catch (permError) {
+        console.error("[PDF] Error while checking/requesting filesystem permissions:", permError);
+        // If we can't get permission, fall back to web method below
+        throw permError;
+      }
+
+      // Use Capacitor Filesystem for native apps (Android/iOS)
       console.log(`[PDF] Using Capacitor Filesystem to save file...`);
-      
+
       // Convert blob to base64
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -54,9 +77,9 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-      
+
       console.log(`[PDF] Blob converted to base64, length: ${base64Data.length}`);
-      
+
       // Save to Documents directory (accessible to user)
       const result = await Filesystem.writeFile({
         path: filename,
@@ -64,14 +87,13 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
         directory: Directory.Documents,
         recursive: true,
       });
-      
+
       console.log(`[PDF] File saved successfully to: ${result.uri}`);
-      
+
       // Show success message (you can customize this)
       if (typeof window !== "undefined" && (window as any).alert) {
         alert(`PDF saved successfully!\n\nFile: ${filename}\nLocation: Documents folder`);
       }
-      
     } catch (error) {
       console.error(`[PDF] Capacitor Filesystem save failed:`, error);
       // Fallback to web method
