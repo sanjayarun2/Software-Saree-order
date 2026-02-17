@@ -7,7 +7,7 @@ import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
-import { getGmailDeepLinkUrl, openGmailApp } from "@/lib/gmail-deep-link";
+import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -89,7 +89,15 @@ export default function RegisterPage() {
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
-                    openGmailApp();
+                    if (typeof window === "undefined") return;
+                    const url = getGmailWebInboxUrlForEmail(email);
+                    // On mobile, still use deep-link into Gmail app; on desktop use web inbox URL.
+                    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                    if (isMobile) {
+                      openGmailApp();
+                    } else {
+                      window.open(url, "_blank", "noopener,noreferrer");
+                    }
                   }}
                   className="block w-full rounded-bento border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >

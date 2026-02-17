@@ -22,6 +22,15 @@ export function getGmailDeepLinkUrl(): string {
   return GMAIL_WEB_URL;
 }
 
+/** Best-effort inbox URL for web to open a specific Gmail account when possible. */
+export function getGmailWebInboxUrlForEmail(email?: string): string {
+  if (!email || !email.toLowerCase().endsWith("@gmail.com")) {
+    return "https://mail.google.com/mail/u/0/#inbox";
+  }
+  const authuser = encodeURIComponent(email);
+  return `https://mail.google.com/mail/?authuser=${authuser}&view=tl&search=inbox`;
+}
+
 /** Opens default mail client via mailto: (no recipient; user picks app). Use as fallback when Gmail app didn't open. */
 export function openMailtoFallback(): void {
   if (typeof window === "undefined") return;

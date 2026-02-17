@@ -44,18 +44,15 @@ export default function OrdersPage() {
         ? String(Number(order.quantity))
         : "1";
 
+    const nameLine = (order.recipient_details || "").split(/\r?\n/)[0]?.trim() || "";
+    const staffName = (order.booked_by || "").trim() || "-";
+
     const lines = [
-      "Thanks for your purchase 🙏",
-      "Please keep purchasing with us.",
-      "",
-      `Booking Date: ${booking}`,
-      `Dispatch Date: ${despatch}`,
-      `Courier: ${order.courier_name || "N/A"}`,
+      "Thanks for order, keep purhcase with us",
+      nameLine,
+      `Booked by: ${staffName}, ${booking}`,
+      `Courier name: ${order.courier_name || "N/A"}`,
       `Qty: ${qty}`,
-      "",
-      "Order Details:",
-      `TO: ${(order.recipient_details || "").trim()}`,
-      `FROM: ${(order.sender_details || "").trim()}`,
     ];
 
     const message = encodeURIComponent(lines.join("\n"));
@@ -333,28 +330,37 @@ export default function OrdersPage() {
                     {order.status === "DESPATCHED" && (
                       <>
                         <button
-                          onClick={() => openWhatsAppForOrder(order)}
-                          className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                          title="Share via WhatsApp"
-                        >
-                          <IconWhatsApp className="h-5 w-5" />
-                        </button>
-                        <button
                           onClick={() => handleMoveToPending(order)}
                           className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 text-amber-600 transition hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
                           title="Move to Pending"
                         >
                           <IconUndo className="h-5 w-5" />
                         </button>
+                        <button
+                          onClick={() => handleDelete(order.id)}
+                          className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+                          title="Delete"
+                        >
+                          <IconTrash className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => openWhatsAppForOrder(order)}
+                          className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                          title="Share via WhatsApp"
+                        >
+                          <IconWhatsApp className="h-5 w-5" />
+                        </button>
                       </>
                     )}
-                    <button
-                      onClick={() => handleDelete(order.id)}
-                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
-                      title="Delete"
-                    >
-                      <IconTrash className="h-5 w-5" />
-                    </button>
+                    {order.status !== "DESPATCHED" && (
+                      <button
+                        onClick={() => handleDelete(order.id)}
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+                        title="Delete"
+                      >
+                        <IconTrash className="h-5 w-5" />
+                      </button>
+                    )}
                   </div>
                 </BentoCard>
               ))
