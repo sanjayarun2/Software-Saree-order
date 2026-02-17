@@ -83,8 +83,10 @@ function EditOrderContent() {
           return;
         }
         const o = data as Order;
-        setRecipient(recipientField.value || o.recipient_details ?? "");
-        setSender(senderField.value || o.sender_details ?? "");
+        const recipientFromDb = o.recipient_details ?? "";
+        const senderFromDb = o.sender_details ?? "";
+        setRecipient(recipientField.value || recipientFromDb);
+        setSender(senderField.value || senderFromDb);
         setBookedBy(o.booked_by ?? "");
         setBookedMobile(o.booked_mobile_no ?? "");
         setCourier(o.courier_name ?? "Professional");
