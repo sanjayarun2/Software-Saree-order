@@ -304,8 +304,8 @@ export default function DashboardPage() {
       {/* Dark header: title, date dropdown, FAB */}
       <div className="relative bg-slate-900 px-4 pb-8 pt-6 dark:bg-slate-950 lg:px-10">
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
-          <div className="flex-1 space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-white md:text-[28px]">
+          <div className="flex-1 space-y-2">
+            <h1 className="text-2xl font-bold leading-tight text-white">
               Dashboard
             </h1>
             <div className="relative" ref={dateDropdownRef}>

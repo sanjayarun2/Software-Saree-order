@@ -4,6 +4,136 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 
+/** Build a unique timestamped filename: Prefix_YYYYMMDD_HHMMSS.pdf */
+function buildTimestampedFilename(prefix: string): string {
+  const now = new Date();
+  const YYYY = now.getFullYear();
+  const MM = String(now.getMonth() + 1).padStart(2, "0");
+  const DD = String(now.getDate()).padStart(2, "0");
+  const HH = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const SS = String(now.getSeconds()).padStart(2, "0");
+  return `${prefix}_${YYYY}${MM}${DD}_${HH}${mm}${SS}.pdf`;
+}
+
+/**
+ * Open the saved PDF using @capacitor/share (works on all Android versions, including
+ * Scoped Storage on Android 11+). Falls back to window.open() if Share is unavailable.
+ */
+async function openPdfFile(uri: string, filename: string): Promise<void> {
+  try {
+    const { Share } = await import("@capacitor/share");
+    const canShare = await Share.canShare();
+    if (canShare.value) {
+      await Share.share({ title: filename, url: uri, dialogTitle: "Open PDF" });
+      return;
+    }
+  } catch (shareErr) {
+    console.warn("[PDF] Share plugin failed:", shareErr);
+  }
+  // Fallback: open the URI directly (triggers default PDF viewer on Android/iOS)
+  try {
+    (window as any).open(uri, "_system");
+  } catch {
+    /* nothing more we can do */
+  }
+}
+
+/**
+ * Show a non-blocking DOM toast confirming the save, with a "View Folder" button.
+ * Pure DOM — no React dependency — so it works from a utility module.
+ */
+function showPdfSavedToast(uri: string, filename: string): void {
+  if (typeof document === "undefined") return;
+
+  // Inject keyframes once
+  if (!document.getElementById("_pdf-toast-style")) {
+    const style = document.createElement("style");
+    style.id = "_pdf-toast-style";
+    style.textContent = `
+      @keyframes _pdfToastIn  { from { opacity:0; transform:translateX(-50%) translateY(24px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+      @keyframes _pdfToastOut { from { opacity:1; } to { opacity:0; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Remove any previous toast
+  document.getElementById("_pdf-save-toast")?.remove();
+
+  const toast = document.createElement("div");
+  toast.id = "_pdf-save-toast";
+  Object.assign(toast.style, {
+    position: "fixed",
+    bottom: "88px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#1e293b",
+    color: "#f8fafc",
+    borderRadius: "16px",
+    padding: "14px 18px",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.40)",
+    zIndex: "99999",
+    maxWidth: "360px",
+    width: "calc(100% - 32px)",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+    fontSize: "14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    animation: "_pdfToastIn 0.28s ease",
+  });
+
+  // Message row
+  const msgRow = document.createElement("div");
+  Object.assign(msgRow.style, { display: "flex", alignItems: "flex-start", gap: "10px" });
+  msgRow.innerHTML = `
+    <span style="font-size:22px;flex-shrink:0;line-height:1.2">✅</span>
+    <div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:3px">PDF Saved!</div>
+      <div style="color:#94a3b8;font-size:12.5px;line-height:1.5">
+        Saved to <strong style="color:#cbd5e1">Documents/Saree_Orders</strong> folder on your device.
+      </div>
+    </div>
+  `;
+
+  // Action buttons row
+  const actions = document.createElement("div");
+  Object.assign(actions.style, { display: "flex", gap: "8px", justifyContent: "flex-end" });
+
+  const btnBase = `
+    border-radius:8px; cursor:pointer; font-size:13px; font-weight:600;
+    padding:7px 16px; border:none; outline:none;
+  `;
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.textContent = "Dismiss";
+  dismissBtn.setAttribute("style", `${btnBase} background:transparent; border:1px solid #475569; color:#94a3b8;`);
+
+  const viewBtn = document.createElement("button");
+  viewBtn.textContent = "View Folder";
+  viewBtn.setAttribute("style", `${btnBase} background:#6366f1; color:#fff;`);
+
+  const dismiss = () => {
+    toast.style.animation = "_pdfToastOut 0.22s ease forwards";
+    setTimeout(() => toast.remove(), 240);
+  };
+
+  dismissBtn.addEventListener("click", dismiss);
+  viewBtn.addEventListener("click", async () => {
+    dismiss();
+    await openPdfFile(uri, filename);
+  });
+
+  actions.appendChild(dismissBtn);
+  actions.appendChild(viewBtn);
+  toast.appendChild(msgRow);
+  toast.appendChild(actions);
+  document.body.appendChild(toast);
+
+  // Auto-dismiss after 8 seconds
+  setTimeout(dismiss, 8000);
+}
+
 /** Force direct download to device: hidden <a download> with Blob URL (web & mobile browsers). */
 function forceDownloadPdf(blob: Blob, filename: string): void {
   if (typeof window === "undefined") return;
@@ -101,12 +231,12 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
         console.warn("[PDF] Browser-style download failed on native, continuing to filesystem save:", anchorErr);
       }
 
-      // Step 2: reliable native save into Documents/SareeOrders.
-      console.log("[PDF] Now trying Capacitor Filesystem save to Documents/SareeOrders...");
+      // Step 2: reliable native save into Documents/Saree_Orders.
+      console.log("[PDF] Now trying Capacitor Filesystem save to Documents/Saree_Orders...");
       try {
         const base64Data = await blobToBase64(blob);
         console.log("[PDF] Blob converted to base64, length:", base64Data.length);
-        const path = `SareeOrders/${filename}`;
+        const path = `Saree_Orders/${filename}`;
         const result = await Filesystem.writeFile({
           path,
           data: base64Data,
@@ -114,7 +244,7 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
           recursive: true,
         });
         console.log("[PDF] Native save success. URI:", result.uri ?? "<no-uri>");
-        alert("PDF saved to your Documents / SareeOrders folder on this device.");
+        showPdfSavedToast(result.uri ?? path, filename);
         return;
       } catch (nativeErr) {
         console.error("[PDF] Native Filesystem save failed, falling back to browser-style download:", nativeErr);
@@ -276,7 +406,7 @@ export async function downloadOrderPdf(order: Order) {
       drawSectionBorder(d, i * SECTION_H);
       drawOrderLabel(d, order, i * SECTION_H);
     }
-    const filename = `saree-order-${new Date(order.booking_date).toISOString().slice(0, 10)}.pdf`;
+    const filename = buildTimestampedFilename("SareeOrder");
     console.log(`[PDF] Generating blob for filename: ${filename}`);
     const blob = doc.output("blob");
     console.log(`[PDF] Blob generated, size: ${blob.size} bytes`);
@@ -325,7 +455,7 @@ export async function downloadOrdersPdf(orders: Order[]) {
       slot++;
     }
 
-    const filename = `saree-orders-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const filename = buildTimestampedFilename("SareeOrders");
     console.log(`[PDF] Generating blob for filename: ${filename}`);
     const blob = doc.output("blob");
     console.log(`[PDF] Blob generated, size: ${blob.size} bytes, pages: ${page + 1}`);
