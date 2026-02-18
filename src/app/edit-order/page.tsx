@@ -178,9 +178,13 @@ function EditOrderContent() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-6">
-        <div className="flex items-center gap-4">
-          <Link href="/orders/" className="min-h-touch min-w-touch flex items-center justify-center">
-            ←
+        <div className="flex items-center gap-3">
+          <Link
+            href="/orders/"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+            aria-label="Back to Orders"
+          >
+            ← Back
           </Link>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             Edit Order
@@ -196,7 +200,7 @@ function EditOrderContent() {
             )}
 
             <div>
-              <label className="mb-1 block text-sm font-medium">TO (Recipient)</label>
+              <label className="mb-1 block text-sm font-medium">TO (Customer)</label>
               <SuggestionChips
                 items={suggestions?.recipients ?? []}
                 label="Recent:"
@@ -222,7 +226,7 @@ function EditOrderContent() {
               <label className="mb-1 block text-sm font-medium">FROM (Sender)</label>
               <SuggestionChips
                 items={senderSuggestions}
-                label={recipient.trim() ? "Used with this recipient:" : "Recent:"}
+                label="Recent:"
                 onSelect={setSender}
               />
               <textarea
@@ -271,11 +275,6 @@ function EditOrderContent() {
               </div>
             </div>
 
-            <div className="rounded-bento border border-gray-100 bg-gray-50 p-4">
-              <p className="text-sm font-medium text-gray-700">Product Images</p>
-              <p className="mt-1 text-sm text-gray-500">We&apos;re working on it. Coming soon.</p>
-            </div>
-
             <div>
               <label className="mb-1 block text-sm font-medium">Booked By</label>
               <input
@@ -283,7 +282,7 @@ function EditOrderContent() {
                 list="booked-by-list-edit"
                 value={bookedBy}
                 onChange={(e) => setBookedBy(e.target.value)}
-                placeholder="Name (tap for suggestions)"
+                placeholder="Name"
                 className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
               />
               <datalist id="booked-by-list-edit">
@@ -300,7 +299,7 @@ function EditOrderContent() {
                 list="mobile-list-edit"
                 value={bookedMobile}
                 onChange={(e) => setBookedMobile(e.target.value)}
-                placeholder="Mobile number (tap for suggestions)"
+                placeholder="Mobile number"
                 className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
               />
               <datalist id="mobile-list-edit">
