@@ -299,7 +299,7 @@ const MAX_ADDRESS_LINES = 7;
 // Layout spacing
 const ADDRESS_PADDING = 3;   // horizontal padding so text doesn't touch borders
 const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
-const THANKS_LINE_GAP = 2;   // vertical gap between "Thanks for purchasing" and "We appreciate your trust"
+const THANKS_LINE_GAP = 3;   // slightly increased gap between center lines
 
 /** Split address by user newlines first, then wrap long lines to fit width. Preserves formatting. */
 function getAddressLines(
@@ -318,7 +318,16 @@ function getAddressLines(
 }
 
 function drawOrderLabel(
-  doc: { setFont: (f: string, s: string) => void; setFontSize: (n: number) => void; text: (s: string, x: number, y: number, o?: { align?: string }) => void; splitTextToSize: (s: string, w: number) => string[] },
+  doc: {
+    setFont: (f: string, s: string) => void;
+    setFontSize: (n: number) => void;
+    text: (s: string, x: number, y: number, o?: { align?: string }) => void;
+    splitTextToSize: (s: string, w: number) => string[];
+    setDrawColor: (r: number, g?: number, b?: number) => void;
+    setFillColor: (r: number, g?: number, b?: number) => void;
+    setTextColor: (r: number, g?: number, b?: number) => void;
+    circle: (x: number, y: number, radius: number, style?: string) => void;
+  },
   order: Order,
   sectionTop: number
 ) {
@@ -350,6 +359,17 @@ function drawOrderLabel(
   doc.setFont(FONT_BODY, "normal");
   doc.setFontSize(SIZE_THANKS_SUB);
   doc.text("We appreciate your trust.", centerX, thanksCenterY + THANKS_LINE_GAP, { align: "center" });
+
+  // Small center mark/logo below the message
+  const logoY = thanksCenterY + 10;
+  doc.setDrawColor(148, 163, 184);
+  doc.setFillColor(241, 245, 249);
+  doc.circle(centerX, logoY, 2.8, "FD");
+  doc.setFont(FONT_HEADING, "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(71, 85, 105);
+  doc.text("SO", centerX, logoY + 1.1, { align: "center" });
+  doc.setTextColor(0, 0, 0);
 
   // FROM (Ours) — same large alignment as TO
   doc.setFont(FONT_HEADING, "bold");
