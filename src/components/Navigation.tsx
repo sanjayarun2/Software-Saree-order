@@ -140,26 +140,6 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
       <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
         <button
           type="button"
-          onClick={async () => {
-            onMobileClose?.();
-            try {
-              const { Share } = await import("@capacitor/share");
-              await Share.share({
-                title: "Saree Order Book",
-                text: "I use Saree Order Book to manage my saree orders. Try it out!",
-                url: "https://play.google.com/store/apps/details?id=com.sareeorderbook.app",
-                dialogTitle: "Share with friends",
-              });
-            } catch {
-              if (typeof navigator !== "undefined" && navigator.share) {
-                navigator.share({
-                  title: "Saree Order Book",
-                  text: "I use Saree Order Book to manage my saree orders. Try it out!",
-                  url: "https://play.google.com/store/apps/details?id=com.sareeorderbook.app",
-                }).catch(() => {});
-              }
-            }
-          }}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           }`}
@@ -169,11 +149,8 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
             Refer a Friend
           </span>
         </button>
-        <a
-          href="https://chat.whatsapp.com/YOUR_GROUP_INVITE_LINK"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => onMobileClose?.()}
+        <button
+          type="button"
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           }`}
@@ -186,7 +163,7 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
           <span className={isMobile ? "text-base font-normal" : "text-base font-normal"}>
             Join WhatsApp
           </span>
-        </a>
+        </button>
       </div>
       <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
         <Link
