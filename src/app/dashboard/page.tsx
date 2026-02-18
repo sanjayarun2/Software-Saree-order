@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -21,6 +21,23 @@ const PERIOD_OPTIONS: { value: DashboardDatePeriod; label: string }[] = [
   { value: "year", label: "Year" },
   { value: "custom", label: "Custom" },
 ];
+
+function formatDateRangeLabel(period: DashboardDatePeriod, from: string, to: string): string {
+  if (period === "today") {
+    const d = new Date(from);
+    return `Today is ${d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
+  }
+  if (period === "yesterday") {
+    const d = new Date(from);
+    return `Yesterday - ${d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
+  }
+  const fromD = new Date(from);
+  const toD = new Date(to);
+  if (from === to) {
+    return fromD.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  }
+  return `${fromD.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${toD.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+}
 
 interface DashboardStats {
   total: number;
@@ -56,6 +73,18 @@ export default function DashboardPage() {
   const [prevStats, setPrevStats] = useState<DashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
+  const dateDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dateDropdownRef.current && !dateDropdownRef.current.contains(e.target as Node)) {
+        setDateDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const range = getDashboardDateRange(period, customFrom, customTo);
   const prevRange = period !== "custom" ? getPreviousRange(range.from, range.to) : null;
@@ -176,85 +205,101 @@ export default function DashboardPage() {
     return Math.round(((current - prev) / prev) * 1000) / 10;
   }
 
-  const displayDate = new Date().toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const dateDisplayLabel = formatDateRangeLabel(period, range.from, range.to);
 
   if (loading) {
     return <DashboardSkeleton />;
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:space-y-8 lg:px-10 lg:py-8">
-      {/* Header with date and Add Order */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-          {displayDate}
-        </p>
-        <Link
-          href="/add-order/"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white shadow-md transition hover:bg-primary-600 active:bg-primary-700"
-          aria-label="Add Order"
-        >
-          <span className="text-xl leading-none">+</span>
-        </Link>
-      </div>
-
-      {/* Date range selector */}
-      <div className="space-y-3">
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-          Date range
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setPeriod(opt.value)}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                period === opt.value
-                  ? "border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
-                  : "border-gray-200 bg-white text-slate-600 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {period === "custom" && (
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
-            />
-            <span className="text-slate-500">–</span>
-            <input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
-            />
+    <div className="min-h-screen">
+      {/* Dark header: title, date dropdown, FAB */}
+      <div className="relative bg-slate-900 px-4 pb-8 pt-6 dark:bg-slate-950 lg:px-10">
+        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
+          <div className="flex-1 space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-white md:text-[28px]">
+              Dashboard
+            </h1>
+            <div className="relative" ref={dateDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setDateDropdownOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-base font-medium text-slate-300 hover:text-white md:text-lg"
+              >
+                {dateDisplayLabel}
+                <span className="text-slate-400" aria-hidden>⌄</span>
+              </button>
+              {dateDropdownOpen && (
+                <div className="absolute left-0 top-full z-20 mt-2 min-w-[200px] rounded-2xl border border-slate-700 bg-white py-2 shadow-xl dark:border-slate-600 dark:bg-slate-800">
+                  {PERIOD_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setPeriod(opt.value);
+                        if (opt.value === "custom" && !customFrom && !customTo) {
+                          const today = new Date().toISOString().slice(0, 10);
+                          setCustomFrom(today);
+                          setCustomTo(today);
+                        }
+                        setDateDropdownOpen(false);
+                      }}
+                      className={`block w-full px-4 py-2.5 text-left text-sm font-medium ${
+                        period === opt.value
+                          ? "bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                          : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  {period === "custom" && (
+                    <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-600">
+                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Select range</p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={customFrom}
+                          onChange={(e) => setCustomFrom(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
+                        />
+                        <span className="text-slate-400">–</span>
+                        <input
+                          type="date"
+                          value={customTo}
+                          onChange={(e) => setCustomTo(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-        <p className="text-xs text-slate-500 dark:text-slate-400">{range.label}</p>
+          <Link
+            href="/add-order/"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white shadow-lg transition hover:bg-primary-600 active:bg-primary-700"
+            aria-label="Add Order"
+          >
+            <span className="text-2xl leading-none">+</span>
+          </Link>
+        </div>
       </div>
 
+      {/* Content: cards (negative margin to overlap header) */}
+      <div className="mx-auto max-w-6xl space-y-6 px-4 pb-8 lg:px-10" style={{ marginTop: "-24px" }}>
       {error && (
         <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
           {error}
         </p>
       )}
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <BentoCard className="flex flex-col gap-3 p-5 shadow-sm">
+      {/* KPI Cards: 2x2 grid, reference anatomy (label top-left, icon top-right, value + trend bottom) */}
+      <div className="grid gap-5 sm:grid-cols-2">
+        <BentoCard className="flex flex-col gap-4 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               Total Orders
             </p>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/40">
@@ -262,22 +307,22 @@ export default function DashboardPage() {
             </div>
           </div>
           {loadingStats ? (
-            <div className="h-9 w-16 animate-pulse rounded bg-gray-200 dark:bg-slate-600" />
+            <div className="h-9 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
           ) : (
-            <>
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 md:text-3xl">
                 {stats.total.toLocaleString()}
               </p>
               {prevStats != null && (
                 <PctChange value={pctChange(stats.total, prevStats.total)} />
               )}
-            </>
+            </div>
           )}
         </BentoCard>
 
-        <BentoCard className="flex flex-col gap-3 p-5 shadow-sm">
+        <BentoCard className="flex flex-col gap-4 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               Dispatched Orders
             </p>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/40">
@@ -285,22 +330,22 @@ export default function DashboardPage() {
             </div>
           </div>
           {loadingStats ? (
-            <div className="h-9 w-16 animate-pulse rounded bg-gray-200 dark:bg-slate-600" />
+            <div className="h-9 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
           ) : (
-            <>
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 md:text-3xl">
                 {stats.dispatched.toLocaleString()}
               </p>
               {prevStats != null && (
                 <PctChange value={pctChange(stats.dispatched, prevStats.dispatched)} />
               )}
-            </>
+            </div>
           )}
         </BentoCard>
 
-        <BentoCard className="flex flex-col gap-3 p-5 shadow-sm sm:col-span-2 lg:col-span-1">
+        <BentoCard className="flex flex-col gap-4 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] sm:col-span-2">
           <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               Pending Orders
             </p>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/40">
@@ -308,62 +353,20 @@ export default function DashboardPage() {
             </div>
           </div>
           {loadingStats ? (
-            <div className="h-9 w-16 animate-pulse rounded bg-gray-200 dark:bg-slate-600" />
+            <div className="h-9 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
           ) : (
-            <>
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 md:text-3xl">
                 {stats.pending.toLocaleString()}
               </p>
               {prevStats != null && (
                 <PctChange value={pctChange(stats.pending, prevStats.pending)} />
               )}
-            </>
+            </div>
           )}
         </BentoCard>
       </div>
-
-      {/* Quick links */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/orders/" className="block">
-          <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
-            <span className="text-3xl md:text-4xl" aria-hidden>📋</span>
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-900 dark:text-slate-100 md:text-lg">
-                Orders
-              </p>
-              <p className="text-sm text-gray-500 dark:text-slate-400 md:text-base">
-                View bookings
-              </p>
-            </div>
-          </BentoCard>
-        </Link>
-        <Link href="/add-order/" className="block">
-          <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
-            <span className="text-3xl md:text-4xl" aria-hidden>➕</span>
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-900 dark:text-slate-100 md:text-lg">
-                Add Order
-              </p>
-              <p className="text-sm text-gray-500 dark:text-slate-400 md:text-base">
-                Create booking
-              </p>
-            </div>
-          </BentoCard>
-        </Link>
-        <Link href="/reports/" className="block">
-          <BentoCard className="flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-2 py-5 transition hover:shadow-md md:min-h-[50px] md:gap-4 md:py-8">
-            <span className="text-3xl md:text-4xl" aria-hidden>📄</span>
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-900 dark:text-slate-100 md:text-lg">
-                Reports
-              </p>
-              <p className="text-sm text-gray-500 dark:text-slate-400 md:text-base">
-                Export PDF
-              </p>
-            </div>
-          </BentoCard>
-        </Link>
-      </div>
+    </div>
     </div>
   );
 }
@@ -377,8 +380,8 @@ function PctChange({ value }: { value: number | null }) {
         isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
       }`}
     >
-      {isPositive ? "+" : ""}
-      {value}%
+      {isPositive ? "▲ +" : "▼ "}
+      {Math.abs(value)}%
     </p>
   );
 }
