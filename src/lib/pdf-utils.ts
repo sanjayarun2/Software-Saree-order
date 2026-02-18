@@ -161,10 +161,15 @@ const FONT_HEADING = "helvetica";
 const FONT_BODY = "helvetica";
 const SIZE_LABEL = 12;       // TO / FROM labels
 const SIZE_ADDRESS = 11;     // address lines (large for parcel)
-const SIZE_THANKS_TITLE = 13;
+const SIZE_THANKS_TITLE = 10;  // reduced for better balance
 const SIZE_THANKS_SUB = 10;
 const LINE_HEIGHT_ADDRESS = 5.5;
 const MAX_ADDRESS_LINES = 7;
+
+// Layout spacing
+const ADDRESS_PADDING = 3;   // horizontal padding so text doesn't touch borders
+const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
+const THANKS_LINE_GAP = 2;   // vertical gap between "Thanks for purchasing" and "We appreciate your trust"
 
 /** Split address by user newlines first, then wrap long lines to fit width. Preserves formatting. */
 function getAddressLines(
@@ -187,13 +192,14 @@ function drawOrderLabel(
   order: Order,
   sectionTop: number
 ) {
-  const leftX = MARGIN;
+  const leftX = MARGIN + ADDRESS_PADDING;
   const centerColStart = MARGIN + COL_W + MARGIN;
   const centerX = centerColStart + COL_W / 2;
-  const rightX = MARGIN + (COL_W + MARGIN) * 2;
-  const maxW = COL_W - 4;
-  const labelY = sectionTop + 8;
-  const addressStartY = sectionTop + 14;
+  const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
+  const rightX = rightColStart + ADDRESS_PADDING;
+  const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
+  const labelY = sectionTop + 8 + VERTICAL_OFFSET;
+  const addressStartY = sectionTop + 14 + VERTICAL_OFFSET;
 
   // TO (Recipient) — larger text, aligned for parcel
   doc.setFont(FONT_HEADING, "bold");
@@ -210,10 +216,10 @@ function drawOrderLabel(
   const thanksCenterY = sectionTop + SECTION_H / 2;
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_THANKS_TITLE);
-  doc.text("Thanks for purchasing", centerX, thanksCenterY - 6, { align: "center" });
+  doc.text("Thanks for purchasing", centerX, thanksCenterY - THANKS_LINE_GAP, { align: "center" });
   doc.setFont(FONT_BODY, "normal");
   doc.setFontSize(SIZE_THANKS_SUB);
-  doc.text("We appreciate your trust.", centerX, thanksCenterY + 6, { align: "center" });
+  doc.text("We appreciate your trust.", centerX, thanksCenterY + THANKS_LINE_GAP, { align: "center" });
 
   // FROM (Ours) — same large alignment as TO
   doc.setFont(FONT_HEADING, "bold");
@@ -228,12 +234,31 @@ function drawOrderLabel(
 }
 
 function drawSectionBorder(
-  doc: { setDrawColor: (r: number, g?: number, b?: number) => void; setLineWidth: (w: number) => void; rect: (x: number, y: number, w: number, h: number) => void },
+  doc: {
+    setDrawColor: (r: number, g?: number, b?: number) => void;
+    setLineWidth: (w: number) => void;
+    setLineDashPattern: (dashArray: number[], dashPhase: number) => void;
+    line: (x1: number, y1: number, x2: number, y2: number, style?: string) => void;
+  },
   sectionTop: number
 ) {
+  const left = MARGIN;
+  const right = A4_W - MARGIN;
+  const bottom = sectionTop + SECTION_H;
+
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.3);
-  doc.rect(MARGIN, sectionTop, A4_W - MARGIN * 2, SECTION_H);
+
+  // Solid left, top, right borders
+  doc.setLineDashPattern([], 0);
+  doc.line(left, sectionTop, left, bottom);
+  doc.line(left, sectionTop, right, sectionTop);
+  doc.line(right, sectionTop, right, bottom);
+
+  // Dotted bottom line — "cut here" guide between orders
+  doc.setLineDashPattern([2, 2], 0);
+  doc.line(left, bottom, right, bottom);
+  doc.setLineDashPattern([], 0); // restore solid for subsequent drawings
 }
 
 export async function downloadOrderPdf(order: Order) {

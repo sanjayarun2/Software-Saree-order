@@ -6,39 +6,13 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
+import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
 import { usePersistentField } from "@/lib/usePersistentField";
 import type { Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
-
-function SuggestionChips({
-  items,
-  onSelect,
-  label,
-}: {
-  items: string[];
-  onSelect: (v: string) => void;
-  label: string;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div className="mt-1 flex flex-wrap gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      {items.map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => onSelect(item)}
-          className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700 hover:bg-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:hover:bg-primary-800/50"
-        >
-          {item.length > 40 ? `${item.slice(0, 40)}…` : item}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function EditOrderContent() {
   const { user, loading: authLoading } = useAuth();
@@ -201,46 +175,34 @@ function EditOrderContent() {
 
             <div>
               <label className="mb-1 block text-sm font-medium">TO (Customer)</label>
-              <SuggestionChips
-                items={suggestions?.recipients ?? []}
-                label="Recent:"
-                onSelect={setRecipient}
-              />
-              <textarea
+              <InlineAutocompleteTextarea
                 value={recipient}
-                onChange={(e) => {
-                  const v = e.target.value.slice(0, 800);
+                onChange={(v) => {
                   setRecipient(v);
                   recipientField.setValue(v);
                 }}
+                suggestions={suggestions?.recipients ?? []}
+                placeholder="Recipient address and details"
                 maxLength={800}
                 rows={3}
-                placeholder="Recipient address and details"
-                className="mt-1 w-full whitespace-pre-wrap rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
-                required
+                className="mt-1"
               />
               <p className="text-right text-xs text-slate-500 dark:text-slate-400">{recipient.length}/800</p>
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium">FROM (Sender)</label>
-              <SuggestionChips
-                items={senderSuggestions}
-                label="Recent:"
-                onSelect={setSender}
-              />
-              <textarea
+              <InlineAutocompleteTextarea
                 value={sender}
-                onChange={(e) => {
-                  const v = e.target.value.slice(0, 800);
+                onChange={(v) => {
                   setSender(v);
                   senderField.setValue(v);
                 }}
+                suggestions={senderSuggestions}
+                placeholder="Sender address and details"
                 maxLength={800}
                 rows={3}
-                placeholder="Sender address and details"
-                className="mt-1 w-full whitespace-pre-wrap rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
-                required
+                className="mt-1"
               />
               <p className="text-right text-xs text-slate-500 dark:text-slate-400">{sender.length}/800</p>
             </div>
