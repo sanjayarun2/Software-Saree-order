@@ -21,7 +21,8 @@
     "test:pdf:watch": "powershell -ExecutionPolicy Bypass -File test-pdf-download.ps1 -Watch",
     "debug:webview": "powershell -ExecutionPolicy Bypass -File enable-webview-debug.ps1",
     "monitor:pdf": "powershell -ExecutionPolicy Bypass -File monitor-pdf-issue.ps1",
-    "test:pdf:auto": "powershell -ExecutionPolicy Bypass -File auto-test-pdf.ps1"
+    "test:pdf:auto": "powershell -ExecutionPolicy Bypass -File auto-test-pdf.ps1",
+    "compress:icons": "node scripts/compress-icons.js"
   },
   "dependencies": {
     "@capacitor-community/file-opener": "^6.0.1",
@@ -52,6 +53,7 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "15.0.5",
     "postcss": "^8.4.47",
+    "sharp": "^0.33.5",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3"
   },
