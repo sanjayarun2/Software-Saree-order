@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
+import { getOrders as svcGetOrders } from "@/lib/order-service";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   getDateRange,
@@ -45,30 +45,16 @@ export default function ReportsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [currentRes, prevRes] = await Promise.all([
-        supabase
-          .from("orders")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("status", "DESPATCHED")
-          .not("despatch_date", "is", null)
-          .gte("despatch_date", range.from)
-          .lte("despatch_date", range.to)
-          .order("despatch_date", { ascending: true }),
-        supabase
-          .from("orders")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("status", "DESPATCHED")
-          .not("despatch_date", "is", null)
-          .gte("despatch_date", prevRange.from)
-          .lte("despatch_date", prevRange.to)
-          .order("despatch_date", { ascending: true }),
+      const currentFilters = { status: "DESPATCHED" as const, fromDate: range.from, toDate: range.to };
+      const prevFilters = { status: "DESPATCHED" as const, fromDate: prevRange.from, toDate: prevRange.to };
+
+      const [currentCached, prevCached] = await Promise.all([
+        svcGetOrders(user.id, currentFilters, (fresh) => setOrders(fresh)),
+        svcGetOrders(user.id, prevFilters, (fresh) => setPrevOrders(fresh)),
       ]);
-      if (currentRes.error) throw currentRes.error;
-      if (prevRes.error) throw prevRes.error;
-      setOrders((currentRes.data as Order[]) ?? []);
-      setPrevOrders((prevRes.data as Order[]) ?? []);
+
+      setOrders(currentCached);
+      setPrevOrders(prevCached);
     } catch (e) {
       setError((e as Error).message || "Failed to load data");
       setOrders([]);

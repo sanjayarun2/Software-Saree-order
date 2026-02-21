@@ -4,14 +4,17 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { OrderListSkeleton } from "@/components/ui/SkeletonLoader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { downloadOrdersPdf } from "@/lib/pdf-utils";
 import { useSearch } from "@/lib/search-context";
-import { getCachedOrders, setCachedOrders } from "@/lib/orders-cache";
+import {
+  getOrders as svcGetOrders,
+  deleteOrder as svcDeleteOrder,
+  updateOrderStatus as svcUpdateOrderStatus,
+} from "@/lib/order-service";
 import type { Order, OrderStatus } from "@/lib/db-types";
 
 function getAddressSummary(text: string, maxLen = 45): string {
@@ -76,40 +79,15 @@ export default function OrdersPage() {
   const fetchOrders = React.useCallback(async () => {
     if (!user) return;
     setError(null);
-    // Cache-first: load from cache immediately
-    let cached: Order[] | null = null;
-    try {
-      cached = getCachedOrders(user.id, status, fromDate, toDate, allOrders) as Order[] | null;
-      if (cached && Array.isArray(cached)) {
-        setOrders(cached);
-      }
-    } catch {
-      // Ignore cache errors
-    }
     setLoading(true);
     try {
-      const dateColumn = status === "PENDING" ? "booking_date" : "despatch_date";
-      let query = supabase
-        .from("orders")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("status", status)
-        .order("created_at", { ascending: false });
-
-      if (!allOrders && fromDate && toDate) {
-        query = query
-          .gte(dateColumn, fromDate)
-          .lte(dateColumn, toDate);
-      }
-
-      const { data, error: err } = await query;
-      if (err) throw err;
-      const list = (data as Order[]) ?? [];
-      setOrders(list);
-      setCachedOrders(user.id, status, fromDate, toDate, allOrders, list);
+      const filters = { status, fromDate, toDate, allOrders };
+      const cached = await svcGetOrders(user.id, filters, (fresh) => {
+        setOrders(fresh);
+      });
+      setOrders(cached);
     } catch (e) {
       setError((e as Error).message || "Failed to load orders");
-      if (!cached?.length) setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -140,10 +118,10 @@ export default function OrdersPage() {
   }, [user, fetchOrders]);
 
   const handleDelete = async (id: string) => {
+    if (!user) return;
     if (!confirm("Delete this order?")) return;
     try {
-      const { error: err } = await supabase.from("orders").delete().eq("id", id);
-      if (err) throw err;
+      await svcDeleteOrder(user.id, id);
       setOrders((prev) => prev.filter((o) => o.id !== id));
     } catch (e) {
       setError((e as Error).message || "Delete failed");
@@ -151,14 +129,10 @@ export default function OrdersPage() {
   };
 
   const handleMarkAsDespatched = async (order: Order) => {
-    if (order.status !== "PENDING") return;
+    if (!user || order.status !== "PENDING") return;
     const today = new Date().toISOString().slice(0, 10);
     try {
-      const { error: err } = await supabase
-        .from("orders")
-        .update({ status: "DESPATCHED", despatch_date: today, updated_at: new Date().toISOString() })
-        .eq("id", order.id);
-      if (err) throw err;
+      await svcUpdateOrderStatus(user.id, order.id, "DESPATCHED", today);
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
     } catch (e) {
       setError((e as Error).message || "Failed to mark as despatched");
@@ -166,14 +140,10 @@ export default function OrdersPage() {
   };
 
   const handleMoveToPending = async (order: Order) => {
-    if (order.status !== "DESPATCHED") return;
+    if (!user || order.status !== "DESPATCHED") return;
     if (!confirm("Move this order back to Pending?")) return;
     try {
-      const { error: err } = await supabase
-        .from("orders")
-        .update({ status: "PENDING", despatch_date: null, updated_at: new Date().toISOString() })
-        .eq("id", order.id);
-      if (err) throw err;
+      await svcUpdateOrderStatus(user.id, order.id, "PENDING", null);
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
     } catch (e) {
       setError((e as Error).message || "Failed to move to pending");

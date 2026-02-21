@@ -3,13 +3,13 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/lib/toast-context";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
 import { usePersistentField } from "@/lib/usePersistentField";
+import { createOrder as svcCreateOrder, getSuggestions as svcGetSuggestions } from "@/lib/order-service";
 import type { OrderInsert, Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
@@ -41,22 +41,23 @@ export default function AddOrderPage() {
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("orders")
-      .select("recipient_details,sender_details,booked_by,booked_mobile_no,courier_name")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        if (data) {
-          const s = buildSuggestionsFromOrders(data as Order[]);
-          setSuggestions(s);
-          if (!defaultSenderSet.current && s.senders.length > 0) {
-            defaultSenderSet.current = true;
-            setSender(s.senders[0]);
-          }
+    svcGetSuggestions(user.id, (fresh) => {
+      const s = buildSuggestionsFromOrders(fresh as Order[]);
+      setSuggestions(s);
+      if (!defaultSenderSet.current && s.senders.length > 0) {
+        defaultSenderSet.current = true;
+        setSender(s.senders[0]);
+      }
+    }).then((cached) => {
+      if (cached.length) {
+        const s = buildSuggestionsFromOrders(cached as Order[]);
+        setSuggestions(s);
+        if (!defaultSenderSet.current && s.senders.length > 0) {
+          defaultSenderSet.current = true;
+          setSender(s.senders[0]);
         }
-      });
+      }
+    });
   }, [user]);
 
   // Sync local persistent values into state after hooks are initialised
@@ -107,8 +108,7 @@ export default function AddOrderPage() {
         user_id: user.id,
         quantity: quantity === "" ? 1 : Number(quantity),
       };
-      const { error: err } = await supabase.from("orders").insert(insert);
-      if (err) throw err;
+      await svcCreateOrder(user.id, insert);
       toast("Order saved");
       // Clear cached draft on successful save
       recipientField.clear();

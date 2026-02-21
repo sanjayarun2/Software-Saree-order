@@ -4,8 +4,8 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
+import { getStatsFromCache, syncOrders } from "@/lib/order-service";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import {
   getDashboardDateRange,
@@ -190,88 +190,31 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const [
-        { count: totalCount, error: totalErr },
-        { count: dispatchedCount, error: dispatchedErr },
-        { count: pendingCount, error: pendingErr },
-        prevTotal,
-        prevDisp,
-        prevPend,
-      ] = await Promise.all([
-        supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .gte("booking_date", range.from)
-          .lte("booking_date", range.to),
-        supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("status", "DESPATCHED")
-          .not("despatch_date", "is", null)
-          .gte("despatch_date", range.from)
-          .lte("despatch_date", range.to),
-        supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("status", "PENDING")
-          .gte("booking_date", range.from)
-          .lte("booking_date", range.to),
-        prevRange
-          ? supabase
-              .from("orders")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", user.id)
-              .gte("booking_date", prevRange.from)
-              .lte("booking_date", prevRange.to)
-          : Promise.resolve({ count: 0, error: null }),
-        prevRange
-          ? supabase
-              .from("orders")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", user.id)
-              .eq("status", "DESPATCHED")
-              .not("despatch_date", "is", null)
-              .gte("despatch_date", prevRange.from)
-              .lte("despatch_date", prevRange.to)
-          : Promise.resolve({ count: 0, error: null }),
-        prevRange
-          ? supabase
-              .from("orders")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", user.id)
-              .eq("status", "PENDING")
-              .gte("booking_date", prevRange.from)
-              .lte("booking_date", prevRange.to)
-          : Promise.resolve({ count: 0, error: null }),
-      ]);
-
-      if (totalErr) throw totalErr;
-      if (dispatchedErr) throw dispatchedErr;
-      if (pendingErr) throw pendingErr;
-
-      setStats({
-        total: totalCount ?? 0,
-        dispatched: dispatchedCount ?? 0,
-        pending: pendingCount ?? 0,
-      });
-
+      // Instant: show stats from local IndexedDB cache
+      const cachedStats = await getStatsFromCache(user.id, range.from, range.to);
+      setStats(cachedStats);
       if (prevRange) {
-        setPrevStats({
-          total: prevTotal?.count ?? 0,
-          dispatched: prevDisp?.count ?? 0,
-          pending: prevPend?.count ?? 0,
-        });
-      } else {
-        setPrevStats(null);
+        const cachedPrev = await getStatsFromCache(user.id, prevRange.from, prevRange.to);
+        setPrevStats(cachedPrev);
       }
+      setLoadingStats(false);
+
+      // Revalidate: fetch exact counts from Supabase in background
+      syncOrders(user.id).then(async (changed) => {
+        // After sync, recompute from cache (now up-to-date)
+        const fresh = await getStatsFromCache(user.id, range.from, range.to);
+        setStats(fresh);
+        if (prevRange) {
+          const freshPrev = await getStatsFromCache(user.id, prevRange.from, prevRange.to);
+          setPrevStats(freshPrev);
+        } else {
+          setPrevStats(null);
+        }
+      });
     } catch (e) {
       setError((e as Error).message || "Failed to load stats");
       setStats({ total: 0, dispatched: 0, pending: 0 });
       setPrevStats(null);
-    } finally {
       setLoadingStats(false);
     }
   }, [user, range.from, range.to, period, customFrom, customTo]);

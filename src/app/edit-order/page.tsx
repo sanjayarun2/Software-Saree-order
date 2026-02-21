@@ -4,12 +4,16 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { supabase } from "@/lib/supabase";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
 import { usePersistentField } from "@/lib/usePersistentField";
+import {
+  getOrderById as svcGetOrderById,
+  updateOrder as svcUpdateOrder,
+  getSuggestions as svcGetSuggestions,
+} from "@/lib/order-service";
 import type { Order } from "@/lib/db-types";
 
 const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
@@ -44,42 +48,34 @@ function EditOrderContent() {
       setFetchLoading(false);
       return;
     }
-    supabase
-      .from("orders")
-      .select("*")
-      .eq("id", orderId)
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data, error: err }) => {
-        setFetchLoading(false);
-        if (err || !data) {
-          setError("Order not found");
-          return;
-        }
-        const o = data as Order;
-        const recipientFromDb = o.recipient_details ?? "";
-        const senderFromDb = o.sender_details ?? "";
-        setRecipient(recipientField.value || recipientFromDb);
-        setSender(senderField.value || senderFromDb);
-        setBookedBy(o.booked_by ?? "");
-        setBookedMobile(o.booked_mobile_no ?? "");
-        setCourier(o.courier_name ?? "Professional");
-        setQuantity(o.quantity != null ? Number(o.quantity) || 1 : 1);
-        setBookingDate(o.booking_date?.slice(0, 10) ?? "");
-      });
+    const applyOrder = (o: Order | null) => {
+      setFetchLoading(false);
+      if (!o) {
+        setError("Order not found");
+        return;
+      }
+      const recipientFromDb = o.recipient_details ?? "";
+      const senderFromDb = o.sender_details ?? "";
+      setRecipient(recipientField.value || recipientFromDb);
+      setSender(senderField.value || senderFromDb);
+      setBookedBy(o.booked_by ?? "");
+      setBookedMobile(o.booked_mobile_no ?? "");
+      setCourier(o.courier_name ?? "Professional");
+      setQuantity(o.quantity != null ? Number(o.quantity) || 1 : 1);
+      setBookingDate(o.booking_date?.slice(0, 10) ?? "");
+    };
+    svcGetOrderById(user.id, orderId, (fresh) => {
+      if (fresh) applyOrder(fresh);
+    }).then(applyOrder);
   }, [user, orderId, recipientField.value, senderField.value]);
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("orders")
-      .select("recipient_details,sender_details,booked_by,booked_mobile_no,courier_name")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        if (data) setSuggestions(buildSuggestionsFromOrders(data as Order[]));
-      });
+    svcGetSuggestions(user.id, (fresh) => {
+      setSuggestions(buildSuggestionsFromOrders(fresh as Order[]));
+    }).then((cached) => {
+      if (cached.length) setSuggestions(buildSuggestionsFromOrders(cached as Order[]));
+    });
   }, [user]);
 
   const courierOptions = useMemo(() => {
@@ -104,21 +100,15 @@ function EditOrderContent() {
     setError(null);
     setLoading(true);
     try {
-      const { error: err } = await supabase
-        .from("orders")
-        .update({
-          recipient_details: recipient,
-          sender_details: sender,
-          booked_by: bookedBy,
-          booked_mobile_no: bookedMobile,
-          courier_name: courier,
-          booking_date: bookingDate,
-          quantity: quantity === "" ? null : Number(quantity),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", orderId)
-        .eq("user_id", user.id);
-      if (err) throw err;
+      await svcUpdateOrder(user.id, orderId, {
+        recipient_details: recipient,
+        sender_details: sender,
+        booked_by: bookedBy,
+        booked_mobile_no: bookedMobile,
+        courier_name: courier,
+        booking_date: bookingDate,
+        quantity: quantity === "" ? null : Number(quantity),
+      });
       // Clear cached draft on successful save
       recipientField.clear();
       senderField.clear();
