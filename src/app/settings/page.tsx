@@ -1,10 +1,18 @@
 "use client";
 
 import React, { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+function PdfIconOutlined({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    </svg>
+  );
+}
 
 export default function SettingsPage() {
   const { user, loading } = useAuth();
@@ -24,15 +32,48 @@ export default function SettingsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
-          Settings
-        </h1>
-        <BentoCard>
-          <p className="text-sm text-slate-600 dark:text-slate-400 lg:text-base">
-            App settings (coming soon). Logged in as: {user?.email}
-          </p>
-        </BentoCard>
+      <div className="mx-auto max-w-6xl px-4 py-4 lg:px-10 lg:py-6">
+        {/* Header: circular back (left), centered Settings, circular X (right) */}
+        <header className="relative flex min-h-[44px] items-center justify-center pb-4">
+          <Link
+            href="/dashboard"
+            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            aria-label="Back"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </Link>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+            Settings
+          </h1>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            aria-label="Close"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+
+        {/* One white card, 24px radius, single row: PDF Settings */}
+        <div className="overflow-hidden rounded-[24px] bg-[#FFFFFF] shadow-sm dark:bg-white">
+          <Link
+            href="#"
+            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-50 dark:active:bg-slate-100"
+          >
+            <PdfIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+            <span className="flex-1 text-base font-medium">PDF Settings</span>
+            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+
+        {/* Rest of screen left blank */}
       </div>
     </ErrorBoundary>
   );

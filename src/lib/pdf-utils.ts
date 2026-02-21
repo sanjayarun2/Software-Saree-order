@@ -466,8 +466,8 @@ function getAddressLines(
   return lines;
 }
 
-const LOGO_SIZE_MM = 30;       // centre logo — larger for visibility
-const LOGO_SHIFT_RIGHT_MM = 5; // reduce gap between logo and TO address
+const LOGO_SIZE_MM = 33;       // centre logo — slightly larger
+const LOGO_SHIFT_RIGHT_MM = 0; // consistent gap between logo and FROM, and logo and TO
 
 function drawOrderLabel(
   doc: {
@@ -492,13 +492,13 @@ function drawOrderLabel(
   const rightX = rightColStart + ADDRESS_PADDING;
   const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
 
-  // TO (right): higher — first focus, where to send; clear of top border
-  const labelYTo = sectionTop + 5;
-  const addressStartYTo = sectionTop + 11;
+  // TO (right): first focus; addresses moved a little down
+  const labelYTo = sectionTop + 8;
+  const addressStartYTo = sectionTop + 14;
 
-  // FROM (left): lower — secondary, sender; clear of centre and bottom line
-  const labelYFrom = sectionTop + 24;
-  const addressStartYFrom = sectionTop + 30;
+  // FROM (left): secondary, sender; addresses moved a little down
+  const labelYFrom = sectionTop + 27;
+  const addressStartYFrom = sectionTop + 33;
 
   // FROM — left column, lower so TO is the main focus
   doc.setFont(FONT_HEADING, "bold");
@@ -511,7 +511,7 @@ function drawOrderLabel(
     doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
   });
 
-  // Centre: thank-you logo — larger, shifted right to reduce gap to TO
+  // Centre: thank-you logo — consistent gap to FROM and TO
   const thanksCenterY = sectionTop + SECTION_H / 2;
   if (logoBase64 && doc.addImage) {
     const logoW = LOGO_SIZE_MM;
