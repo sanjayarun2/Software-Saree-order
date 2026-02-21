@@ -17,21 +17,45 @@ function buildTimestampedFilename(prefix: string): string {
 }
 
 /**
- * Open the saved PDF using @capacitor/share (works on all Android versions, including
- * Scoped Storage on Android 11+). Falls back to window.open() if Share is unavailable.
+ * Open the saved PDF after generation.
+ *
+ * Strategy (in order):
+ *  1. @capacitor-community/file-opener  – opens the file via a native Intent
+ *     (ACTION_VIEW + FileProvider on Android, UIDocumentInteractionController
+ *     on iOS). Works with Scoped Storage on Android 11+.
+ *  2. @capacitor/share                  – opens the system share sheet so the
+ *     user can pick a file manager or PDF viewer.
+ *  3. window.open(uri, "_system")       – last-resort fallback.
  */
 async function openPdfFile(uri: string, filename: string): Promise<void> {
+  // 1. Try the file-opener plugin (opens directly in the default viewer / file manager)
+  try {
+    const { FileOpener } = await import("@capacitor-community/file-opener");
+    await FileOpener.open({
+      filePath: uri,
+      contentType: "application/pdf",
+      openWithDefault: true,
+    });
+    console.log("[PDF] File opened via file-opener plugin");
+    return;
+  } catch (openerErr) {
+    console.warn("[PDF] file-opener plugin failed, trying share fallback:", openerErr);
+  }
+
+  // 2. Fallback: native share sheet
   try {
     const { Share } = await import("@capacitor/share");
     const canShare = await Share.canShare();
     if (canShare.value) {
       await Share.share({ title: filename, url: uri, dialogTitle: "Open PDF" });
+      console.log("[PDF] File shared via Share plugin");
       return;
     }
   } catch (shareErr) {
     console.warn("[PDF] Share plugin failed:", shareErr);
   }
-  // Fallback: open the URI directly (triggers default PDF viewer on Android/iOS)
+
+  // 3. Last resort: open the URI directly
   try {
     (window as any).open(uri, "_system");
   } catch {
@@ -132,6 +156,30 @@ function showPdfSavedToast(uri: string, filename: string): void {
 
   // Auto-dismiss after 8 seconds
   setTimeout(dismiss, 8000);
+}
+
+/**
+ * After writing a file via Filesystem.writeFile, call getUri + stat so that
+ * Android's MediaStore / content-resolver acknowledges the file.  This makes
+ * it appear in "Recent files", Documents notification history, and the system
+ * file manager's Saree_Orders folder.  Non-fatal — failures are logged and
+ * swallowed so they never block the save flow.
+ *
+ * Returns the resolved native URI (preferred over the raw writeFile result).
+ */
+async function registerFileWithSystem(path: string): Promise<string | null> {
+  try {
+    const { uri } = await Filesystem.getUri({ path, directory: Directory.Documents });
+    console.log("[PDF] registerFile: resolved URI:", uri);
+
+    const info = await Filesystem.stat({ path, directory: Directory.Documents });
+    console.log(`[PDF] registerFile: stat OK – ${info.size} bytes, mtime ${info.mtime}`);
+
+    return uri;
+  } catch (err) {
+    console.warn("[PDF] registerFile: non-fatal error:", err);
+    return null;
+  }
 }
 
 /** Force direct download to device: hidden <a download> with Blob URL (web & mobile browsers). */
@@ -244,7 +292,11 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
           recursive: true,
         });
         console.log("[PDF] Native save success. URI:", result.uri ?? "<no-uri>");
-        showPdfSavedToast(result.uri ?? path, filename);
+
+        // Register file with the Android media index so it appears in
+        // system notifications / recent-files / Documents browser.
+        const resolvedUri = await registerFileWithSystem(path);
+        showPdfSavedToast(resolvedUri ?? result.uri ?? path, filename);
         return;
       } catch (nativeErr) {
         console.error("[PDF] Native Filesystem save failed, falling back to browser-style download:", nativeErr);

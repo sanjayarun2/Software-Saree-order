@@ -24,6 +24,7 @@
     "test:pdf:auto": "powershell -ExecutionPolicy Bypass -File auto-test-pdf.ps1"
   },
   "dependencies": {
+    "@capacitor-community/file-opener": "^6.0.1",
     "@capacitor/android": "^6.1.2",
     "@capacitor/app": "^6.0.2",
     "@capacitor/browser": "^6.0.6",
