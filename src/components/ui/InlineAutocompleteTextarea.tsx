@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 interface InlineAutocompleteTextareaProps {
   value: string;
@@ -25,6 +26,13 @@ export function InlineAutocompleteTextarea({
 }: InlineAutocompleteTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
+  const [isWeb, setIsWeb] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsWeb(!Capacitor.isNativePlatform());
+    }
+  }, []);
 
   const query = value.trim().toLowerCase();
   const bestMatch = query
@@ -32,7 +40,17 @@ export function InlineAutocompleteTextarea({
     : undefined;
   const completion = bestMatch ? bestMatch.slice(value.length) : "";
 
-  // Sync scroll from textarea to hint
+  // Web only: auto-grow textarea so only the page scrolls (no inner scrollbar)
+  useEffect(() => {
+    if (!isWeb || !textareaRef.current) return;
+    const el = textareaRef.current;
+    el.style.overflowY = "hidden";
+    el.style.height = "auto";
+    const minHeight = rows * 22;
+    el.style.height = `${Math.max(el.scrollHeight, minHeight)}px`;
+  }, [isWeb, value, rows]);
+
+  // Sync scroll from textarea to hint (native only; web uses auto-grow)
   const handleScroll = () => {
     if (textareaRef.current && hintRef.current) {
       hintRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -61,7 +79,7 @@ export function InlineAutocompleteTextarea({
       <div
         ref={hintRef}
         aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-auto whitespace-pre-wrap break-words px-4 py-2 text-base leading-normal"
+        className={`pointer-events-none absolute inset-0 whitespace-pre-wrap break-words px-4 py-2 text-base leading-normal ${isWeb ? "overflow-hidden" : "overflow-auto"}`}
       >
         <span className="invisible">{value}</span>
         {completion && (
