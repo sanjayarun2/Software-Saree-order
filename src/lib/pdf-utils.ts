@@ -389,18 +389,24 @@ function drawOrderLabel(
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
   const rightX = rightColStart + ADDRESS_PADDING;
   const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
-  const labelY = sectionTop + 8 + VERTICAL_OFFSET;
-  const addressStartY = sectionTop + 14 + VERTICAL_OFFSET;
 
-  // FROM — left column (swapped)
+  // TO (right): higher — first focus, where to send
+  const labelYTo = sectionTop + 8;
+  const addressStartYTo = sectionTop + 14;
+
+  // FROM (left): pushed down — secondary, sender
+  const labelYFrom = sectionTop + 18;
+  const addressStartYFrom = sectionTop + 24;
+
+  // FROM — left column, lower so TO is the main focus
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);
-  doc.text("FROM", leftX, labelY);
+  doc.text("FROM:", leftX, labelYFrom);
   doc.setFont(FONT_BODY, "normal");
   doc.setFontSize(SIZE_ADDRESS);
   const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
   fromLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
-    doc.text(line, leftX, addressStartY + i * LINE_HEIGHT_ADDRESS);
+    doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
   });
 
   // Centre: Thank you for ordering
@@ -409,15 +415,15 @@ function drawOrderLabel(
   doc.setFontSize(12); // slightly larger than SIZE_THANKS_TITLE for emphasis
   doc.text("Thank you for ordering", centerX, thanksCenterY, { align: "center" });
 
-  // TO — right column (swapped)
+  // TO — right column, higher so it’s the first focus (delivery address)
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);
-  doc.text("TO", rightX, labelY);
+  doc.text("TO:", rightX, labelYTo);
   doc.setFont(FONT_BODY, "normal");
   doc.setFontSize(SIZE_ADDRESS);
   const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
   toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
-    doc.text(line, rightX, addressStartY + i * LINE_HEIGHT_ADDRESS);
+    doc.text(line, rightX, addressStartYTo + i * LINE_HEIGHT_ADDRESS);
   });
 }
 
