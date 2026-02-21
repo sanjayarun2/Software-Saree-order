@@ -392,34 +392,31 @@ function drawOrderLabel(
   const labelY = sectionTop + 8 + VERTICAL_OFFSET;
   const addressStartY = sectionTop + 14 + VERTICAL_OFFSET;
 
-  // TO (Recipient) — larger text, aligned for parcel
+  // FROM — left column (swapped)
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);
-  doc.text("TO (Recipient)", leftX, labelY);
-  doc.setFont(FONT_BODY, "normal");
-  doc.setFontSize(SIZE_ADDRESS);
-  const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
-  toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
-    doc.text(line, leftX, addressStartY + i * LINE_HEIGHT_ADDRESS);
-  });
-
-  // Thanks for purchasing — modern, centred, professional
-  const thanksCenterY = sectionTop + SECTION_H / 2;
-  doc.setFont(FONT_HEADING, "bold");
-  doc.setFontSize(SIZE_THANKS_TITLE);
-  doc.text("Thanks for purchasing", centerX, thanksCenterY - THANKS_LINE_GAP, { align: "center" });
-  doc.setFont(FONT_BODY, "normal");
-  doc.setFontSize(SIZE_THANKS_SUB);
-  doc.text("We appreciate your trust.", centerX, thanksCenterY + THANKS_LINE_GAP, { align: "center" });
-
-  // FROM (Ours) — same large alignment as TO
-  doc.setFont(FONT_HEADING, "bold");
-  doc.setFontSize(SIZE_LABEL);
-  doc.text("FROM (Ours)", rightX, labelY);
+  doc.text("FROM", leftX, labelY);
   doc.setFont(FONT_BODY, "normal");
   doc.setFontSize(SIZE_ADDRESS);
   const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
   fromLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
+    doc.text(line, leftX, addressStartY + i * LINE_HEIGHT_ADDRESS);
+  });
+
+  // Centre: Thank you for ordering
+  const thanksCenterY = sectionTop + SECTION_H / 2;
+  doc.setFont(FONT_HEADING, "bold");
+  doc.setFontSize(12); // slightly larger than SIZE_THANKS_TITLE for emphasis
+  doc.text("Thank you for ordering", centerX, thanksCenterY, { align: "center" });
+
+  // TO — right column (swapped)
+  doc.setFont(FONT_HEADING, "bold");
+  doc.setFontSize(SIZE_LABEL);
+  doc.text("TO", rightX, labelY);
+  doc.setFont(FONT_BODY, "normal");
+  doc.setFontSize(SIZE_ADDRESS);
+  const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
+  toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
     doc.text(line, rightX, addressStartY + i * LINE_HEIGHT_ADDRESS);
   });
 }
