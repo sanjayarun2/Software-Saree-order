@@ -412,17 +412,6 @@ function drawOrderLabel(
   doc.setFontSize(SIZE_THANKS_SUB);
   doc.text("We appreciate your trust.", centerX, thanksCenterY + THANKS_LINE_GAP, { align: "center" });
 
-  // Small center mark/logo below the message
-  const logoY = thanksCenterY + 10;
-  doc.setDrawColor(148, 163, 184);
-  doc.setFillColor(241, 245, 249);
-  doc.circle(centerX, logoY, 2.8, "FD");
-  doc.setFont(FONT_HEADING, "bold");
-  doc.setFontSize(7);
-  doc.setTextColor(71, 85, 105);
-  doc.text("SO", centerX, logoY + 1.1, { align: "center" });
-  doc.setTextColor(0, 0, 0);
-
   // FROM (Ours) — same large alignment as TO
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);

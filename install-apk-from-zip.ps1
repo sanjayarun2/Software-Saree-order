@@ -1,7 +1,5 @@
 param(
-    # Path to the ZIP file downloaded from GitHub Actions.
-    # If not provided, defaults to build-apk.zip in your Downloads folder.
-    [string]$ZipPath = "$env:USERPROFILE\Downloads\build-apk.zip"
+    [string]$ZipPath = ""
 )
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -9,13 +7,48 @@ Write-Host "  Install APK from ZIP (GitHub)" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+$downloadsDir = "$env:USERPROFILE\Downloads"
+
+if (-not $ZipPath) {
+    $candidates = @(
+        "$downloadsDir\saree-order-book-apk.zip",
+        "$downloadsDir\saree-order-book-apk",
+        "$downloadsDir\build-apk.zip",
+        "$downloadsDir\build-apk"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) {
+            $ZipPath = $c
+            break
+        }
+    }
+    if (-not $ZipPath) {
+        Write-Host "ERROR: No APK ZIP found in Downloads." -ForegroundColor Red
+        Write-Host "Searched for:" -ForegroundColor Yellow
+        foreach ($c in $candidates) { Write-Host "  - $c" -ForegroundColor Gray }
+        Write-Host ""
+        Write-Host "Tip: Pass the path explicitly:" -ForegroundColor Yellow
+        Write-Host "  .\install-apk-from-zip.ps1 -ZipPath 'C:\Users\YOURNAME\Downloads\saree-order-book-apk.zip'" -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 if (-not (Test-Path $ZipPath)) {
-    Write-Host "ERROR: ZIP file not found at:" -ForegroundColor Red
+    Write-Host "ERROR: File not found at:" -ForegroundColor Red
     Write-Host "       $ZipPath" -ForegroundColor Red
     Write-Host ""
     Write-Host "Tip: Pass the ZIP path explicitly, for example:" -ForegroundColor Yellow
-    Write-Host "  .\install-apk-from-zip.ps1 -ZipPath 'C:\Users\YOURNAME\Downloads\build-apk.zip'" -ForegroundColor Yellow
+    Write-Host "  .\install-apk-from-zip.ps1 -ZipPath 'C:\Users\YOURNAME\Downloads\saree-order-book-apk.zip'" -ForegroundColor Yellow
     exit 1
+}
+
+$item = Get-Item $ZipPath
+if (-not $item.Extension -or $item.Extension -ne ".zip") {
+    $newPath = "$($item.FullName).zip"
+    Write-Host "[FIX] File has no .zip extension. Renaming:" -ForegroundColor Yellow
+    Write-Host "      $($item.Name) -> $($item.Name).zip" -ForegroundColor Gray
+    Rename-Item -Path $item.FullName -NewName "$($item.Name).zip"
+    $ZipPath = $newPath
 }
 
 $ZipPath = (Resolve-Path $ZipPath).Path

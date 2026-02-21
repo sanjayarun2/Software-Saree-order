@@ -48,12 +48,20 @@ export default function OrdersPage() {
     const nameLine = (order.recipient_details || "").split(/\r?\n/)[0]?.trim() || "";
     const staffName = (order.booked_by || "").trim() || "-";
 
+    const mobile = (order.booked_mobile_no || "").trim() || "-";
+
     const lines = [
-      "Thanks for order, keep purhcase with us",
+      "Thanks for ordering with us",
+      "Keep purchase with us",
+      "",
       nameLine,
-      `Booked by: ${staffName}, ${booking}`,
+      "",
+      `Booked by: ${staffName}`,
+      `Quantity: ${qty}`,
+      `Booked date: ${booking}`,
+      `Booked mobile number: ${mobile}`,
       `Courier name: ${order.courier_name || "N/A"}`,
-      `Qty: ${qty}`,
+      `Dispatched date: ${despatch}`,
     ];
 
     const message = encodeURIComponent(lines.join("\n"));
