@@ -159,6 +159,78 @@ function showPdfSavedToast(uri: string, filename: string): void {
 }
 
 /**
+ * Show toast when user clicks PDF again with no change: "Already downloaded. View again?"
+ */
+function showAlreadyDownloadedToast(uri: string, filename: string): void {
+  if (typeof document === "undefined") return;
+  document.getElementById("_pdf-save-toast")?.remove();
+  if (!document.getElementById("_pdf-toast-style")) {
+    const style = document.createElement("style");
+    style.id = "_pdf-toast-style";
+    style.textContent = `
+      @keyframes _pdfToastIn  { from { opacity:0; transform:translateX(-50%) translateY(24px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+      @keyframes _pdfToastOut { from { opacity:1; } to { opacity:0; } }
+    `;
+    document.head.appendChild(style);
+  }
+  const toast = document.createElement("div");
+  toast.id = "_pdf-save-toast";
+  Object.assign(toast.style, {
+    position: "fixed",
+    bottom: "88px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#1e293b",
+    color: "#f8fafc",
+    borderRadius: "16px",
+    padding: "14px 18px",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.40)",
+    zIndex: "99999",
+    maxWidth: "360px",
+    width: "calc(100% - 32px)",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+    fontSize: "14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    animation: "_pdfToastIn 0.28s ease",
+  });
+  const msgRow = document.createElement("div");
+  Object.assign(msgRow.style, { display: "flex", alignItems: "flex-start", gap: "10px" });
+  msgRow.innerHTML = `
+    <span style="font-size:22px;flex-shrink:0">📄</span>
+    <div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:3px">Already downloaded</div>
+      <div style="color:#94a3b8;font-size:12.5px;line-height:1.5">No change — open or download again?</div>
+    </div>
+  `;
+  const actions = document.createElement("div");
+  Object.assign(actions.style, { display: "flex", gap: "8px", justifyContent: "flex-end" });
+  const btnBase = "border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; padding:7px 16px; border:none; outline:none;";
+  const dismissBtn = document.createElement("button");
+  dismissBtn.textContent = "Dismiss";
+  dismissBtn.setAttribute("style", `${btnBase} background:transparent; border:1px solid #475569; color:#94a3b8;`);
+  const viewBtn = document.createElement("button");
+  viewBtn.textContent = "View";
+  viewBtn.setAttribute("style", `${btnBase} background:#6366f1; color:#fff;`);
+  const dismiss = () => {
+    toast.style.animation = "_pdfToastOut 0.22s ease forwards";
+    setTimeout(() => toast.remove(), 240);
+  };
+  dismissBtn.addEventListener("click", dismiss);
+  viewBtn.addEventListener("click", async () => {
+    dismiss();
+    await openPdfFile(uri, filename);
+  });
+  actions.appendChild(dismissBtn);
+  actions.appendChild(viewBtn);
+  toast.appendChild(msgRow);
+  toast.appendChild(actions);
+  document.body.appendChild(toast);
+  setTimeout(dismiss, 8000);
+}
+
+/**
  * After writing a file via Filesystem.writeFile, call getUri + stat so that
  * Android's MediaStore / content-resolver acknowledges the file.  This makes
  * it appear in "Recent files", Documents notification history, and the system
@@ -242,10 +314,15 @@ async function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
+/** Last single-order PDF: used to show "Already downloaded" when user clicks again with no change. */
+let lastPdfOrderId: string | null = null;
+let lastPdfUri: string | null = null;
+let lastPdfFilename: string | null = null;
+
+export async function savePdfBlob(blob: Blob, filename: string): Promise<string | null> {
   if (typeof window === "undefined") {
     console.warn("[PDF] savePdfBlob called in SSR context, skipping");
-    return;
+    return null;
   }
   console.log(`[PDF] savePdfBlob called: ${filename}, blob size: ${blob.size} bytes`);
 
@@ -267,7 +344,7 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
       const ok = window.confirm(message);
       if (!ok) {
         console.log("[PDF] User declined download consent, aborting download");
-        return;
+        return null;
       }
       if (hasStorage) {
         (window as any).localStorage.setItem(consentKey as string, "yes");
@@ -315,7 +392,7 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
         // system notifications / recent-files / Documents browser.
         const resolvedUri = await registerFileWithSystem(path);
         showPdfSavedToast(resolvedUri ?? result.uri ?? path, filename);
-        return;
+        return resolvedUri ?? result.uri ?? path;
       } catch (nativeErr) {
         console.error("[PDF] Native Filesystem save failed, falling back to browser-style download:", nativeErr);
       }
@@ -323,11 +400,13 @@ export async function savePdfBlob(blob: Blob, filename: string): Promise<void> {
     }
     forceDownloadPdf(blob, filename);
     console.log("[PDF] Download method (anchor/blob) completed successfully");
+    return null;
   } catch (error) {
     console.error("[PDF] Download failed, using fallback:", error);
     const fallbackUrl = URL.createObjectURL(blob);
     console.log("[PDF] Fallback: navigating to blob URL");
     window.location.href = fallbackUrl;
+    return null;
   }
 }
 
@@ -360,10 +439,10 @@ const COL_W = (A4_W - MARGIN * 4) / 3;
 const FONT_HEADING = "helvetica";
 const FONT_BODY = "helvetica";
 const SIZE_LABEL = 14;       // TO / FROM labels — larger than address for emphasis
-const SIZE_ADDRESS = 11;     // address lines (large for parcel)
+const SIZE_ADDRESS = 12;     // address lines — larger and bold for print visibility
 const SIZE_THANKS_TITLE = 10;  // reduced for better balance
 const SIZE_THANKS_SUB = 10;
-const LINE_HEIGHT_ADDRESS = 5.5;
+const LINE_HEIGHT_ADDRESS = 6; // matches SIZE_ADDRESS for clean print
 const MAX_ADDRESS_LINES = 7;
 
 // Layout spacing
@@ -387,7 +466,8 @@ function getAddressLines(
   return lines;
 }
 
-const LOGO_SIZE_MM = 22; // centre logo size; fits in centre column without touching TO/FROM text
+const LOGO_SIZE_MM = 30;       // centre logo — larger for visibility
+const LOGO_SHIFT_RIGHT_MM = 5; // reduce gap between logo and TO address
 
 function drawOrderLabel(
   doc: {
@@ -424,19 +504,19 @@ function drawOrderLabel(
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);
   doc.text("FROM:", leftX, labelYFrom);
-  doc.setFont(FONT_BODY, "normal");
+  doc.setFont(FONT_BODY, "bold");
   doc.setFontSize(SIZE_ADDRESS);
   const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
   fromLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
     doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
   });
 
-  // Centre: thank-you logo (no text overlap; logo stays in centre column)
+  // Centre: thank-you logo — larger, shifted right to reduce gap to TO
   const thanksCenterY = sectionTop + SECTION_H / 2;
   if (logoBase64 && doc.addImage) {
     const logoW = LOGO_SIZE_MM;
     const logoH = LOGO_SIZE_MM;
-    const logoX = centerX - logoW / 2;
+    const logoX = centerX - logoW / 2 + LOGO_SHIFT_RIGHT_MM;
     const logoY = thanksCenterY - logoH / 2;
     doc.addImage(logoBase64, "PNG", logoX, logoY, logoW, logoH);
   }
@@ -445,7 +525,7 @@ function drawOrderLabel(
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);
   doc.text("TO:", rightX, labelYTo);
-  doc.setFont(FONT_BODY, "normal");
+  doc.setFont(FONT_BODY, "bold");
   doc.setFontSize(SIZE_ADDRESS);
   const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
   toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
@@ -487,6 +567,11 @@ export async function downloadOrderPdf(order: Order) {
     return;
   }
   console.log(`[PDF] downloadOrderPdf called for order: ${order.id}`);
+  // If same order already downloaded, show "Already downloaded" and offer to view again
+  if (lastPdfOrderId === order.id && lastPdfUri && lastPdfFilename) {
+    showAlreadyDownloadedToast(lastPdfUri, lastPdfFilename);
+    return;
+  }
   try {
     const logoBase64 = await loadThankYouLogoBase64();
     console.log(`[PDF] Creating jsPDF document...`);
@@ -501,7 +586,12 @@ export async function downloadOrderPdf(order: Order) {
     console.log(`[PDF] Generating blob for filename: ${filename}`);
     const blob = doc.output("blob");
     console.log(`[PDF] Blob generated, size: ${blob.size} bytes`);
-    await savePdfBlob(blob, filename);
+    const uri = await savePdfBlob(blob, filename);
+    if (uri) {
+      lastPdfOrderId = order.id;
+      lastPdfUri = uri;
+      lastPdfFilename = filename;
+    }
   } catch (e) {
     console.error("[PDF] downloadOrderPdf failed:", e);
     throw e; // Re-throw so caller can handle
