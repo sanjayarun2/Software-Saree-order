@@ -182,6 +182,24 @@ async function registerFileWithSystem(path: string): Promise<string | null> {
   }
 }
 
+/** Load thank-you purchase logo from public folder; returns base64 data URL or null if fetch fails. */
+async function loadThankYouLogoBase64(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const res = await fetch("/thank-you-purchase-logo.png");
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(typeof r.result === "string" ? r.result : null);
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** Force direct download to device: hidden <a download> with Blob URL (web & mobile browsers). */
 function forceDownloadPdf(blob: Blob, filename: string): void {
   if (typeof window === "undefined") return;
@@ -341,7 +359,7 @@ const COL_W = (A4_W - MARGIN * 4) / 3;
 // Typography (Helvetica only = identical on Mobile, Android, Web)
 const FONT_HEADING = "helvetica";
 const FONT_BODY = "helvetica";
-const SIZE_LABEL = 12;       // TO / FROM labels
+const SIZE_LABEL = 14;       // TO / FROM labels — larger than address for emphasis
 const SIZE_ADDRESS = 11;     // address lines (large for parcel)
 const SIZE_THANKS_TITLE = 10;  // reduced for better balance
 const SIZE_THANKS_SUB = 10;
@@ -369,6 +387,8 @@ function getAddressLines(
   return lines;
 }
 
+const LOGO_SIZE_MM = 22; // centre logo size; fits in centre column without touching TO/FROM text
+
 function drawOrderLabel(
   doc: {
     setFont: (f: string, s: string) => void;
@@ -379,9 +399,11 @@ function drawOrderLabel(
     setFillColor: (r: number, g?: number, b?: number) => void;
     setTextColor: (r: number, g?: number, b?: number) => void;
     circle: (x: number, y: number, radius: number, style?: string) => void;
+    addImage?: (imageData: string, format: string, x: number, y: number, w: number, h: number) => void;
   },
   order: Order,
-  sectionTop: number
+  sectionTop: number,
+  logoBase64: string | null = null
 ) {
   const leftX = MARGIN + ADDRESS_PADDING;
   const centerColStart = MARGIN + COL_W + MARGIN;
@@ -390,13 +412,13 @@ function drawOrderLabel(
   const rightX = rightColStart + ADDRESS_PADDING;
   const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
 
-  // TO (right): higher — first focus, where to send
-  const labelYTo = sectionTop + 8;
-  const addressStartYTo = sectionTop + 14;
+  // TO (right): higher — first focus, where to send; clear of top border
+  const labelYTo = sectionTop + 5;
+  const addressStartYTo = sectionTop + 11;
 
-  // FROM (left): pushed down — secondary, sender
-  const labelYFrom = sectionTop + 18;
-  const addressStartYFrom = sectionTop + 24;
+  // FROM (left): lower — secondary, sender; clear of centre and bottom line
+  const labelYFrom = sectionTop + 24;
+  const addressStartYFrom = sectionTop + 30;
 
   // FROM — left column, lower so TO is the main focus
   doc.setFont(FONT_HEADING, "bold");
@@ -409,11 +431,15 @@ function drawOrderLabel(
     doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
   });
 
-  // Centre: Thank you for ordering
+  // Centre: thank-you logo (no text overlap; logo stays in centre column)
   const thanksCenterY = sectionTop + SECTION_H / 2;
-  doc.setFont(FONT_HEADING, "bold");
-  doc.setFontSize(12); // slightly larger than SIZE_THANKS_TITLE for emphasis
-  doc.text("Thank you for ordering", centerX, thanksCenterY, { align: "center" });
+  if (logoBase64 && doc.addImage) {
+    const logoW = LOGO_SIZE_MM;
+    const logoH = LOGO_SIZE_MM;
+    const logoX = centerX - logoW / 2;
+    const logoY = thanksCenterY - logoH / 2;
+    doc.addImage(logoBase64, "PNG", logoX, logoY, logoW, logoH);
+  }
 
   // TO — right column, higher so it’s the first focus (delivery address)
   doc.setFont(FONT_HEADING, "bold");
@@ -462,13 +488,14 @@ export async function downloadOrderPdf(order: Order) {
   }
   console.log(`[PDF] downloadOrderPdf called for order: ${order.id}`);
   try {
+    const logoBase64 = await loadThankYouLogoBase64();
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
     console.log(`[PDF] Drawing ${SECTIONS_PER_PAGE} sections...`);
     for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
       drawSectionBorder(d, i * SECTION_H);
-      drawOrderLabel(d, order, i * SECTION_H);
+      drawOrderLabel(d, order, i * SECTION_H, logoBase64);
     }
     const filename = buildTimestampedFilename("SareeOrder");
     console.log(`[PDF] Generating blob for filename: ${filename}`);
@@ -498,6 +525,7 @@ export async function downloadOrdersPdf(orders: Order[]) {
     let page = 0;
     let slot = 0;
 
+    const logoBase64 = await loadThankYouLogoBase64();
     console.log(`[PDF] Drawing ${orders.length} orders...`);
     for (let i = 0; i < orders.length; i++) {
       if (slot === 0 && page > 0) {
@@ -506,7 +534,7 @@ export async function downloadOrdersPdf(orders: Order[]) {
       }
       const sectionTop = slot * SECTION_H;
       drawSectionBorder(d, sectionTop);
-      drawOrderLabel(d, orders[i], sectionTop);
+      drawOrderLabel(d, orders[i], sectionTop, logoBase64);
       slot++;
       if (slot >= SECTIONS_PER_PAGE) {
         slot = 0;
