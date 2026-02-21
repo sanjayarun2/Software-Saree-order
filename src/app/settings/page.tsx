@@ -62,7 +62,7 @@ export default function SettingsPage() {
         {/* One white card, 24px radius, single row: PDF Settings */}
         <div className="overflow-hidden rounded-[24px] bg-[#FFFFFF] shadow-sm dark:bg-white">
           <Link
-            href="#"
+            href="/settings/pdf"
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-50 dark:active:bg-slate-100"
           >
             <PdfIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
