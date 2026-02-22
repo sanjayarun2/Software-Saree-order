@@ -4,6 +4,20 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 
+/** Options passed from fetchPdfSettingsForRendering; used for centre block and vertical position. */
+export type PdfRenderOptions = {
+  settings: {
+    content_type: "text" | "logo";
+    placement: "top" | "bottom";
+    text_size: number;
+    custom_text: string;
+    logo_zoom: number;
+  } | null;
+  logoBase64: string | null;
+  /** Natural width / height of the logo image (for aspect-ratio-aware scaling). */
+  logoAspectRatio: number | null;
+};
+
 /** Build a unique timestamped filename: Prefix_YYYYMMDD_HHMMSS.pdf */
 function buildTimestampedFilename(prefix: string): string {
   const now = new Date();
@@ -254,8 +268,8 @@ async function registerFileWithSystem(path: string): Promise<string | null> {
   }
 }
 
-/** Load thank-you purchase logo from public folder; returns base64 data URL or null if fetch fails. */
-async function loadThankYouLogoBase64(): Promise<string | null> {
+/** Load default thank-you logo from public folder; returns base64 data URL or null. */
+async function loadDefaultLogoBase64(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   try {
     const res = await fetch("/thank-you-purchase-logo.png");
@@ -269,6 +283,39 @@ async function loadThankYouLogoBase64(): Promise<string | null> {
     });
   } catch {
     return null;
+  }
+}
+
+/** Returns width/height ratio of a base64 image (browser only). */
+async function getImageAspectRatio(base64: string): Promise<number | null> {
+  if (typeof window === "undefined") return null;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img.naturalWidth / (img.naturalHeight || 1));
+    img.onerror = () => resolve(null);
+    img.src = base64;
+  });
+}
+
+/** Fetches PDF settings and logo from Supabase (no cache) so generation always uses latest. */
+async function fetchPdfSettingsForRendering(userId: string): Promise<PdfRenderOptions> {
+  try {
+    const { getPdfSettings, getPdfLogoBase64 } = await import("./pdf-settings-supabase");
+    const settings = await getPdfSettings(userId);
+    let logoBase64: string | null = null;
+    if (settings?.content_type === "logo") {
+      if (settings.logo_path) {
+        logoBase64 = await getPdfLogoBase64(userId, settings.logo_path);
+      }
+      if (!logoBase64) logoBase64 = await loadDefaultLogoBase64();
+    }
+    const logoAspectRatio = logoBase64 ? await getImageAspectRatio(logoBase64) : null;
+    return { settings, logoBase64, logoAspectRatio };
+  } catch (e) {
+    console.warn("[PDF] fetchPdfSettingsForRendering failed:", e);
+    const logoBase64 = await loadDefaultLogoBase64();
+    const logoAspectRatio = logoBase64 ? await getImageAspectRatio(logoBase64) : null;
+    return { settings: null, logoBase64, logoAspectRatio };
   }
 }
 
@@ -466,8 +513,8 @@ function getAddressLines(
   return lines;
 }
 
-const LOGO_SIZE_MM = 33;       // centre logo — slightly larger
-const LOGO_SHIFT_RIGHT_MM = 0; // consistent gap between logo and FROM, and logo and TO
+const LOGO_MAX_W_MM = 40;   // fixed logo container width (mm)
+const LOGO_MAX_H_MM = 20;   // fixed logo container height (mm)
 
 function drawOrderLabel(
   doc: {
@@ -480,10 +527,11 @@ function drawOrderLabel(
     setTextColor: (r: number, g?: number, b?: number) => void;
     circle: (x: number, y: number, radius: number, style?: string) => void;
     addImage?: (imageData: string, format: string, x: number, y: number, w: number, h: number) => void;
+    internal?: { write: (s: string) => void; scaleFactor: number };
   },
   order: Order,
   sectionTop: number,
-  logoBase64: string | null = null
+  options: PdfRenderOptions
 ) {
   const leftX = MARGIN + ADDRESS_PADDING;
   const centerColStart = MARGIN + COL_W + MARGIN;
@@ -511,14 +559,66 @@ function drawOrderLabel(
     doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
   });
 
-  // Centre: thank-you logo — consistent gap to FROM and TO
-  const thanksCenterY = sectionTop + SECTION_H / 2;
-  if (logoBase64 && doc.addImage) {
-    const logoW = LOGO_SIZE_MM;
-    const logoH = LOGO_SIZE_MM;
-    const logoX = centerX - logoW / 2 + LOGO_SHIFT_RIGHT_MM;
-    const logoY = thanksCenterY - logoH / 2;
-    doc.addImage(logoBase64, "PNG", logoX, logoY, logoW, logoH);
+  // Centre: vertical position fixed (top or bottom); horizontal always center
+  const placement = options.settings?.placement ?? "bottom";
+  const thanksCenterY =
+    placement === "top" ? sectionTop + 28 : sectionTop + SECTION_H - 28;
+  const contentType = options.settings?.content_type ?? "logo";
+  const customText = (options.settings?.custom_text ?? "").trim();
+  const textSize = options.settings?.text_size ?? 15;
+
+  if (contentType === "text" && customText && doc.splitTextToSize) {
+    doc.setFont(FONT_BODY, "normal");
+    doc.setFontSize(textSize);
+    const maxCenterW = COL_W - 8;
+    const lines = doc.splitTextToSize(customText, maxCenterW);
+    const lineHeight = textSize * 0.4;
+    const startY = thanksCenterY - (lines.length * lineHeight) / 2;
+    lines.forEach((line, i) => {
+      doc.text(line, centerX, startY + i * lineHeight, { align: "center" });
+    });
+  } else if (options.logoBase64 && doc.addImage) {
+    const zoom = Math.max(0.5, Math.min(options.settings?.logo_zoom ?? 1, 2));
+    const ar = options.logoAspectRatio ?? 1;
+
+    // Scale logo to fit within the fixed container, preserving aspect ratio
+    let fitW = LOGO_MAX_W_MM;
+    let fitH = fitW / ar;
+    if (fitH > LOGO_MAX_H_MM) {
+      fitH = LOGO_MAX_H_MM;
+      fitW = fitH * ar;
+    }
+
+    // Apply zoom (expand/shrink from centre point)
+    const drawW = fitW * zoom;
+    const drawH = fitH * zoom;
+
+    // Slot rectangle for clipping (fixed container centred on thanksCenterY)
+    const slotX = centerX - LOGO_MAX_W_MM / 2;
+    const slotY = thanksCenterY - LOGO_MAX_H_MM / 2;
+    const drawX = centerX - drawW / 2;
+    const drawY = thanksCenterY - drawH / 2;
+
+    const needsClip =
+      drawW > LOGO_MAX_W_MM || drawH > LOGO_MAX_H_MM;
+
+    if (needsClip && doc.internal) {
+      const k = doc.internal.scaleFactor;
+      doc.internal.write("q");
+      const rx = slotX * k;
+      const ry = (A4_H - slotY - LOGO_MAX_H_MM) * k;
+      const rw = LOGO_MAX_W_MM * k;
+      const rh = LOGO_MAX_H_MM * k;
+      doc.internal.write(
+        `${rx.toFixed(2)} ${ry.toFixed(2)} ${rw.toFixed(2)} ${rh.toFixed(2)} re W n`
+      );
+    }
+
+    doc.addImage(options.logoBase64, "PNG", drawX, drawY, drawW, drawH);
+
+    if (needsClip && doc.internal) {
+      doc.internal.write("Q");
+    }
   }
 
   // TO — right column, higher so it’s the first focus (delivery address)
@@ -573,14 +673,14 @@ export async function downloadOrderPdf(order: Order) {
     return;
   }
   try {
-    const logoBase64 = await loadThankYouLogoBase64();
+    const renderOptions = await fetchPdfSettingsForRendering(order.user_id);
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
+    const d = doc as unknown as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
     console.log(`[PDF] Drawing ${SECTIONS_PER_PAGE} sections...`);
     for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
       drawSectionBorder(d, i * SECTION_H);
-      drawOrderLabel(d, order, i * SECTION_H, logoBase64);
+      drawOrderLabel(d, order, i * SECTION_H, renderOptions);
     }
     const filename = buildTimestampedFilename("SareeOrder");
     console.log(`[PDF] Generating blob for filename: ${filename}`);
@@ -611,11 +711,12 @@ export async function downloadOrdersPdf(orders: Order[]) {
   try {
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const d = doc as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
+    const d = doc as unknown as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
     let page = 0;
     let slot = 0;
 
-    const logoBase64 = await loadThankYouLogoBase64();
+    const userId = orders[0].user_id;
+    const renderOptions = await fetchPdfSettingsForRendering(userId);
     console.log(`[PDF] Drawing ${orders.length} orders...`);
     for (let i = 0; i < orders.length; i++) {
       if (slot === 0 && page > 0) {
@@ -624,7 +725,7 @@ export async function downloadOrdersPdf(orders: Order[]) {
       }
       const sectionTop = slot * SECTION_H;
       drawSectionBorder(d, sectionTop);
-      drawOrderLabel(d, orders[i], sectionTop, logoBase64);
+      drawOrderLabel(d, orders[i], sectionTop, renderOptions);
       slot++;
       if (slot >= SECTIONS_PER_PAGE) {
         slot = 0;
