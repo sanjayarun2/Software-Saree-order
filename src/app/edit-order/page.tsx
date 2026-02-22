@@ -31,6 +31,8 @@ function EditOrderContent() {
   const [courier, setCourier] = useState("Professional");
   const [quantity, setQuantity] = useState<number | "">("");
   const [bookingDate, setBookingDate] = useState("");
+  const [orderStatus, setOrderStatus] = useState<"PENDING" | "DESPATCHED">("PENDING");
+  const [trackingNumber, setTrackingNumber] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +65,8 @@ function EditOrderContent() {
       setCourier(o.courier_name ?? "Professional");
       setQuantity(o.quantity != null ? Number(o.quantity) || 1 : 1);
       setBookingDate(o.booking_date?.slice(0, 10) ?? "");
+      setOrderStatus(o.status ?? "PENDING");
+      setTrackingNumber((o.tracking_number ?? "").trim());
     };
     svcGetOrderById(user.id, orderId, (fresh) => {
       if (fresh) applyOrder(fresh);
@@ -142,18 +146,20 @@ function EditOrderContent() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-6">
-        <div className="flex items-center gap-3">
+        <header className="relative flex min-h-[44px] items-center justify-center pb-4">
           <Link
             href="/orders/"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             aria-label="Back to Orders"
           >
-            ← Back
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
           </Link>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             Edit Order
           </h1>
-        </div>
+        </header>
 
         <BentoCard>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -284,6 +290,19 @@ function EditOrderContent() {
                 required
               />
             </div>
+
+            {orderStatus === "DESPATCHED" && (
+              <div>
+                <label className="mb-1 block text-sm font-medium">Consignment number</label>
+                <input
+                  type="text"
+                  value={trackingNumber}
+                  readOnly
+                  className="w-full rounded-bento border border-gray-200 bg-gray-50 px-4 py-2 text-slate-700 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300"
+                  aria-readonly
+                />
+              </div>
+            )}
 
             <button
               type="submit"

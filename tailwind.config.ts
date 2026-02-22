@@ -42,6 +42,15 @@ const config: Config = {
       minWidth: {
         touch: "50px",
       },
+      keyframes: {
+        "scan-line": {
+          "0%, 100%": { top: "0%" },
+          "50%": { top: "100%" },
+        },
+      },
+      animation: {
+        "scan-line": "scan-line 2s ease-in-out infinite",
+      },
     },
   },
   plugins: [],

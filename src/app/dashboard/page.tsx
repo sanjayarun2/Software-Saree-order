@@ -243,9 +243,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="flex h-screen min-h-screen flex-col overflow-hidden">
       {/* Dark header: title, date dropdown, FAB - title size/place matches other page headings */}
-      <div className="relative bg-slate-900 px-4 pb-8 pt-4 dark:bg-slate-950 lg:px-10 lg:pt-6">
+      <div className="relative shrink-0 bg-slate-900 px-4 pb-8 pt-4 dark:bg-slate-950 lg:px-10 lg:pt-6">
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
             <h1 className="text-xl font-bold leading-tight text-white lg:text-2xl">
@@ -360,8 +360,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Content: cards with clear spacing below header */}
-      <div className="mx-auto max-w-6xl space-y-6 px-4 pb-8 pt-6 lg:px-10 lg:pt-8">
+      {/* Content: cards with clear spacing below header - scrolls inside viewport */}
+      <div className="mx-auto min-h-0 flex-1 overflow-y-auto max-w-6xl space-y-6 px-4 pb-8 pt-6 lg:px-10 lg:pt-8">
       {error && (
         <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
           {error}

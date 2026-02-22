@@ -32,7 +32,7 @@ export default function SettingsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto h-screen min-h-screen max-w-6xl overflow-hidden px-4 py-4 lg:px-10 lg:py-6">
+      <div className="mx-auto flex h-screen min-h-screen max-w-6xl flex-col overflow-hidden px-4 py-4 lg:px-10 lg:py-6">
         {/* Header: back (left), centered Settings - no X button */}
         <header className="relative flex min-h-[44px] items-center justify-center pb-4">
           <Link

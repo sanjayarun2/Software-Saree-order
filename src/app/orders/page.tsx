@@ -8,6 +8,7 @@ import { BentoCard } from "@/components/ui/BentoCard";
 import { OrderListSkeleton } from "@/components/ui/SkeletonLoader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
+import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
 import { downloadOrdersPdf } from "@/lib/pdf-utils";
 import { useSearch } from "@/lib/search-context";
 import {
@@ -42,6 +43,7 @@ export default function OrdersPage() {
   const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [dispatching, setDispatching] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const trackingInputRef = useRef<HTMLInputElement>(null);
 
   const openWhatsAppForOrder = (order: Order) => {
@@ -80,30 +82,6 @@ export default function OrdersPage() {
     const message = encodeURIComponent(lines.join("\n"));
     const url = `https://wa.me/?text=${message}`;
     window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const copyConsignmentNumber = async (order: Order) => {
-    const tn = (order.tracking_number || "").trim();
-    if (!tn) {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        try { await navigator.clipboard.writeText(""); } catch { /* no-op */ }
-      }
-      return;
-    }
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(tn);
-      }
-    } catch {
-      // fallback for older browsers
-      const input = document.createElement("input");
-      input.value = tn;
-      input.setAttribute("readonly", "");
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand("copy");
-      document.body.removeChild(input);
-    }
   };
 
   useEffect(() => {
@@ -368,17 +346,6 @@ export default function OrdersPage() {
                         >
                           <IconTrash className="h-5 w-5" />
                         </button>
-                        {(order.tracking_number || "").trim() && (
-                          <button
-                            onClick={() => copyConsignmentNumber(order)}
-                            className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-                            title="Copy consignment number"
-                          >
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                          </button>
-                        )}
                         <button
                           onClick={() => openWhatsAppForOrder(order)}
                           className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
@@ -470,16 +437,30 @@ export default function OrdersPage() {
               <label htmlFor="tracking-number" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
                 Tracking / Consignment / LR Number <span className="text-slate-400">(optional)</span>
               </label>
-              <input
-                id="tracking-number"
-                ref={trackingInputRef}
-                type="text"
-                value={trackingNumber}
-                onChange={(e) => setTrackingNumber(e.target.value)}
-                placeholder="e.g. PRO123456789"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
-                onKeyDown={(e) => { if (e.key === "Enter" && !dispatching) confirmDispatch(); }}
-              />
+              <div className="flex gap-2">
+                <input
+                  id="tracking-number"
+                  ref={trackingInputRef}
+                  type="text"
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder="e.g. PRO123456789"
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
+                  onKeyDown={(e) => { if (e.key === "Enter" && !dispatching) confirmDispatch(); }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-slate-700 hover:bg-gray-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                  title="Scan barcode or QR code"
+                  aria-label="Scan LR number"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7V5a2 2 0 012-2h2M7 3h10a2 2 0 012 2v2M7 19h10a2 2 0 002-2v-2M3 17v2a2 2 0 002 2h2" />
+                    <path d="M5 12h.01M12 12h.01M19 12h.01M5 12a1 1 0 11-2 0 1 1 0 012 0M12 12a1 1 0 11-2 0 1 1 0 012 0M19 12a1 1 0 11-2 0 1 1 0 012 0" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div className="mt-6 flex gap-3">
@@ -503,6 +484,12 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onResult={(text) => setTrackingNumber(text)}
+      />
     </ErrorBoundary>
   );
 }

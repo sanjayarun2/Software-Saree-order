@@ -37,6 +37,7 @@
     "@capacitor/share": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.2",
     "@supabase/supabase-js": "^2.45.0",
+    "html5-qrcode": "^2.3.8",
     "idb-keyval": "^6.2.2",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^5.0.7",
