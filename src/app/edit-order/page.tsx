@@ -112,6 +112,7 @@ function EditOrderContent() {
         courier_name: courier,
         booking_date: bookingDate,
         quantity: quantity === "" ? null : Number(quantity),
+        ...(orderStatus === "DESPATCHED" && { tracking_number: trackingNumber.trim() || null }),
       });
       // Clear cached draft on successful save
       recipientField.clear();
@@ -297,9 +298,8 @@ function EditOrderContent() {
                 <input
                   type="text"
                   value={trackingNumber}
-                  readOnly
-                  className="w-full rounded-bento border border-gray-200 bg-gray-50 px-4 py-2 text-slate-700 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300"
-                  aria-readonly
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
                 />
               </div>
             )}

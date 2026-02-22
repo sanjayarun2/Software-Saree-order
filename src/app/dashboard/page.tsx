@@ -361,29 +361,32 @@ export default function DashboardPage() {
       </div>
 
       {/* Content: cards with clear spacing below header - scrolls inside viewport */}
-      <div className="mx-auto min-h-0 flex-1 overflow-y-auto max-w-6xl space-y-6 px-4 pb-8 pt-6 lg:px-10 lg:pt-8">
+      <div className="mx-auto min-h-0 flex-1 overflow-y-auto max-w-6xl space-y-6 bg-slate-50 px-4 pb-8 pt-6 dark:bg-slate-900/50 lg:px-10 lg:pt-8">
       {error && (
         <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
           {error}
         </p>
       )}
 
-      {/* KPI Cards: 2x2 grid, reference anatomy (label top-left, icon top-right, value + trend bottom) */}
-      <div className="grid gap-5 sm:grid-cols-2">
-        <BentoCard className="flex flex-col gap-4 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-          <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+      {/* KPI Cards: 3-column grid, clean aesthetic */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <BentoCard className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600">
+          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-primary-500/10 transition group-hover:bg-primary-500/15" aria-hidden />
+          <div className="relative flex items-start justify-between">
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Total Orders
             </p>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/40">
-              <span className="text-lg" aria-hidden>📋</span>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
             </div>
           </div>
           {loadingStats ? (
-            <div className="h-9 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
+            <div className="relative h-10 w-24 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-600" />
           ) : (
-            <div className="flex flex-wrap items-baseline gap-3">
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 md:text-3xl">
+            <div className="relative flex flex-wrap items-baseline gap-2">
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
                 {stats.total.toLocaleString()}
               </p>
               {prevStats != null && (
@@ -393,20 +396,23 @@ export default function DashboardPage() {
           )}
         </BentoCard>
 
-        <BentoCard className="flex flex-col gap-4 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-          <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              Dispatched Orders
+        <BentoCard className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600">
+          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-emerald-500/10 transition group-hover:bg-emerald-500/15" aria-hidden />
+          <div className="relative flex items-start justify-between">
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Dispatched
             </p>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/40">
-              <span className="text-lg" aria-hidden>✓</span>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
           </div>
           {loadingStats ? (
-            <div className="h-9 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
+            <div className="relative h-10 w-24 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-600" />
           ) : (
-            <div className="flex flex-wrap items-baseline gap-3">
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 md:text-3xl">
+            <div className="relative flex flex-wrap items-baseline gap-2">
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
                 {stats.dispatched.toLocaleString()}
               </p>
               {prevStats != null && (
@@ -416,20 +422,23 @@ export default function DashboardPage() {
           )}
         </BentoCard>
 
-        <BentoCard className="flex flex-col gap-4 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] sm:col-span-2">
-          <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              Pending Orders
+        <BentoCard className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600">
+          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-amber-500/10 transition group-hover:bg-amber-500/15" aria-hidden />
+          <div className="relative flex items-start justify-between">
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Pending
             </p>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/40">
-              <span className="text-lg" aria-hidden>⏳</span>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
           </div>
           {loadingStats ? (
-            <div className="h-9 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
+            <div className="relative h-10 w-24 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-600" />
           ) : (
-            <div className="flex flex-wrap items-baseline gap-3">
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 md:text-3xl">
+            <div className="relative flex flex-wrap items-baseline gap-2">
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
                 {stats.pending.toLocaleString()}
               </p>
               {prevStats != null && (
@@ -448,13 +457,15 @@ function PctChange({ value }: { value: number | null }) {
   if (value == null) return null;
   const isPositive = value >= 0;
   return (
-    <p
-      className={`text-sm font-medium ${
-        isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+        isPositive
+          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+          : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
       }`}
     >
-      {isPositive ? "▲ +" : "▼ "}
+      {isPositive ? "↑ +" : "↓ "}
       {Math.abs(value)}%
-    </p>
+    </span>
   );
 }

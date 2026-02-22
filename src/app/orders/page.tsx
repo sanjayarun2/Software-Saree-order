@@ -437,7 +437,7 @@ export default function OrdersPage() {
               <label htmlFor="tracking-number" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
                 Tracking / Consignment / LR Number <span className="text-slate-400">(optional)</span>
               </label>
-              <div className="flex gap-2">
+              <div className="flex items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500 dark:border-slate-600 dark:bg-slate-800">
                 <input
                   id="tracking-number"
                   ref={trackingInputRef}
@@ -445,19 +445,26 @@ export default function OrdersPage() {
                   value={trackingNumber}
                   onChange={(e) => setTrackingNumber(e.target.value)}
                   placeholder="e.g. PRO123456789"
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
+                  className="min-w-0 flex-1 border-0 bg-transparent px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder-slate-500"
                   onKeyDown={(e) => { if (e.key === "Enter" && !dispatching) confirmDispatch(); }}
                 />
                 <button
                   type="button"
-                  onClick={() => setScannerOpen(true)}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-slate-700 hover:bg-gray-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                  onClick={async () => {
+                    try {
+                      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                      stream.getTracks().forEach((t) => t.stop());
+                    } catch {
+                      // Permission denied or no device; modal will show error
+                    }
+                    setScannerOpen(true);
+                  }}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center border-l border-gray-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                   title="Scan barcode or QR code"
                   aria-label="Scan LR number"
                 >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 7V5a2 2 0 012-2h2M7 3h10a2 2 0 012 2v2M7 19h10a2 2 0 002-2v-2M3 17v2a2 2 0 002 2h2" />
-                    <path d="M5 12h.01M12 12h.01M19 12h.01M5 12a1 1 0 11-2 0 1 1 0 012 0M12 12a1 1 0 11-2 0 1 1 0 012 0M19 12a1 1 0 11-2 0 1 1 0 012 0" />
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M2 4h1v16H2V4z M4 4h1v16H4V4z M6 4h1v16H6V4z M8 4h1v16H8V4z M10 4h1v16H10V4z M12 4h1v16H12V4z M14 4h1v16H14V4z M16 4h1v16H16V4z M18 4h1v16H18V4z M20 4h1v16H20V4z M22 4h1v16H22V4z" />
                   </svg>
                 </button>
               </div>

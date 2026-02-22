@@ -1,8 +1,19 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const SCANNER_ELEMENT_ID = "barcode-scanner-root";
+
+function isPermissionDenied(e: unknown): boolean {
+  const name = (e as { name?: string })?.name;
+  const msg = String((e as Error)?.message ?? "").toLowerCase();
+  return name === "NotAllowedError" || name === "PermissionDeniedError" || msg.includes("permission") || msg.includes("denied");
+}
+
+function isNotFoundOrNotReadable(e: unknown): boolean {
+  const name = (e as { name?: string })?.name;
+  return name === "NotFoundError" || name === "NotReadableError" || name === "OverconstrainedError";
+}
 
 export interface BarcodeScannerModalProps {
   open: boolean;
@@ -14,77 +25,83 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorPermissionDenied, setErrorPermissionDenied] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scannerRef = useRef<any>(null);
 
-  useEffect(() => {
-    if (!open) return;
+  const tryStartScanner = useCallback(async (cancelled: { current: boolean }) => {
+    const { Html5Qrcode: H5Q, Html5QrcodeSupportedFormats: F } = await import("html5-qrcode");
+    const el = document.getElementById(SCANNER_ELEMENT_ID);
+    if (!el || cancelled.current) return;
 
-    let cancelled = false;
-    setError(null);
-    setStarting(true);
-    setTorchOn(false);
-    setTorchAvailable(false);
+    const scanner = new H5Q(SCANNER_ELEMENT_ID, {
+      formatsToSupport: [
+        F.CODE_128,
+        F.QR_CODE,
+        F.CODE_39,
+        F.EAN_13,
+        F.UPC_A,
+        F.ITF,
+        F.CODABAR,
+      ],
+      verbose: false,
+    });
+    scannerRef.current = scanner;
 
-    const startScanner = async () => {
-      const { Html5Qrcode: H5Q, Html5QrcodeSupportedFormats: F } = await import("html5-qrcode");
-      const el = document.getElementById(SCANNER_ELEMENT_ID);
-      if (!el || cancelled) return;
+    let cameras: { id: string; label: string }[] = [];
+    try {
+      cameras = await H5Q.getCameras();
+    } catch (e) {
+      if (cancelled.current) return;
+      if (isPermissionDenied(e)) {
+        setError("Camera access was denied.");
+        setErrorPermissionDenied(true);
+        setStarting(false);
+        return;
+      }
+      throw e;
+    }
 
-      const scanner = new H5Q(SCANNER_ELEMENT_ID, {
-        formatsToSupport: [
-          F.CODE_128,
-          F.QR_CODE,
-          F.CODE_39,
-          F.EAN_13,
-          F.UPC_A,
-          F.ITF,
-          F.CODABAR,
-        ],
-        verbose: false,
-      });
-      scannerRef.current = scanner;
+    if (cancelled.current) {
+      await scanner.stop();
+      return;
+    }
+    if (!cameras?.length) {
+      setError("No camera found on this device.");
+      setStarting(false);
+      return;
+    }
 
+    const preferred = cameras.find(
+      (c) => c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("environment")
+    );
+    const candidates = preferred ? [preferred, ...cameras.filter((c) => c.id !== preferred.id)] : cameras;
+
+    for (const camera of candidates) {
+      if (cancelled.current) break;
       try {
-        const cameras = await H5Q.getCameras();
-        if (cancelled) {
-          await scanner.stop();
-          return;
-        }
-        const backCamera = cameras.find(
-          (c) => c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("environment")
-        );
-        const cameraId = backCamera?.id ?? cameras[0]?.id;
-        if (!cameraId) {
-          setError("No camera found");
-          setStarting(false);
-          return;
-        }
-
         await scanner.start(
-          cameraId,
+          camera.id,
           {
             fps: 10,
             qrbox: { width: 250, height: 150 },
           },
-          (decodedText) => {
-            if (cancelled) return;
+          (decodedText: string) => {
+            if (cancelled.current) return;
             onResult(decodedText);
             onClose();
           },
-          () => {
-            // Ignore decode errors (no code in frame)
-          }
+          () => {}
         );
-
-        if (cancelled) {
+        if (cancelled.current) {
           await scanner.stop();
           return;
         }
-
+        setError(null);
+        setErrorPermissionDenied(false);
         setStarting(false);
-
         try {
           const caps = scanner.getRunningTrackCapabilities();
           const hasTorch = typeof (caps as MediaTrackCapabilities & { torch?: boolean }).torch === "boolean";
@@ -92,24 +109,50 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         } catch {
           setTorchAvailable(false);
         }
+        return;
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled.current) return;
+        if (isPermissionDenied(e)) {
+          setError("Camera access was denied.");
+          setErrorPermissionDenied(true);
+          setStarting(false);
+          return;
+        }
+        if (isNotFoundOrNotReadable(e) && candidates.indexOf(camera) < candidates.length - 1) continue;
         setError((e as Error).message || "Failed to start camera");
         setStarting(false);
+        return;
       }
+    }
+  }, [onClose, onResult]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const cancelled = { current: false };
+    setError(null);
+    setErrorPermissionDenied(false);
+    setStarting(true);
+    setTorchOn(false);
+    setTorchAvailable(false);
+
+    const startScanner = async () => {
+      await new Promise((r) => requestAnimationFrame(r));
+      if (cancelled.current) return;
+      await tryStartScanner(cancelled);
     };
 
     startScanner();
 
     return () => {
-      cancelled = true;
+      cancelled.current = true;
       const s = scannerRef.current;
       scannerRef.current = null;
       if (s) {
         s.stop().catch(() => {});
       }
     };
-  }, [open, onClose, onResult]);
+  }, [open, retryKey, tryStartScanner]);
 
   const toggleTorch = async () => {
     const scanner = scannerRef.current;
@@ -179,13 +222,34 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         {error && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/90 px-4">
             <p className="text-center text-sm text-red-300">{error}</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl bg-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/30"
-            >
-              Close
-            </button>
+            {errorPermissionDenied && (
+              <p className="text-center text-xs text-white/70 max-w-sm">
+                Allow camera for this site in your browser settings (address bar or site settings), then tap Try again or close and tap Scan again.
+              </p>
+            )}
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {errorPermissionDenied && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setErrorPermissionDenied(false);
+                    setStarting(true);
+                    setRetryKey((k) => k + 1);
+                  }}
+                  className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600"
+                >
+                  Try again
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl bg-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/30"
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </div>
