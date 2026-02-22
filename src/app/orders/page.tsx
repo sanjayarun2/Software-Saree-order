@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -22,6 +22,10 @@ function getAddressSummary(text: string, maxLen = 45): string {
   return first.length > maxLen ? `${first.slice(0, maxLen)}…` : first;
 }
 
+function getAddressLine1(text: string): string {
+  return (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "—";
+}
+
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const { query, setQuery } = useSearch();
@@ -35,6 +39,10 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [pdfFallbackUrl, setPdfFallbackUrl] = useState<string | null>(null);
+  const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [dispatching, setDispatching] = useState(false);
+  const trackingInputRef = useRef<HTMLInputElement>(null);
 
   const openWhatsAppForOrder = (order: Order) => {
     if (typeof window === "undefined") return;
@@ -128,14 +136,26 @@ export default function OrdersPage() {
     }
   };
 
-  const handleMarkAsDespatched = async (order: Order) => {
+  const handleMarkAsDespatched = (order: Order) => {
     if (!user || order.status !== "PENDING") return;
+    setDispatchOrder(order);
+    setTrackingNumber("");
+    setTimeout(() => trackingInputRef.current?.focus(), 100);
+  };
+
+  const confirmDispatch = async () => {
+    if (!user || !dispatchOrder) return;
+    setDispatching(true);
     const today = new Date().toISOString().slice(0, 10);
+    const tn = trackingNumber.trim() || null;
     try {
-      await svcUpdateOrderStatus(user.id, order.id, "DESPATCHED", today);
-      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      await svcUpdateOrderStatus(user.id, dispatchOrder.id, "DESPATCHED", today, tn);
+      setOrders((prev) => prev.filter((o) => o.id !== dispatchOrder.id));
+      setDispatchOrder(null);
     } catch (e) {
       setError((e as Error).message || "Failed to mark as despatched");
+    } finally {
+      setDispatching(false);
     }
   };
 
@@ -392,6 +412,60 @@ export default function OrdersPage() {
           )}
         </div>
       </div>
+
+      {/* ── Dispatch confirmation modal ── */}
+      {dispatchOrder && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !dispatching) setDispatchOrder(null); }}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-800">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Move to Dispatch</h2>
+
+            <div className="mt-3 rounded-xl bg-gray-50 px-4 py-3 dark:bg-slate-700">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Recipient (To)</p>
+              <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                {getAddressLine1(dispatchOrder.recipient_details)}
+              </p>
+            </div>
+
+            <div className="mt-4">
+              <label htmlFor="tracking-number" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Tracking / Consignment / LR Number <span className="text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="tracking-number"
+                ref={trackingInputRef}
+                type="text"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="e.g. PRO123456789"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
+                onKeyDown={(e) => { if (e.key === "Enter" && !dispatching) confirmDispatch(); }}
+              />
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDispatchOrder(null)}
+                disabled={dispatching}
+                className="flex-1 min-h-[44px] rounded-xl border border-gray-200 bg-white font-medium text-slate-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDispatch}
+                disabled={dispatching}
+                className="flex-1 min-h-[44px] rounded-xl bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50"
+              >
+                {dispatching ? "Dispatching…" : "Dispatch"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ErrorBoundary>
   );
 }

@@ -98,7 +98,10 @@ async function revalidateOrders(
     await mergeOrders(userId, orders);
     await touchAccess(userId, orders.map((o) => o.id));
 
-    if (onFresh) onFresh(orders);
+    if (onFresh) {
+      const merged = await getOrdersLocal(userId, filters);
+      onFresh(merged);
+    }
   } catch (err) {
     console.warn("[OrderService] revalidate failed:", err);
   }
@@ -201,6 +204,7 @@ export async function updateOrderStatus(
   orderId: string,
   status: OrderStatus,
   despatchDate: string | null,
+  trackingNumber?: string | null,
 ): Promise<void> {
   const existing = await getLocalOrder(userId, orderId);
   if (existing) {
@@ -208,6 +212,7 @@ export async function updateOrderStatus(
       ...existing,
       status,
       despatch_date: despatchDate,
+      tracking_number: trackingNumber ?? existing.tracking_number ?? null,
       updated_at: new Date().toISOString(),
     };
     await putOrder(userId, updated);
@@ -215,7 +220,7 @@ export async function updateOrderStatus(
 
   const entry: OutboxEntry = {
     id: uid(),
-    action: { type: "status", orderId, status, despatch_date: despatchDate },
+    action: { type: "status", orderId, status, despatch_date: despatchDate, tracking_number: trackingNumber ?? null },
     createdAt: Date.now(),
   };
   await pushOutbox(userId, entry);
@@ -281,13 +286,15 @@ async function processOutboxEntry(userId: string, entry: OutboxEntry): Promise<v
       break;
     }
     case "status": {
+      const payload: Record<string, unknown> = {
+        status: action.status,
+        despatch_date: action.despatch_date,
+        updated_at: new Date().toISOString(),
+      };
+      if (action.tracking_number !== undefined) payload.tracking_number = action.tracking_number;
       const { error } = await supabase
         .from("orders")
-        .update({
-          status: action.status,
-          despatch_date: action.despatch_date,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", action.orderId)
         .eq("user_id", userId);
       if (error) throw error;

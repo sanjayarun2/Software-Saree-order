@@ -74,7 +74,10 @@ export async function removeOrder(userId: string, orderId: string): Promise<void
 export async function mergeOrders(userId: string, orders: Order[]): Promise<void> {
   const map = await getAllOrders(userId);
   for (const o of orders) {
-    map[o.id] = o;
+    const existing = map[o.id];
+    if (!existing || o.updated_at >= existing.updated_at) {
+      map[o.id] = o;
+    }
   }
   await set(ordersKey(userId), map, store);
 }

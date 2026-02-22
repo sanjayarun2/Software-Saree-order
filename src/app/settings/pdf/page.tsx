@@ -379,7 +379,7 @@ export default function PdfSettingsPage() {
             </div>
           </div>
 
-          {/* Row 2: Y Position — single horizontal row: [Label] [From|Logo|To icons] [ − ] [ Value ] [ + ] */}
+          {/* Row 2: Y Position — [Label] [From|Logo|To] [ Up ] [ Value ] [ Down ]; Up = move up, Down = move down */}
           <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-gray-100 px-4 py-2.5 dark:border-slate-700">
             <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">Y Position</span>
             <div className="flex shrink-0 items-center gap-1">
@@ -387,38 +387,39 @@ export default function PdfSettingsPage() {
                 type="button"
                 title="From Address"
                 onClick={() => setSelectedTarget("from")}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${selectedTarget === "from" ? "bg-primary-500 text-white shadow-sm dark:bg-primary-500" : "bg-gray-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${selectedTarget === "from" ? "border-primary-500 ring-2 ring-primary-500/30 dark:border-primary-400" : "border-gray-200 bg-gray-50 dark:border-slate-600 dark:bg-slate-700"}`}
                 aria-label="Select From address"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 10H3M21 6H3M17 14H3M21 18H3" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={selectedTarget === "from" ? "text-primary-600 dark:text-primary-400" : "text-slate-500 dark:text-slate-400"}><path d="M17 10H3M21 6H3M17 14H3M21 18H3" /></svg>
               </button>
               <button
                 type="button"
                 title="Logo / Center"
                 onClick={() => setSelectedTarget("logo")}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${selectedTarget === "logo" ? "bg-primary-500 text-white shadow-sm dark:bg-primary-500" : "bg-gray-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${selectedTarget === "logo" ? "border-primary-500 ring-2 ring-primary-500/30 dark:border-primary-400" : "border-gray-200 bg-gray-50 dark:border-slate-600 dark:bg-slate-700"}`}
                 aria-label="Select Logo"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M7 21v-1a5 5 0 0110 0v1" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={selectedTarget === "logo" ? "text-primary-600 dark:text-primary-400" : "text-slate-500 dark:text-slate-400"}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M7 21v-1a5 5 0 0110 0v1" /></svg>
               </button>
               <button
                 type="button"
                 title="To Address"
                 onClick={() => setSelectedTarget("to")}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${selectedTarget === "to" ? "bg-primary-500 text-white shadow-sm dark:bg-primary-500" : "bg-gray-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${selectedTarget === "to" ? "border-primary-500 ring-2 ring-primary-500/30 dark:border-primary-400" : "border-gray-200 bg-gray-50 dark:border-slate-600 dark:bg-slate-700"}`}
                 aria-label="Select To address"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10H7M21 6H3M21 14H7M21 18H3" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={selectedTarget === "to" ? "text-primary-600 dark:text-primary-400" : "text-slate-500 dark:text-slate-400"}><path d="M21 10H7M21 6H3M21 14H7M21 18H3" /></svg>
               </button>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 onClick={() => stepY(-1)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-500 text-lg font-bold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
-                aria-label="Decrease Y"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                aria-label="Move up"
+                title="Move up"
               >
-                −
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6" /></svg>
               </button>
               <input
                 type="number"
@@ -430,46 +431,67 @@ export default function PdfSettingsPage() {
                   const n = parseFloat(e.target.value);
                   if (!Number.isNaN(n)) setSelectedValue(Math.max(0, Math.min(PDF_SECTION_H_MM, n)));
                 }}
-                className="w-14 rounded-lg border border-primary-200 bg-white px-2 py-1.5 text-center text-sm font-medium tabular-nums text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="w-14 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-medium tabular-nums text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 aria-label={`${selectedTarget} Y mm`}
               />
               <button
                 type="button"
                 onClick={() => stepY(1)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-500 text-lg font-bold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
-                aria-label="Increase Y"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                aria-label="Move down"
+                title="Move down"
               >
-                +
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
               </button>
               <span className="text-xs text-slate-500 dark:text-slate-400">mm</span>
             </div>
           </div>
 
-          {/* Row 3: Text Size + Bold / Not bold (reflects in PDF and live preview) */}
+          {/* Row 3: Text Size (box + Up/Down like Y Position) + Bold */}
           <div className="flex min-h-[56px] items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
             </svg>
             <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">Text Size</span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setTextSize((s) => Math.max(10, Math.min(24, s - 1)))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                aria-label="Text size down"
+                title="Decrease"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6" /></svg>
+              </button>
               <input
-                type="range"
+                type="number"
                 min={10}
                 max={24}
                 value={textSize}
-                onChange={(e) => setTextSize(Number(e.target.value))}
-                className="h-2 w-24 appearance-none rounded-full bg-gray-200 dark:bg-slate-600 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-500"
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (!Number.isNaN(n)) setTextSize(Math.max(10, Math.min(24, n)));
+                }}
+                className="w-12 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-medium tabular-nums text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 aria-label="Text size"
               />
-              <span className="w-8 text-right text-sm font-medium text-slate-700 dark:text-slate-300">{textSize}</span>
+              <button
+                type="button"
+                onClick={() => setTextSize((s) => Math.max(10, Math.min(24, s + 1)))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                aria-label="Text size up"
+                title="Increase"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
               <button
                 type="button"
                 title={textBold ? "Bold (on)" : "Not bold (off)"}
                 onClick={() => setTextBold((b) => !b)}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${textBold ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${textBold ? "border-primary-500 ring-2 ring-primary-500/30 dark:border-primary-400" : "border-gray-200 bg-gray-50 dark:border-slate-600 dark:bg-slate-700"}`}
                 aria-label={textBold ? "Bold" : "Not bold"}
               >
-                <span className="text-sm font-bold">B</span>
+                <span className={`text-sm font-bold ${textBold ? "text-primary-600 dark:text-primary-400" : "text-slate-500 dark:text-slate-400"}`}>B</span>
               </button>
             </div>
           </div>
@@ -603,7 +625,7 @@ export default function PdfSettingsPage() {
             >
               <p className="font-bold leading-tight text-slate-800 dark:text-slate-200" style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.45))}px` }}>FROM:</p>
               <p className={`leading-snug text-slate-600 dark:text-slate-400 ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${Math.max(5, Math.round(textSize * 0.38))}px` }}>
-                Global Tech Solutions, Silicon Valley.
+                Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043.<br />Ph: +1 555 123 4567
               </p>
             </div>
 
@@ -653,7 +675,7 @@ export default function PdfSettingsPage() {
             >
               <p className="font-bold leading-tight text-slate-800 dark:text-slate-200" style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.45))}px` }}>TO:</p>
               <p className={`leading-snug text-slate-600 dark:text-slate-400 ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${Math.max(5, Math.round(textSize * 0.38))}px` }}>
-                Anthony Raj, Chennai.
+                Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001.<br />Ph: +91 98765 43210
               </p>
             </div>
           </div>

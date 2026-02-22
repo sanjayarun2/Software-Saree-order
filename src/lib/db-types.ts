@@ -11,6 +11,7 @@ export interface Order {
   despatch_date: string | null;
   status: OrderStatus;
   quantity?: number | null;
+  tracking_number?: string | null;
   created_at: string;
   updated_at: string;
   user_id: string;
