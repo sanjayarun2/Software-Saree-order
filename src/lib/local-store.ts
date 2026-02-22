@@ -26,7 +26,7 @@ export type OutboxAction =
   | { type: "insert"; payload: Record<string, unknown>; tempId: string }
   | { type: "update"; orderId: string; payload: Record<string, unknown> }
   | { type: "delete"; orderId: string }
-  | { type: "status"; orderId: string; status: string; despatch_date: string | null };
+  | { type: "status"; orderId: string; status: string; despatch_date: string | null; tracking_number?: string | null };
 
 export interface OutboxEntry {
   id: string;

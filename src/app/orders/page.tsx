@@ -61,6 +61,7 @@ export default function OrdersPage() {
 
     const mobile = (order.booked_mobile_no || "").trim() || "-";
 
+    const consignment = (order.tracking_number || "").trim() || "—";
     const lines = [
       "Thanks for ordering with us",
       "Keep purchase with us",
@@ -73,11 +74,36 @@ export default function OrdersPage() {
       `Booked mobile number: ${mobile}`,
       `Courier name: ${order.courier_name || "N/A"}`,
       `Dispatched date: ${despatch}`,
+      `Consignment / Tracking: ${consignment}`,
     ];
 
     const message = encodeURIComponent(lines.join("\n"));
     const url = `https://wa.me/?text=${message}`;
     window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const copyConsignmentNumber = async (order: Order) => {
+    const tn = (order.tracking_number || "").trim();
+    if (!tn) {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        try { await navigator.clipboard.writeText(""); } catch { /* no-op */ }
+      }
+      return;
+    }
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(tn);
+      }
+    } catch {
+      // fallback for older browsers
+      const input = document.createElement("input");
+      input.value = tn;
+      input.setAttribute("readonly", "");
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    }
   };
 
   useEffect(() => {
@@ -342,6 +368,17 @@ export default function OrdersPage() {
                         >
                           <IconTrash className="h-5 w-5" />
                         </button>
+                        {(order.tracking_number || "").trim() && (
+                          <button
+                            onClick={() => copyConsignmentNumber(order)}
+                            className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                            title="Copy consignment number"
+                          >
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => openWhatsAppForOrder(order)}
                           className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"

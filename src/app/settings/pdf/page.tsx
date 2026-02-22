@@ -597,12 +597,9 @@ export default function PdfSettingsPage() {
           </p>
         </div>
 
-        {/* ── WYSIWYG Print-Mirror Preview (exact 25% scale of A4 section) ── */}
+        {/* ── Live Preview ── */}
         <div className="mt-6 w-full px-0">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
-            <span className="text-xs text-slate-400">25% scale · drag vertically</span>
-          </div>
+          <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
           <div
             ref={previewContainerRef}
             className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800"
