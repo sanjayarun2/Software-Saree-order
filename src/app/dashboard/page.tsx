@@ -243,8 +243,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="h-screen min-h-screen overflow-hidden flex flex-col">
-      {/* Dark header: title, date dropdown, FAB — title size/place matches other page headings */}
+    <div className="min-h-screen">
+      {/* Dark header: title, date dropdown, FAB - title size/place matches other page headings */}
       <div className="relative bg-slate-900 px-4 pb-8 pt-4 dark:bg-slate-950 lg:px-10 lg:pt-6">
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
@@ -360,8 +360,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Content: scrollable inside viewport so page itself does not scroll */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* Content: cards with clear spacing below header */}
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-8 pt-6 lg:px-10 lg:pt-8">
       {error && (
         <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
