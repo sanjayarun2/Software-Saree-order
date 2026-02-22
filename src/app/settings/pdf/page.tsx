@@ -42,11 +42,13 @@ function clampNum(v: number | null | undefined, min: number, max: number, def: n
   return Math.max(min, Math.min(max, v));
 }
 
-const PREVIEW_SCALE = 0.25;
+const A4_W_MM = 210;
 const defaultContentType: PdfContentType = "logo";
 const defaultPlacement: PdfPlacement = "bottom";
 const defaultTextSize = 15;
 const defaultCustomText = "";
+
+type YTarget = "from" | "logo" | "to";
 
 export type { PdfContentType, PdfPlacement };
 
@@ -78,11 +80,11 @@ export default function PdfSettingsPage() {
   const [logoYmm, setLogoYmm] = useState(50);
   const [fromYmm, setFromYmm] = useState(27);
   const [toYmm, setToYmm] = useState(8);
+  const [selectedTarget, setSelectedTarget] = useState<YTarget>("logo");
   const useNativePicker = useNativeLogoPicker();
   const previewContainerRef = useRef<HTMLDivElement>(null);
-  const dragTargetRef = useRef<"logo" | "from" | "to" | null>(null);
+  const dragTargetRef = useRef<YTarget | null>(null);
   const dragStartYRef = useRef(0);
-  const dragStartMmRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingYRef = useRef<{ logo?: number; from?: number; to?: number } | null>(null);
 
@@ -229,13 +231,17 @@ export default function PdfSettingsPage() {
     }, 50);
   };
 
-  const handlePreviewPointerDown = (e: React.PointerEvent, target: "logo" | "from" | "to") => {
+  const dragPointerIdRef = useRef<number | null>(null);
+
+  const handlePreviewPointerDown = (e: React.PointerEvent, target: YTarget) => {
     e.preventDefault();
+    e.stopPropagation();
+    setSelectedTarget(target);
     dragTargetRef.current = target;
     dragStartYRef.current = e.clientY;
-    const mm = target === "logo" ? logoYmm : target === "from" ? fromYmm : toYmm;
-    dragStartMmRef.current = mm;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragPointerIdRef.current = e.pointerId;
+    const container = previewContainerRef.current;
+    if (container) container.setPointerCapture(e.pointerId);
   };
 
   const handlePreviewPointerMove = (e: React.PointerEvent) => {
@@ -246,20 +252,28 @@ export default function PdfSettingsPage() {
     const deltaPx = e.clientY - dragStartYRef.current;
     const realMmPerPx = PDF_SECTION_H_MM / rect.height;
     const deltaMm = deltaPx * realMmPerPx;
-    const d = { logo: undefined as number | undefined, from: undefined as number | undefined, to: undefined as number | undefined };
-    if (dragTargetRef.current === "logo") d.logo = deltaMm;
-    else if (dragTargetRef.current === "from") d.from = deltaMm;
-    else d.to = deltaMm;
+    const d: { logo?: number; from?: number; to?: number } = {};
+    d[dragTargetRef.current] = deltaMm;
     scheduleDebouncedY(d);
     dragStartYRef.current = e.clientY;
   };
 
-  const handlePreviewPointerUp = (e: React.PointerEvent) => {
+  const handlePreviewPointerUp = () => {
     if (dragTargetRef.current) {
       flushPendingY();
       dragTargetRef.current = null;
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      const container = previewContainerRef.current;
+      if (container && dragPointerIdRef.current != null) {
+        try { container.releasePointerCapture(dragPointerIdRef.current); } catch { /* already released */ }
+      }
+      dragPointerIdRef.current = null;
     }
+  };
+
+  const selectedValue = selectedTarget === "logo" ? logoYmm : selectedTarget === "from" ? fromYmm : toYmm;
+  const setSelectedValue = selectedTarget === "logo" ? setLogoYmm : selectedTarget === "from" ? setFromYmm : setToYmm;
+  const stepY = (dir: 1 | -1) => {
+    setSelectedValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, +(v + dir).toFixed(1))));
   };
 
   const handleSave = async () => {
@@ -357,23 +371,80 @@ export default function PdfSettingsPage() {
             </div>
           </div>
 
-          {/* Row 2: Vertical position - Top / Bottom only (horizontal locked to center) */}
-          <div className="flex min-h-[56px] items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
+          {/* Row 2: Y Position – 3 selector icons + minus / value / plus */}
+          <div className="flex min-h-[56px] flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 001.138 0l7.108-4.061A1.125 1.125 0 0021 8.689v8.622c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 00-1.138 0l-7.108 4.061A1.125 1.125 0 013 17.311V8.69z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l-6-6m6 6l6-6" />
             </svg>
-            <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">Vertical position</span>
-            <div className="flex gap-1">
-              {(["top", "bottom"] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPlacement(p)}
-                  className={`rounded-xl px-3 py-1.5 text-sm font-medium capitalize ${placement === p ? "bg-primary-500 text-white" : "bg-gray-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"}`}
-                >
-                  {p}
-                </button>
-              ))}
+            <span className="text-base font-medium text-slate-900 dark:text-slate-100">Y Position</span>
+
+            <div className="ml-auto flex items-center gap-1.5">
+              {/* From icon (left-aligned paragraph) */}
+              <button
+                type="button"
+                title="From Address"
+                onClick={() => setSelectedTarget("from")}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${selectedTarget === "from" ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                aria-label="Select From address"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 10H3M21 6H3M17 14H3M21 18H3" /></svg>
+              </button>
+              {/* Logo icon (center) */}
+              <button
+                type="button"
+                title="Logo / Center"
+                onClick={() => setSelectedTarget("logo")}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${selectedTarget === "logo" ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                aria-label="Select Logo"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M7 21v-1a5 5 0 0110 0v1" /></svg>
+              </button>
+              {/* To icon (right-aligned paragraph) */}
+              <button
+                type="button"
+                title="To Address"
+                onClick={() => setSelectedTarget("to")}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${selectedTarget === "to" ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                aria-label="Select To address"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10H7M21 6H3M21 14H7M21 18H3" /></svg>
+              </button>
+
+              <div className="mx-1 h-6 w-px bg-gray-200 dark:bg-slate-600" />
+
+              {/* Minus */}
+              <button
+                type="button"
+                onClick={() => stepY(-1)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg font-bold text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                aria-label="Decrease Y"
+              >
+                −
+              </button>
+              {/* Numeric value */}
+              <input
+                type="number"
+                min={0}
+                max={PDF_SECTION_H_MM}
+                step={1}
+                value={Math.round(selectedValue * 10) / 10}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  if (!Number.isNaN(n)) setSelectedValue(Math.max(0, Math.min(PDF_SECTION_H_MM, n)));
+                }}
+                className="w-16 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-medium tabular-nums dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                aria-label={`${selectedTarget} Y mm`}
+              />
+              {/* Plus */}
+              <button
+                type="button"
+                onClick={() => stepY(1)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg font-bold text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                aria-label="Increase Y"
+              >
+                +
+              </button>
+              <span className="text-xs text-slate-500 dark:text-slate-400">mm</span>
             </div>
           </div>
 
@@ -495,108 +566,66 @@ export default function PdfSettingsPage() {
           </button>
         </div>
 
-        {/* Live Preview + vertical position controls (mm) */}
-        <div className="mt-8 space-y-4">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Live Preview</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Drag blocks vertically only. Values in mm match the printed PDF (0–{PDF_SECTION_H_MM}).
-          </p>
-
-          {/* Position controls: number box + up/down per element */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[
-              { id: "logo" as const, label: "Logo Y (mm)", value: logoYmm, setValue: setLogoYmm },
-              { id: "from" as const, label: "From Y (mm)", value: fromYmm, setValue: setFromYmm },
-              { id: "to" as const, label: "To Y (mm)", value: toYmm, setValue: setToYmm },
-            ].map(({ id, label, value, setValue }) => (
-              <div key={id} className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    min={0}
-                    max={PDF_SECTION_H_MM}
-                    step={1}
-                    value={Math.round(value * 10) / 10}
-                    onChange={(e) => {
-                      const n = parseFloat(e.target.value);
-                      if (!Number.isNaN(n)) setValue(Math.max(0, Math.min(PDF_SECTION_H_MM, n)));
-                    }}
-                    className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, v - 1)))}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-slate-700 hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500"
-                    aria-label={`${id} up`}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, v + 1)))}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-slate-700 hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500"
-                    aria-label={`${id} down`}
-                  >
-                    ↓
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* ── Full-width Live Preview ── */}
+        <div className="mt-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
+            <span className="text-xs text-slate-400">25% of A4 &middot; drag vertically</span>
           </div>
-
-          {/* 25% scale preview: one section, 52.5mm x 18.5625mm (section height at 25%) */}
           <div
             ref={previewContainerRef}
-            className="relative overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-white dark:border-slate-600 dark:bg-slate-800"
+            className="relative mx-auto w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800"
             style={{
-              width: "52.5mm",
-              height: "18.5625mm",
-              minHeight: 72,
+              aspectRatio: `${A4_W_MM} / ${PDF_SECTION_H_MM}`,
+              maxWidth: "100%",
+              touchAction: "none",
             }}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerUp}
+            onPointerLeave={handlePreviewPointerUp}
           >
-            {/* From (left) - placeholder */}
+            {/* From Address (left) */}
             <div
               role="button"
               tabIndex={0}
-              className="absolute left-0 w-1/3 cursor-grab select-none px-0.5 py-0.5 text-[2px] leading-tight text-slate-700 active:cursor-grabbing dark:text-slate-300"
-              style={{ top: `${fromYmm * PREVIEW_SCALE}mm` }}
+              data-target="from"
+              className={`absolute left-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 transition-shadow ${selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""}`}
+              style={{ top: `${(fromYmm / PDF_SECTION_H_MM) * 100}%` }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
-              onPointerMove={handlePreviewPointerMove}
-              onPointerUp={handlePreviewPointerUp}
-              onPointerLeave={handlePreviewPointerUp}
             >
-              <span className="font-bold">FROM:</span>
-              <br />
-              123 Tech Avenue, NY
+              <p className="text-[7px] font-bold leading-tight text-slate-800 dark:text-slate-200 sm:text-[9px]">FROM:</p>
+              <p className="text-[6px] leading-snug text-slate-600 dark:text-slate-400 sm:text-[8px]">
+                Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043
+              </p>
             </div>
-            {/* Logo (center) - placeholder */}
+
+            {/* Logo / Center */}
             <div
               role="button"
               tabIndex={0}
-              className="absolute left-1/2 flex -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-slate-400 bg-slate-100 px-1 py-0.5 text-[2px] font-medium text-slate-600 active:cursor-grabbing dark:border-slate-500 dark:bg-slate-700 dark:text-slate-300"
-              style={{ top: `${logoYmm * PREVIEW_SCALE}mm`, transform: "translate(-50%, -50%)" }}
+              data-target="logo"
+              className={`absolute left-1/2 cursor-grab select-none rounded-full transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
+              style={{ top: `${(logoYmm / PDF_SECTION_H_MM) * 100}%`, transform: "translate(-50%, -50%)" }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
-              onPointerMove={handlePreviewPointerMove}
-              onPointerUp={handlePreviewPointerUp}
-              onPointerLeave={handlePreviewPointerUp}
             >
-              Company Logo
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white shadow sm:h-10 sm:w-10">
+                <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm0 2.18l7 3.89v5.04c0 4.5-3.03 8.72-7 9.82-3.97-1.1-7-5.32-7-9.82V8.07l7-3.89z" /><path d="M12 7l-4.5 2.5v3.5c0 2.76 1.86 5.37 4.5 6 2.64-.63 4.5-3.24 4.5-6V9.5L12 7z" opacity=".6" /></svg>
+              </div>
             </div>
-            {/* To (right) - placeholder */}
+
+            {/* To Address (right) */}
             <div
               role="button"
               tabIndex={0}
-              className="absolute right-0 w-1/3 cursor-grab select-none px-0.5 py-0.5 text-right text-[2px] leading-tight text-slate-700 active:cursor-grabbing dark:text-slate-300"
-              style={{ top: `${toYmm * PREVIEW_SCALE}mm` }}
+              data-target="to"
+              className={`absolute right-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 text-right transition-shadow ${selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""}`}
+              style={{ top: `${(toYmm / PDF_SECTION_H_MM) * 100}%` }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
-              onPointerMove={handlePreviewPointerMove}
-              onPointerUp={handlePreviewPointerUp}
-              onPointerLeave={handlePreviewPointerUp}
             >
-              <span className="font-bold">TO:</span>
-              <br />
-              Anthony Raj, 456 Street, Chennai
+              <p className="text-[7px] font-bold leading-tight text-slate-800 dark:text-slate-200 sm:text-[9px]">TO:</p>
+              <p className="text-[6px] leading-snug text-slate-600 dark:text-slate-400 sm:text-[8px]">
+                Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001
+              </p>
             </div>
           </div>
         </div>
