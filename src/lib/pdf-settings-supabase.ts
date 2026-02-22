@@ -7,6 +7,9 @@ export type PdfPlacement = "top" | "bottom";
 const PDF_LOGOS_BUCKET = "pdf-logos";
 const LOGO_FILE_NAME = "logo.png";
 
+/** Section height in mm (one label section on A4). */
+export const PDF_SECTION_H_MM = 74.25;
+
 export interface PdfSettingsRow {
   user_id: string;
   content_type: PdfContentType;
@@ -15,6 +18,9 @@ export interface PdfSettingsRow {
   custom_text: string;
   logo_path: string | null;
   logo_zoom: number;
+  logo_y_mm: number;
+  from_y_mm: number;
+  to_y_mm: number;
   updated_at: string;
 }
 
@@ -25,6 +31,9 @@ const defaultSettings: Omit<PdfSettingsRow, "user_id" | "updated_at"> = {
   custom_text: "",
   logo_path: null,
   logo_zoom: 1.0,
+  logo_y_mm: 50,
+  from_y_mm: 27,
+  to_y_mm: 8,
 };
 
 /** Fetch PDF settings for a user from Supabase. Returns null if not found. */
@@ -51,6 +60,9 @@ export async function upsertPdfSettings(
     custom_text?: string;
     logo_path?: string | null;
     logo_zoom?: number;
+    logo_y_mm?: number;
+    from_y_mm?: number;
+    to_y_mm?: number;
   }
 ): Promise<{ error: Error | null }> {
   const { error } = await supabase.from("pdf_settings").upsert(

@@ -11,6 +11,7 @@ import {
   uploadPdfLogo,
   uploadPdfLogoFromBlob,
   getPdfLogoPreviewUrl,
+  PDF_SECTION_H_MM,
   type PdfContentType,
   type PdfPlacement,
 } from "@/lib/pdf-settings-supabase";
@@ -36,6 +37,12 @@ function getImageDimensionsFromFile(file: File): Promise<{ width: number; height
   });
 }
 
+function clampNum(v: number | null | undefined, min: number, max: number, def: number): number {
+  if (v == null || typeof v !== "number") return def;
+  return Math.max(min, Math.min(max, v));
+}
+
+const PREVIEW_SCALE = 0.25;
 const defaultContentType: PdfContentType = "logo";
 const defaultPlacement: PdfPlacement = "bottom";
 const defaultTextSize = 15;
@@ -68,7 +75,16 @@ export default function PdfSettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lowResWarning, setLowResWarning] = useState<string | null>(null);
+  const [logoYmm, setLogoYmm] = useState(50);
+  const [fromYmm, setFromYmm] = useState(27);
+  const [toYmm, setToYmm] = useState(8);
   const useNativePicker = useNativeLogoPicker();
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const dragTargetRef = useRef<"logo" | "from" | "to" | null>(null);
+  const dragStartYRef = useRef(0);
+  const dragStartMmRef = useRef(0);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingYRef = useRef<{ logo?: number; from?: number; to?: number } | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -87,6 +103,9 @@ export default function PdfSettingsPage() {
         setTextSize(row.text_size);
         setCustomText(row.custom_text ?? "");
         setLogoZoom(row.logo_zoom ?? 1.0);
+        setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 50));
+        setFromYmm(clampNum(row.from_y_mm, 0, PDF_SECTION_H_MM, 27));
+        setToYmm(clampNum(row.to_y_mm, 0, PDF_SECTION_H_MM, 8));
         setLogoPath(row.logo_path);
         if (row.logo_path) {
           const url = await getPdfLogoPreviewUrl(user.id, row.logo_path);
@@ -179,6 +198,70 @@ export default function PdfSettingsPage() {
     }
   };
 
+  const flushPendingY = () => {
+    const pending = pendingYRef.current;
+    pendingYRef.current = null;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (pending) {
+      if (pending.logo != null) setLogoYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.logo!)));
+      if (pending.from != null) setFromYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.from!)));
+      if (pending.to != null) setToYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.to!)));
+    }
+  };
+
+  const scheduleDebouncedY = (delta: { logo?: number; from?: number; to?: number }) => {
+    if (!pendingYRef.current) pendingYRef.current = { };
+    if (delta.logo != null) pendingYRef.current.logo = (pendingYRef.current.logo ?? 0) + delta.logo;
+    if (delta.from != null) pendingYRef.current.from = (pendingYRef.current.from ?? 0) + delta.from;
+    if (delta.to != null) pendingYRef.current.to = (pendingYRef.current.to ?? 0) + delta.to;
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      if (pendingYRef.current) {
+        if (pendingYRef.current.logo != null) setLogoYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pendingYRef.current!.logo!)));
+        if (pendingYRef.current.from != null) setFromYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pendingYRef.current!.from!)));
+        if (pendingYRef.current.to != null) setToYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pendingYRef.current!.to!)));
+        pendingYRef.current = null;
+      }
+      debounceTimerRef.current = null;
+    }, 50);
+  };
+
+  const handlePreviewPointerDown = (e: React.PointerEvent, target: "logo" | "from" | "to") => {
+    e.preventDefault();
+    dragTargetRef.current = target;
+    dragStartYRef.current = e.clientY;
+    const mm = target === "logo" ? logoYmm : target === "from" ? fromYmm : toYmm;
+    dragStartMmRef.current = mm;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePreviewPointerMove = (e: React.PointerEvent) => {
+    if (dragTargetRef.current == null) return;
+    const container = previewContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const deltaPx = e.clientY - dragStartYRef.current;
+    const realMmPerPx = PDF_SECTION_H_MM / rect.height;
+    const deltaMm = deltaPx * realMmPerPx;
+    const d = { logo: undefined as number | undefined, from: undefined as number | undefined, to: undefined as number | undefined };
+    if (dragTargetRef.current === "logo") d.logo = deltaMm;
+    else if (dragTargetRef.current === "from") d.from = deltaMm;
+    else d.to = deltaMm;
+    scheduleDebouncedY(d);
+    dragStartYRef.current = e.clientY;
+  };
+
+  const handlePreviewPointerUp = (e: React.PointerEvent) => {
+    if (dragTargetRef.current) {
+      flushPendingY();
+      dragTargetRef.current = null;
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setSaveError(null);
@@ -189,6 +272,9 @@ export default function PdfSettingsPage() {
       custom_text: customText,
       logo_path: logoPath,
       logo_zoom: logoZoom,
+      logo_y_mm: logoYmm,
+      from_y_mm: fromYmm,
+      to_y_mm: toYmm,
     });
     if (error) {
       setSaveError("Failed to save. Try again.");
@@ -407,6 +493,112 @@ export default function PdfSettingsPage() {
           >
             {saved ? "Saved" : "Save Changes"}
           </button>
+        </div>
+
+        {/* Live Preview + vertical position controls (mm) */}
+        <div className="mt-8 space-y-4">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Live Preview</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Drag blocks vertically only. Values in mm match the printed PDF (0–{PDF_SECTION_H_MM}).
+          </p>
+
+          {/* Position controls: number box + up/down per element */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[
+              { id: "logo" as const, label: "Logo Y (mm)", value: logoYmm, setValue: setLogoYmm },
+              { id: "from" as const, label: "From Y (mm)", value: fromYmm, setValue: setFromYmm },
+              { id: "to" as const, label: "To Y (mm)", value: toYmm, setValue: setToYmm },
+            ].map(({ id, label, value, setValue }) => (
+              <div key={id} className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={PDF_SECTION_H_MM}
+                    step={1}
+                    value={Math.round(value * 10) / 10}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (!Number.isNaN(n)) setValue(Math.max(0, Math.min(PDF_SECTION_H_MM, n)));
+                    }}
+                    className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, v - 1)))}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-slate-700 hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500"
+                    aria-label={`${id} up`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, v + 1)))}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-slate-700 hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500"
+                    aria-label={`${id} down`}
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 25% scale preview: one section, 52.5mm x 18.5625mm (section height at 25%) */}
+          <div
+            ref={previewContainerRef}
+            className="relative overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-white dark:border-slate-600 dark:bg-slate-800"
+            style={{
+              width: "52.5mm",
+              height: "18.5625mm",
+              minHeight: 72,
+            }}
+          >
+            {/* From (left) - placeholder */}
+            <div
+              role="button"
+              tabIndex={0}
+              className="absolute left-0 w-1/3 cursor-grab select-none px-0.5 py-0.5 text-[2px] leading-tight text-slate-700 active:cursor-grabbing dark:text-slate-300"
+              style={{ top: `${fromYmm * PREVIEW_SCALE}mm` }}
+              onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerLeave={handlePreviewPointerUp}
+            >
+              <span className="font-bold">FROM:</span>
+              <br />
+              123 Tech Avenue, NY
+            </div>
+            {/* Logo (center) - placeholder */}
+            <div
+              role="button"
+              tabIndex={0}
+              className="absolute left-1/2 flex -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-slate-400 bg-slate-100 px-1 py-0.5 text-[2px] font-medium text-slate-600 active:cursor-grabbing dark:border-slate-500 dark:bg-slate-700 dark:text-slate-300"
+              style={{ top: `${logoYmm * PREVIEW_SCALE}mm`, transform: "translate(-50%, -50%)" }}
+              onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerLeave={handlePreviewPointerUp}
+            >
+              Company Logo
+            </div>
+            {/* To (right) - placeholder */}
+            <div
+              role="button"
+              tabIndex={0}
+              className="absolute right-0 w-1/3 cursor-grab select-none px-0.5 py-0.5 text-right text-[2px] leading-tight text-slate-700 active:cursor-grabbing dark:text-slate-300"
+              style={{ top: `${toYmm * PREVIEW_SCALE}mm` }}
+              onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerLeave={handlePreviewPointerUp}
+            >
+              <span className="font-bold">TO:</span>
+              <br />
+              Anthony Raj, 456 Street, Chennai
+            </div>
+          </div>
         </div>
       </div>
     </ErrorBoundary>

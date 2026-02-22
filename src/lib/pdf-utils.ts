@@ -12,11 +12,19 @@ export type PdfRenderOptions = {
     text_size: number;
     custom_text: string;
     logo_zoom: number;
+    /** Vertical positions in mm from section top (0–74.25). When set, used by PDF engine. */
+    logo_y_mm?: number;
+    from_y_mm?: number;
+    to_y_mm?: number;
   } | null;
   logoBase64: string | null;
   /** Natural width / height of the logo image (for aspect-ratio-aware scaling). */
   logoAspectRatio: number | null;
 };
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
 
 /** Build a unique timestamped filename: Prefix_YYYYMMDD_HHMMSS.pdf */
 function buildTimestampedFilename(prefix: string): string {
@@ -540,15 +548,15 @@ function drawOrderLabel(
   const rightX = rightColStart + ADDRESS_PADDING;
   const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
 
-  // TO (right): first focus; addresses moved a little down
-  const labelYTo = sectionTop + 8;
-  const addressStartYTo = sectionTop + 14;
+  const sectionH = SECTION_H;
+  const toY = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
+  const fromY = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
+  const labelYTo = sectionTop + toY;
+  const addressStartYTo = sectionTop + toY + 6;
+  const labelYFrom = sectionTop + fromY;
+  const addressStartYFrom = sectionTop + fromY + 6;
 
-  // FROM (left): secondary, sender; addresses moved a little down
-  const labelYFrom = sectionTop + 27;
-  const addressStartYFrom = sectionTop + 33;
-
-  // FROM — left column, lower so TO is the main focus
+  // FROM — left column
   doc.setFont(FONT_HEADING, "bold");
   doc.setFontSize(SIZE_LABEL);
   doc.text("FROM:", leftX, labelYFrom);
@@ -559,10 +567,11 @@ function drawOrderLabel(
     doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
   });
 
-  // Centre: vertical position fixed (top or bottom); horizontal always center
+  // Centre: vertical position from settings (logo_y_mm) or placement fallback
+  const logoY = options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
   const placement = options.settings?.placement ?? "bottom";
   const thanksCenterY =
-    placement === "top" ? sectionTop + 28 : sectionTop + SECTION_H - 28;
+    logoY != null ? sectionTop + logoY : (placement === "top" ? sectionTop + 28 : sectionTop + SECTION_H - 28);
   const contentType = options.settings?.content_type ?? "logo";
   const customText = (options.settings?.custom_text ?? "").trim();
   const textSize = options.settings?.text_size ?? 15;
