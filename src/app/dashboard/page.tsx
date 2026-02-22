@@ -368,10 +368,10 @@ export default function DashboardPage() {
         </p>
       )}
 
-      {/* KPI Cards: 3-column grid, clean aesthetic */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-        <BentoCard className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600">
-          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-primary-500/10 transition group-hover:bg-primary-500/15" aria-hidden />
+      {/* KPI Cards: vertical stack, consistent width and alignment, no animation */}
+      <div className="flex w-full max-w-2xl flex-col gap-5 mx-auto">
+        <BentoCard className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-primary-500/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Total Orders
@@ -383,7 +383,7 @@ export default function DashboardPage() {
             </div>
           </div>
           {loadingStats ? (
-            <div className="relative h-10 w-24 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-600" />
+            <div className="relative h-10 w-24 rounded-lg bg-slate-200 dark:bg-slate-600" />
           ) : (
             <div className="relative flex flex-wrap items-baseline gap-2">
               <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
@@ -396,8 +396,8 @@ export default function DashboardPage() {
           )}
         </BentoCard>
 
-        <BentoCard className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600">
-          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-emerald-500/10 transition group-hover:bg-emerald-500/15" aria-hidden />
+        <BentoCard className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-emerald-500/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Dispatched
@@ -409,7 +409,7 @@ export default function DashboardPage() {
             </div>
           </div>
           {loadingStats ? (
-            <div className="relative h-10 w-24 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-600" />
+            <div className="relative h-10 w-24 rounded-lg bg-slate-200 dark:bg-slate-600" />
           ) : (
             <div className="relative flex flex-wrap items-baseline gap-2">
               <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
@@ -422,8 +422,8 @@ export default function DashboardPage() {
           )}
         </BentoCard>
 
-        <BentoCard className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600">
-          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-amber-500/10 transition group-hover:bg-amber-500/15" aria-hidden />
+        <BentoCard className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+          <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-amber-500/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Pending
@@ -435,7 +435,7 @@ export default function DashboardPage() {
             </div>
           </div>
           {loadingStats ? (
-            <div className="relative h-10 w-24 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-600" />
+            <div className="relative h-10 w-24 rounded-lg bg-slate-200 dark:bg-slate-600" />
           ) : (
             <div className="relative flex flex-wrap items-baseline gap-2">
               <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">

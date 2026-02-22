@@ -1,19 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-
-const SCANNER_ELEMENT_ID = "barcode-scanner-root";
-
-function isPermissionDenied(e: unknown): boolean {
-  const name = (e as { name?: string })?.name;
-  const msg = String((e as Error)?.message ?? "").toLowerCase();
-  return name === "NotAllowedError" || name === "PermissionDeniedError" || msg.includes("permission") || msg.includes("denied");
-}
-
-function isNotFoundOrNotReadable(e: unknown): boolean {
-  const name = (e as { name?: string })?.name;
-  return name === "NotFoundError" || name === "NotReadableError" || name === "OverconstrainedError";
-}
+import React, { useEffect, useRef, useState, useCallback } from "react";
 
 export interface BarcodeScannerModalProps {
   open: boolean;
@@ -21,232 +8,259 @@ export interface BarcodeScannerModalProps {
   onResult: (text: string) => void;
 }
 
+type ScanState = "starting" | "scanning" | "denied" | "no-camera" | "error";
+
 export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerModalProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controlsRef = useRef<any>(null);
+  const doneRef = useRef(false);
+
+  const [scanState, setScanState] = useState<ScanState>("starting");
+  const [errorMsg, setErrorMsg] = useState("");
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errorPermissionDenied, setErrorPermissionDenied] = useState(false);
-  const [starting, setStarting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const scannerRef = useRef<any>(null);
 
-  const tryStartScanner = useCallback(async (cancelled: { current: boolean }) => {
-    const { Html5Qrcode: H5Q, Html5QrcodeSupportedFormats: F } = await import("html5-qrcode");
-    const el = document.getElementById(SCANNER_ELEMENT_ID);
-    if (!el || cancelled.current) return;
-
-    const scanner = new H5Q(SCANNER_ELEMENT_ID, {
-      formatsToSupport: [
-        F.CODE_128,
-        F.QR_CODE,
-        F.CODE_39,
-        F.EAN_13,
-        F.UPC_A,
-        F.ITF,
-        F.CODABAR,
-      ],
-      verbose: false,
-    });
-    scannerRef.current = scanner;
-
-    let cameras: { id: string; label: string }[] = [];
-    try {
-      cameras = await H5Q.getCameras();
-    } catch (e) {
-      if (cancelled.current) return;
-      if (isPermissionDenied(e)) {
-        setError("Camera access was denied.");
-        setErrorPermissionDenied(true);
-        setStarting(false);
-        return;
-      }
-      throw e;
-    }
-
-    if (cancelled.current) {
-      await scanner.stop();
-      return;
-    }
-    if (!cameras?.length) {
-      setError("No camera found on this device.");
-      setStarting(false);
-      return;
-    }
-
-    const preferred = cameras.find(
-      (c) => c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("environment")
-    );
-    const candidates = preferred ? [preferred, ...cameras.filter((c) => c.id !== preferred.id)] : cameras;
-
-    for (const camera of candidates) {
-      if (cancelled.current) break;
-      try {
-        await scanner.start(
-          camera.id,
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 150 },
-          },
-          (decodedText: string) => {
-            if (cancelled.current) return;
-            onResult(decodedText);
-            onClose();
-          },
-          () => {}
-        );
-        if (cancelled.current) {
-          await scanner.stop();
-          return;
-        }
-        setError(null);
-        setErrorPermissionDenied(false);
-        setStarting(false);
-        try {
-          const caps = scanner.getRunningTrackCapabilities();
-          const hasTorch = typeof (caps as MediaTrackCapabilities & { torch?: boolean }).torch === "boolean";
-          setTorchAvailable(hasTorch);
-        } catch {
-          setTorchAvailable(false);
-        }
-        return;
-      } catch (e) {
-        if (cancelled.current) return;
-        if (isPermissionDenied(e)) {
-          setError("Camera access was denied.");
-          setErrorPermissionDenied(true);
-          setStarting(false);
-          return;
-        }
-        if (isNotFoundOrNotReadable(e) && candidates.indexOf(camera) < candidates.length - 1) continue;
-        setError((e as Error).message || "Failed to start camera");
-        setStarting(false);
-        return;
-      }
-    }
-  }, [onClose, onResult]);
+  const cleanup = useCallback(() => {
+    try { controlsRef.current?.stop?.(); } catch { /* ignore */ }
+    controlsRef.current = null;
+    const s = streamRef.current;
+    streamRef.current = null;
+    if (s) s.getTracks().forEach((t) => t.stop());
+  }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      cleanup();
+      return;
+    }
 
-    const cancelled = { current: false };
-    setError(null);
-    setErrorPermissionDenied(false);
-    setStarting(true);
+    doneRef.current = false;
+    setScanState("starting");
+    setErrorMsg("");
     setTorchOn(false);
     setTorchAvailable(false);
 
-    const startScanner = async () => {
-      await new Promise((r) => requestAnimationFrame(r));
-      if (cancelled.current) return;
-      await tryStartScanner(cancelled);
-    };
+    let cancelled = false;
 
-    startScanner();
+    const start = async () => {
+      cleanup();
 
-    return () => {
-      cancelled.current = true;
-      const s = scannerRef.current;
-      scannerRef.current = null;
-      if (s) {
-        s.stop().catch(() => {});
+      // Step 1: Get camera stream with fallback constraints
+      let stream: MediaStream | null = null;
+      const tryConstraints: MediaStreamConstraints[] = [
+        { video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } },
+        { video: { facingMode: "environment" } },
+        { video: true },
+      ];
+
+      for (const c of tryConstraints) {
+        if (cancelled) return;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(c);
+          break;
+        } catch (err) {
+          const name = (err as DOMException)?.name;
+          if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+            if (!cancelled) {
+              setScanState("denied");
+              setErrorMsg(
+                "Camera permission is blocked. To fix:\n" +
+                "1. Tap the lock/info icon in the address bar\n" +
+                "2. Set Camera to \"Allow\"\n" +
+                "3. Reload the page and try again"
+              );
+            }
+            return;
+          }
+          if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+            if (!cancelled) {
+              setScanState("no-camera");
+              setErrorMsg("No camera found on this device.");
+            }
+            return;
+          }
+          if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
+            continue;
+          }
+          if (name === "NotReadableError" || name === "TrackStartError") {
+            continue;
+          }
+        }
+      }
+
+      if (cancelled) {
+        stream?.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      if (!stream) {
+        setScanState("error");
+        setErrorMsg("Could not access any camera on this device.");
+        return;
+      }
+
+      streamRef.current = stream;
+
+      // Step 2: Check torch
+      const vTrack = stream.getVideoTracks()[0];
+      if (vTrack) {
+        try {
+          const caps = vTrack.getCapabilities?.();
+          if (caps && "torch" in caps) setTorchAvailable(true);
+        } catch { /* ignore */ }
+      }
+
+      // Step 3: Start zxing decoder on our stream
+      try {
+        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const { DecodeHintType, BarcodeFormat } = await import("@zxing/library");
+        if (cancelled) return;
+
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.QR_CODE,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.ITF,
+          BarcodeFormat.CODABAR,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints);
+
+        const controls = await reader.decodeFromStream(
+          stream,
+          videoRef.current!,
+          (result, error) => {
+            if (cancelled || doneRef.current) return;
+            if (result) {
+              const text = result.getText();
+              if (text) {
+                doneRef.current = true;
+                onResult(text);
+                onClose();
+              }
+            }
+            if (error && error.name !== "NotFoundException") {
+              // Non-decode errors are logged but we keep scanning
+            }
+          }
+        );
+
+        if (cancelled) {
+          controls?.stop?.();
+          return;
+        }
+
+        controlsRef.current = controls;
+        setScanState("scanning");
+      } catch (err) {
+        if (!cancelled) {
+          setScanState("error");
+          setErrorMsg((err as Error)?.message || "Failed to start barcode reader.");
+        }
       }
     };
-  }, [open, retryKey, tryStartScanner]);
 
-  const toggleTorch = async () => {
-    const scanner = scannerRef.current;
-    if (!scanner) return;
+    start();
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [open, retryKey, onResult, onClose, cleanup]);
+
+  const toggleTorch = useCallback(async () => {
+    const s = streamRef.current;
+    if (!s) return;
+    const track = s.getVideoTracks()[0];
+    if (!track) return;
     try {
-      await scanner.applyVideoConstraints({
+      await track.applyConstraints({
         advanced: [{ torch: !torchOn } as MediaTrackConstraintSet],
       });
-      setTorchOn((prev) => !prev);
-    } catch {
-      // Torch not supported or failed
-    }
-  };
+      setTorchOn((v) => !v);
+    } catch { /* ignore */ }
+  }, [torchOn]);
+
+  const handleRetry = useCallback(() => {
+    cleanup();
+    setScanState("starting");
+    setErrorMsg("");
+    setRetryKey((k) => k + 1);
+  }, [cleanup]);
 
   if (!open) return null;
+
+  const showError = scanState === "denied" || scanState === "no-camera" || scanState === "error";
 
   return (
     <div className="fixed inset-0 z-[200] flex flex-col bg-black">
       {/* Top bar */}
       <div className="flex shrink-0 items-center justify-between px-4 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-          aria-label="Close"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+        <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white" aria-label="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </button>
         <h2 className="text-lg font-semibold text-white">Scan Barcode</h2>
         {torchAvailable ? (
-          <button
-            type="button"
-            onClick={toggleTorch}
-            className={`flex h-10 w-10 items-center justify-center rounded-full ${torchOn ? "bg-primary-500 text-white" : "bg-white/10 text-white hover:bg-white/20"}`}
-            aria-label={torchOn ? "Turn off flashlight" : "Turn on flashlight"}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 2h6v1H9zM12 22v-5M9 17h6" />
-              <path d="M9 6a3 3 0 016 0v5a3 3 0 01-6 0V6z" />
-              <path d="M17 11a5 5 0 01-10 0" />
-            </svg>
+          <button type="button" onClick={toggleTorch} className={`flex h-10 w-10 items-center justify-center rounded-full ${torchOn ? "bg-primary-500 text-white" : "bg-white/10 text-white"}`} aria-label={torchOn ? "Turn off flashlight" : "Turn on flashlight"}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
           </button>
         ) : (
           <div className="h-10 w-10" />
         )}
       </div>
 
-      {/* Camera + viewfinder */}
+      {/* Camera feed + overlays */}
       <div className="relative min-h-0 flex-1">
-        <div id={SCANNER_ELEMENT_ID} className="h-full w-full" />
-        {/* Scanning frame overlay */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="relative h-[60%] w-[85%] max-w-sm">
-            <div className="absolute inset-0 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]" />
-            <div className="absolute inset-0 overflow-hidden rounded-2xl">
-              <div className="absolute left-0 right-0 h-1 animate-scan-line rounded-full bg-primary-400/90" />
+        <video ref={videoRef} className="h-full w-full object-cover" playsInline muted autoPlay />
+
+        {scanState === "scanning" && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative h-[55%] w-[80%] max-w-sm">
+              <div className="absolute inset-0 rounded-2xl border-2 border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]" />
+              <div className="absolute left-0 top-0 h-6 w-6 border-l-4 border-t-4 border-primary-400 rounded-tl-lg" />
+              <div className="absolute right-0 top-0 h-6 w-6 border-r-4 border-t-4 border-primary-400 rounded-tr-lg" />
+              <div className="absolute bottom-0 left-0 h-6 w-6 border-b-4 border-l-4 border-primary-400 rounded-bl-lg" />
+              <div className="absolute bottom-0 right-0 h-6 w-6 border-b-4 border-r-4 border-primary-400 rounded-br-lg" />
             </div>
           </div>
-        </div>
-        {starting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <p className="text-sm font-medium text-white">Starting camera…</p>
+        )}
+
+        {scanState === "starting" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black">
+            <div className="h-8 w-8 rounded-full border-[3px] border-white/20 border-t-white" style={{ animation: "spin 0.8s linear infinite" }} />
+            <p className="text-sm font-medium text-white/80">Starting camera…</p>
           </div>
         )}
-        {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/90 px-4">
-            <p className="text-center text-sm text-red-300">{error}</p>
-            {errorPermissionDenied && (
-              <p className="text-center text-xs text-white/70 max-w-sm">
-                Allow camera for this site in your browser settings (address bar or site settings), then tap Try again or close and tap Scan again.
+
+        {showError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-black/95 px-6">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {scanState === "denied" ? (
+                  <><rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="1" y1="1" x2="23" y2="23" /><circle cx="12" cy="10" r="3" /></>
+                ) : (
+                  <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
+                )}
+              </svg>
+            </div>
+            <div className="max-w-sm text-center">
+              <p className="text-base font-semibold text-white">
+                {scanState === "denied" ? "Camera Access Needed" : scanState === "no-camera" ? "No Camera Found" : "Camera Error"}
               </p>
-            )}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {errorPermissionDenied && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setErrorPermissionDenied(false);
-                    setStarting(true);
-                    setRetryKey((k) => k + 1);
-                  }}
-                  className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600"
-                >
-                  Try again
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl bg-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/30"
-              >
+              <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/70">{errorMsg}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button type="button" onClick={handleRetry} className="rounded-xl bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white">
+                Try again
+              </button>
+              <button type="button" onClick={onClose} className="rounded-xl bg-white/15 px-5 py-2.5 text-sm font-semibold text-white">
                 Close
               </button>
             </div>
@@ -254,10 +268,13 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         )}
       </div>
 
-      {/* Bottom instruction */}
-      <div className="shrink-0 px-4 pb-6 pt-2 text-center">
-        <p className="text-sm text-white/80">Point camera at barcode or QR code</p>
-      </div>
+      {scanState === "scanning" && (
+        <div className="shrink-0 px-4 pb-6 pt-3 text-center">
+          <p className="text-sm text-white/80">Point camera at barcode or QR code</p>
+        </div>
+      )}
+
+      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
