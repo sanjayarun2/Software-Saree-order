@@ -20,6 +20,22 @@ import {
   isLowResolutionForPrint,
 } from "@/lib/pdf-logo-picker";
 
+function getImageDimensionsFromFile(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: 0, height: 0 });
+    };
+    img.src = url;
+  });
+}
+
 const defaultContentType: PdfContentType = "logo";
 const defaultPlacement: PdfPlacement = "bottom";
 const defaultTextSize = 15;
@@ -33,6 +49,8 @@ export interface PdfSettings {
   textSize: number;
   customText: string;
 }
+
+type FileOrPickedLogo = File | { blob: Blob; mimeType: string; width: number; height: number };
 
 export default function PdfSettingsPage() {
   const { user, loading } = useAuth();
@@ -79,9 +97,7 @@ export default function PdfSettingsPage() {
       }
       setLoadingSettings(false);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user]);
 
   useEffect(() => {
@@ -90,32 +106,12 @@ export default function PdfSettingsPage() {
     getPdfLogoPreviewUrl(user.id, logoPath).then((url) => {
       if (!cancelled) setLogoPreviewUrl(url ?? null);
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user, logoPath]);
 
   const validTypes = ["image/png", "image/jpeg", "image/webp"];
 
-  function getImageDimensionsFromFile(file: File): Promise<{ width: number; height: number }> {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve({ width: 0, height: 0 });
-      };
-      img.src = url;
-    });
-  }
-
-  async function processAndUploadLogo(
-    fileOrPicked: File | { blob: Blob; mimeType: string; width: number; height: number }
-  ): Promise<void> {
+  const processAndUploadLogo = async (fileOrPicked: FileOrPickedLogo): Promise<void> => {
     if (!user) return;
     setSaveError(null);
     setLowResWarning(null);
@@ -151,7 +147,6 @@ export default function PdfSettingsPage() {
     }
 
     setUploadingLogo(true);
-    // Upload runs asynchronously so the UI stays responsive (no freeze on low-end devices).
     const { path, error } = await uploadPdfLogoFromBlob(user.id, blob, mimeType);
     setUploadingLogo(false);
 
@@ -165,7 +160,7 @@ export default function PdfSettingsPage() {
       const freshUrl = await getPdfLogoPreviewUrl(user.id, path);
       setLogoPreviewUrl(freshUrl ?? null);
     }
-  }
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -214,7 +209,7 @@ export default function PdfSettingsPage() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-2xl px-4 py-4 lg:px-10 lg:py-6">
-        {/* Header: back (left), centered title — no X button */}
+        {/* Header: back (left), centered title - no X button */}
         <header className="relative flex min-h-[44px] items-center justify-center pb-4">
           <Link
             href="/settings"
@@ -250,7 +245,7 @@ export default function PdfSettingsPage() {
           </p>
         )}
 
-        {/* Single card — app-consistent styling */}
+        {/* Single card - app-consistent styling */}
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
           {/* Row 1: Content Type */}
           <div className="flex min-h-[56px] items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
@@ -276,7 +271,7 @@ export default function PdfSettingsPage() {
             </div>
           </div>
 
-          {/* Row 2: Vertical position — Top / Bottom only (horizontal locked to center) */}
+          {/* Row 2: Vertical position - Top / Bottom only (horizontal locked to center) */}
           <div className="flex min-h-[56px] items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.689c0-.864.933-1.406 1.683-.977l7.108 4.061a1.125 1.125 0 001.138 0l7.108-4.061A1.125 1.125 0 0021 8.689v8.622c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 00-1.138 0l-7.108 4.061A1.125 1.125 0 013 17.311V8.69z" />
@@ -317,7 +312,12 @@ export default function PdfSettingsPage() {
           </div>
 
           {/* Row 4: Upload Logo / Enter Text */}
-          <div className={`flex min-h-[56px] items-center gap-3 px-4 py-3${contentType === "logo" ? " border-b border-gray-100 dark:border-slate-700" : ""}`}
+          <div
+            className={
+              "flex min-h-[56px] items-center gap-3 px-4 py-3" +
+              (contentType === "logo" ? " border-b border-gray-100 dark:border-slate-700" : "")
+            }
+          >
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
@@ -348,7 +348,7 @@ export default function PdfSettingsPage() {
                   disabled={uploadingLogo || loadingSettings}
                   className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                 >
-                  {uploadingLogo ? "Uploading…" : logoPath ? "Change logo" : "Choose file"}
+                  {uploadingLogo ? "Uploading..." : logoPath ? "Change logo" : "Choose file"}
                 </button>
                 {logoPreviewUrl && (
                   <img src={logoPreviewUrl} alt="Logo preview" className="h-8 w-8 rounded-lg object-cover" />
@@ -357,7 +357,7 @@ export default function PdfSettingsPage() {
             )}
           </div>
 
-          {/* Row 5: Logo Zoom — only visible when content type is logo */}
+          {/* Row 5: Logo Zoom - only visible when content type is logo */}
           {contentType === "logo" && (
             <div className="flex min-h-[56px] items-center gap-3 px-4 py-3">
               <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -397,7 +397,7 @@ export default function PdfSettingsPage() {
           )}
         </div>
 
-        {/* Save Changes — app primary button */}
+        {/* Save Changes - app primary button */}
         <div className="mt-8">
           <button
             type="button"
