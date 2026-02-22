@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@capacitor-community/file-opener": "^6.0.1",
+    "@capacitor-mlkit/barcode-scanning": "^6.2.0",
     "@capacitor/android": "^6.1.2",
     "@capacitor/app": "^6.0.2",
     "@capacitor/browser": "^6.0.6",
@@ -37,8 +38,7 @@
     "@capacitor/share": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.2",
     "@supabase/supabase-js": "^2.45.0",
-    "@zxing/browser": "^0.1.5",
-    "@zxing/library": "^0.21.3",
+    "barcode-detector": "^3.0.8",
     "idb-keyval": "^6.2.2",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^5.0.7",

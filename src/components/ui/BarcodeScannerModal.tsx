@@ -1,6 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
+import {
+  BarcodeScanner,
+  type Barcode,
+  LensFacing,
+  BarcodeFormat,
+} from "@capacitor-mlkit/barcode-scanning";
 
 export interface BarcodeScannerModalProps {
   open: boolean;
@@ -8,13 +15,19 @@ export interface BarcodeScannerModalProps {
   onResult: (text: string) => void;
 }
 
+const BODY_SCANNER_CLASS = "barcode-scanner-active";
+
 type ScanState = "starting" | "scanning" | "denied" | "no-camera" | "error";
+
+function getBarcodeText(barcode: Barcode): string {
+  return barcode.displayValue ?? barcode.rawValue ?? "";
+}
 
 export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const controlsRef = useRef<any>(null);
+  const detectorRef = useRef<BarcodeDetector | null>(null);
+  const rafRef = useRef<number>(0);
   const doneRef = useRef(false);
 
   const [scanState, setScanState] = useState<ScanState>("starting");
@@ -23,17 +36,33 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
-  const cleanup = useCallback(() => {
-    try { controlsRef.current?.stop?.(); } catch { /* ignore */ }
-    controlsRef.current = null;
+  const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform();
+
+  const stopWebScan = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+    detectorRef.current = null;
     const s = streamRef.current;
     streamRef.current = null;
     if (s) s.getTracks().forEach((t) => t.stop());
   }, []);
 
+  const stopNativeScan = useCallback(async () => {
+    try {
+      document.body.classList.remove(BODY_SCANNER_CLASS);
+      await BarcodeScanner.removeAllListeners();
+      await BarcodeScanner.stopScan();
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) {
-      cleanup();
+      if (isNative) stopNativeScan();
+      else stopWebScan();
       return;
     }
 
@@ -45,18 +74,104 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
 
     let cancelled = false;
 
-    const start = async () => {
-      cleanup();
+    if (isNative) {
+      const run = async () => {
+        try {
+          const { camera } = await BarcodeScanner.checkPermissions();
+          if (cancelled) return;
+          if (camera !== "granted" && camera !== "limited") {
+            const { camera: after } = await BarcodeScanner.requestPermissions();
+            if (cancelled) return;
+            if (after !== "granted" && after !== "limited") {
+              setScanState("denied");
+              setErrorMsg(
+                "Camera permission is required. Please allow camera access in app settings and try again."
+              );
+              return;
+            }
+          }
 
-      // Step 1: Get camera stream with fallback constraints
+          document.body.classList.add(BODY_SCANNER_CLASS);
+
+          const listener = await BarcodeScanner.addListener(
+            "barcodesScanned",
+            (event: { barcodes: Barcode[] }) => {
+              if (cancelled || doneRef.current) return;
+              const barcodes = event.barcodes ?? [];
+              const first = barcodes[0];
+              if (first) {
+                const text = getBarcodeText(first);
+                if (text) {
+                  doneRef.current = true;
+                  onResult(text);
+                  onClose();
+                }
+              }
+            }
+          );
+
+          await BarcodeScanner.startScan({
+            lensFacing: LensFacing.Back,
+            formats: [
+              BarcodeFormat.QrCode,
+              BarcodeFormat.Code128,
+              BarcodeFormat.Code39,
+              BarcodeFormat.Ean13,
+              BarcodeFormat.Ean8,
+              BarcodeFormat.UpcA,
+              BarcodeFormat.Itf,
+              BarcodeFormat.Codabar,
+            ],
+          });
+
+          if (cancelled) return;
+          setScanState("scanning");
+
+          try {
+            const { available } = await BarcodeScanner.isTorchAvailable();
+            if (!cancelled) setTorchAvailable(available);
+          } catch {
+            /* ignore */
+          }
+
+          return () => {
+            listener.remove();
+          };
+        } catch (err) {
+          if (!cancelled) {
+            await stopNativeScan();
+            setScanState("error");
+            setErrorMsg((err as Error)?.message ?? "Failed to start scanner.");
+          }
+        }
+      };
+
+      run();
+
+      return () => {
+        cancelled = true;
+        stopNativeScan();
+      };
+    }
+
+    // Web: Barcode Detection API + getUserMedia
+    const runWeb = async () => {
+      try {
+        await import("barcode-detector/polyfill");
+      } catch {
+        /* polyfill optional if browser supports BarcodeDetector */
+      }
+
+      if (cancelled) return;
+
       let stream: MediaStream | null = null;
-      const tryConstraints: MediaStreamConstraints[] = [
+      const constraints: MediaStreamConstraints[] = [
         { video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } },
         { video: { facingMode: "environment" } },
         { video: true },
       ];
 
-      for (const c of tryConstraints) {
+      for (const c of constraints) {
         if (cancelled) return;
         try {
           stream = await navigator.mediaDevices.getUserMedia(c);
@@ -67,115 +182,112 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
             if (!cancelled) {
               setScanState("denied");
               setErrorMsg(
-                "Camera permission is blocked. To fix:\n" +
-                "1. Tap the lock/info icon in the address bar\n" +
-                "2. Set Camera to \"Allow\"\n" +
-                "3. Reload the page and try again"
+                "Camera permission was denied. Allow camera for this site in browser settings and try again."
               );
             }
             return;
           }
-          if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+          if (name === "NotFoundError") {
             if (!cancelled) {
               setScanState("no-camera");
-              setErrorMsg("No camera found on this device.");
+              setErrorMsg("No camera found.");
             }
             return;
-          }
-          if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
-            continue;
-          }
-          if (name === "NotReadableError" || name === "TrackStartError") {
-            continue;
           }
         }
       }
 
-      if (cancelled) {
+      if (cancelled || !stream) {
         stream?.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      if (!stream) {
-        setScanState("error");
-        setErrorMsg("Could not access any camera on this device.");
+        if (!cancelled && !stream) {
+          setScanState("error");
+          setErrorMsg("Could not access camera.");
+        }
         return;
       }
 
       streamRef.current = stream;
-
-      // Step 2: Check torch
-      const vTrack = stream.getVideoTracks()[0];
-      if (vTrack) {
-        try {
-          const caps = vTrack.getCapabilities?.();
-          if (caps && "torch" in caps) setTorchAvailable(true);
-        } catch { /* ignore */ }
+      const video = videoRef.current;
+      if (!video || cancelled) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
       }
 
-      // Step 3: Start zxing decoder on our stream
+      video.srcObject = stream;
       try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const { DecodeHintType, BarcodeFormat } = await import("@zxing/library");
-        if (cancelled) return;
-
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-          BarcodeFormat.CODE_128,
-          BarcodeFormat.QR_CODE,
-          BarcodeFormat.CODE_39,
-          BarcodeFormat.EAN_13,
-          BarcodeFormat.EAN_8,
-          BarcodeFormat.UPC_A,
-          BarcodeFormat.ITF,
-          BarcodeFormat.CODABAR,
-        ]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-
-        const reader = new BrowserMultiFormatReader(hints);
-
-        const controls = await reader.decodeFromStream(
-          stream,
-          videoRef.current!,
-          (result, error) => {
-            if (cancelled || doneRef.current) return;
-            if (result) {
-              const text = result.getText();
-              if (text) {
-                doneRef.current = true;
-                onResult(text);
-                onClose();
-              }
-            }
-            if (error && error.name !== "NotFoundException") {
-              // Non-decode errors are logged but we keep scanning
-            }
-          }
-        );
-
-        if (cancelled) {
-          controls?.stop?.();
-          return;
-        }
-
-        controlsRef.current = controls;
-        setScanState("scanning");
-      } catch (err) {
+        await video.play();
+      } catch {
         if (!cancelled) {
           setScanState("error");
-          setErrorMsg((err as Error)?.message || "Failed to start barcode reader.");
+          setErrorMsg("Could not start video.");
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        try {
+          const caps = track.getCapabilities?.();
+          if (caps && "torch" in caps) setTorchAvailable(true);
+        } catch {
+          /* ignore */
         }
       }
+
+      setScanState("scanning");
+
+      try {
+        const detector = new (window as unknown as { BarcodeDetector: typeof BarcodeDetector }).BarcodeDetector({
+          formats: ["qr_code", "code_128", "code_39", "ean_13", "ean_8", "upc_a", "itf", "codabar"],
+        });
+        detectorRef.current = detector;
+      } catch {
+        if (!cancelled) {
+          setScanState("error");
+          setErrorMsg("Barcode detection not supported in this browser.");
+        }
+        return;
+      }
+
+      const detectLoop = async () => {
+        if (cancelled || doneRef.current || !detectorRef.current || !videoRef.current) return;
+        try {
+          const barcodes = await detectorRef.current.detect(videoRef.current);
+          if (barcodes?.length && barcodes[0].rawValue) {
+            doneRef.current = true;
+            onResult(barcodes[0].rawValue);
+            onClose();
+            return;
+          }
+        } catch {
+          /* no barcode in frame */
+        }
+        rafRef.current = requestAnimationFrame(detectLoop);
+      };
+
+      rafRef.current = requestAnimationFrame(detectLoop);
     };
 
-    start();
+    runWeb();
 
     return () => {
       cancelled = true;
-      cleanup();
+      stopWebScan();
     };
-  }, [open, retryKey, onResult, onClose, cleanup]);
+  }, [open, retryKey, isNative, onResult, onClose, stopNativeScan, stopWebScan]);
 
   const toggleTorch = useCallback(async () => {
+    if (isNative) {
+      try {
+        await BarcodeScanner.toggleTorch();
+        setTorchOn((v) => !v);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     const s = streamRef.current;
     if (!s) return;
     const track = s.getVideoTracks()[0];
@@ -185,23 +297,25 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         advanced: [{ torch: !torchOn } as MediaTrackConstraintSet],
       });
       setTorchOn((v) => !v);
-    } catch { /* ignore */ }
-  }, [torchOn]);
+    } catch {
+      /* ignore */
+    }
+  }, [torchOn, isNative]);
 
   const handleRetry = useCallback(() => {
-    cleanup();
+    if (isNative) stopNativeScan();
+    else stopWebScan();
     setScanState("starting");
     setErrorMsg("");
     setRetryKey((k) => k + 1);
-  }, [cleanup]);
+  }, [isNative, stopNativeScan, stopWebScan]);
 
   if (!open) return null;
 
   const showError = scanState === "denied" || scanState === "no-camera" || scanState === "error";
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-black">
-      {/* Top bar */}
+    <div className={`barcode-scanner-modal fixed inset-0 z-[200] flex flex-col ${isNative ? "bg-transparent" : "bg-black"}`}>
       <div className="flex shrink-0 items-center justify-between px-4 py-3">
         <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white" aria-label="Close">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -216,9 +330,8 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         )}
       </div>
 
-      {/* Camera feed + overlays */}
       <div className="relative min-h-0 flex-1">
-        <video ref={videoRef} className="h-full w-full object-cover" playsInline muted autoPlay />
+        {!isNative && <video ref={videoRef} className="h-full w-full object-cover" playsInline muted autoPlay />}
 
         {scanState === "scanning" && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -243,11 +356,9 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-black/95 px-6">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {scanState === "denied" ? (
-                  <><rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="1" y1="1" x2="23" y2="23" /><circle cx="12" cy="10" r="3" /></>
-                ) : (
-                  <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
-                )}
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+                <circle cx="12" cy="10" r="3" />
               </svg>
             </div>
             <div className="max-w-sm text-center">
@@ -257,12 +368,8 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
               <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/70">{errorMsg}</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <button type="button" onClick={handleRetry} className="rounded-xl bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white">
-                Try again
-              </button>
-              <button type="button" onClick={onClose} className="rounded-xl bg-white/15 px-5 py-2.5 text-sm font-semibold text-white">
-                Close
-              </button>
+              <button type="button" onClick={handleRetry} className="rounded-xl bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white">Try again</button>
+              <button type="button" onClick={onClose} className="rounded-xl bg-white/15 px-5 py-2.5 text-sm font-semibold text-white">Close</button>
             </div>
           </div>
         )}
@@ -274,7 +381,17 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         </div>
       )}
 
-      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style jsx global>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        body.barcode-scanner-active {
+          visibility: hidden;
+        }
+        body.barcode-scanner-active .barcode-scanner-modal {
+          visibility: visible;
+        }
+      `}</style>
     </div>
   );
 }
