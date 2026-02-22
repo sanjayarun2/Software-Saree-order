@@ -33,7 +33,7 @@ export default function SettingsPage() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-6xl px-4 py-4 lg:px-10 lg:py-6">
-        {/* Header: circular back (left), centered Settings, circular X (right) */}
+        {/* Header: back (left), centered Settings - no X button */}
         <header className="relative flex min-h-[44px] items-center justify-center pb-4">
           <Link
             href="/dashboard"
@@ -47,16 +47,6 @@ export default function SettingsPage() {
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             Settings
           </h1>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            aria-label="Close"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
         </header>
 
         {/* One white card, 24px radius, single row: PDF Settings */}
