@@ -68,6 +68,7 @@ export default function PdfSettingsPage() {
   const [contentType, setContentType] = useState<PdfContentType>(defaultContentType);
   const [placement, setPlacement] = useState<PdfPlacement>(defaultPlacement);
   const [textSize, setTextSize] = useState(defaultTextSize);
+  const [textBold, setTextBold] = useState(true);
   const [customText, setCustomText] = useState(defaultCustomText);
   const [logoZoom, setLogoZoom] = useState(1.0);
   const [logoPath, setLogoPath] = useState<string | null>(null);
@@ -103,6 +104,7 @@ export default function PdfSettingsPage() {
         setContentType(row.content_type);
         setPlacement(row.placement === "top" || row.placement === "bottom" ? row.placement : "bottom");
         setTextSize(row.text_size);
+        setTextBold(row.text_bold !== false);
         setCustomText(row.custom_text ?? "");
         setLogoZoom(row.logo_zoom ?? 1.0);
         setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 50));
@@ -208,9 +210,11 @@ export default function PdfSettingsPage() {
       debounceTimerRef.current = null;
     }
     if (pending) {
-      if (pending.logo != null) setLogoYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.logo!)));
-      if (pending.from != null) setFromYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.from!)));
-      if (pending.to != null) setToYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.to!)));
+      requestAnimationFrame(() => {
+        if (pending.logo != null) setLogoYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.logo!)));
+        if (pending.from != null) setFromYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.from!)));
+        if (pending.to != null) setToYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.to!)));
+      });
     }
   };
 
@@ -221,14 +225,17 @@ export default function PdfSettingsPage() {
     if (delta.to != null) pendingYRef.current.to = (pendingYRef.current.to ?? 0) + delta.to;
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
-      if (pendingYRef.current) {
-        if (pendingYRef.current.logo != null) setLogoYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pendingYRef.current!.logo!)));
-        if (pendingYRef.current.from != null) setFromYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pendingYRef.current!.from!)));
-        if (pendingYRef.current.to != null) setToYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pendingYRef.current!.to!)));
-        pendingYRef.current = null;
-      }
+      const pending = pendingYRef.current;
+      pendingYRef.current = null;
       debounceTimerRef.current = null;
-    }, 50);
+      if (pending) {
+        requestAnimationFrame(() => {
+          if (pending.logo != null) setLogoYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.logo!)));
+          if (pending.from != null) setFromYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.from!)));
+          if (pending.to != null) setToYmm((prev) => Math.max(0, Math.min(PDF_SECTION_H_MM, prev + pending.to!)));
+        });
+      }
+    }, 250);
   };
 
   const dragPointerIdRef = useRef<number | null>(null);
@@ -283,6 +290,7 @@ export default function PdfSettingsPage() {
       content_type: contentType,
       placement,
       text_size: textSize,
+      text_bold: textBold,
       custom_text: customText,
       logo_path: logoPath,
       logo_zoom: logoZoom,
@@ -371,57 +379,47 @@ export default function PdfSettingsPage() {
             </div>
           </div>
 
-          {/* Row 2: Y Position – 3 selector icons + minus / value / plus */}
-          <div className="flex min-h-[56px] flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
-            <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l-6-6m6 6l6-6" />
-            </svg>
-            <span className="text-base font-medium text-slate-900 dark:text-slate-100">Y Position</span>
-
-            <div className="ml-auto flex items-center gap-1.5">
-              {/* From icon (left-aligned paragraph) */}
+          {/* Row 2: Y Position — single horizontal row: [Label] [From|Logo|To icons] [ − ] [ Value ] [ + ] */}
+          <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-gray-100 px-4 py-2.5 dark:border-slate-700">
+            <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">Y Position</span>
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 title="From Address"
                 onClick={() => setSelectedTarget("from")}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${selectedTarget === "from" ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${selectedTarget === "from" ? "bg-primary-500 text-white shadow-sm dark:bg-primary-500" : "bg-gray-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}
                 aria-label="Select From address"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 10H3M21 6H3M17 14H3M21 18H3" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 10H3M21 6H3M17 14H3M21 18H3" /></svg>
               </button>
-              {/* Logo icon (center) */}
               <button
                 type="button"
                 title="Logo / Center"
                 onClick={() => setSelectedTarget("logo")}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${selectedTarget === "logo" ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${selectedTarget === "logo" ? "bg-primary-500 text-white shadow-sm dark:bg-primary-500" : "bg-gray-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}
                 aria-label="Select Logo"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M7 21v-1a5 5 0 0110 0v1" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M7 21v-1a5 5 0 0110 0v1" /></svg>
               </button>
-              {/* To icon (right-aligned paragraph) */}
               <button
                 type="button"
                 title="To Address"
                 onClick={() => setSelectedTarget("to")}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${selectedTarget === "to" ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${selectedTarget === "to" ? "bg-primary-500 text-white shadow-sm dark:bg-primary-500" : "bg-gray-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}
                 aria-label="Select To address"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10H7M21 6H3M21 14H7M21 18H3" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10H7M21 6H3M21 14H7M21 18H3" /></svg>
               </button>
-
-              <div className="mx-1 h-6 w-px bg-gray-200 dark:bg-slate-600" />
-
-              {/* Minus */}
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 onClick={() => stepY(-1)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg font-bold text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-500 text-lg font-bold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
                 aria-label="Decrease Y"
               >
                 −
               </button>
-              {/* Numeric value */}
               <input
                 type="number"
                 min={0}
@@ -432,14 +430,13 @@ export default function PdfSettingsPage() {
                   const n = parseFloat(e.target.value);
                   if (!Number.isNaN(n)) setSelectedValue(Math.max(0, Math.min(PDF_SECTION_H_MM, n)));
                 }}
-                className="w-16 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm font-medium tabular-nums dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                className="w-14 rounded-lg border border-primary-200 bg-white px-2 py-1.5 text-center text-sm font-medium tabular-nums text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 aria-label={`${selectedTarget} Y mm`}
               />
-              {/* Plus */}
               <button
                 type="button"
                 onClick={() => stepY(1)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg font-bold text-slate-700 hover:bg-gray-100 active:bg-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-500 text-lg font-bold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
                 aria-label="Increase Y"
               >
                 +
@@ -448,7 +445,7 @@ export default function PdfSettingsPage() {
             </div>
           </div>
 
-          {/* Row 3: Text Size */}
+          {/* Row 3: Text Size + Bold / Not bold (reflects in PDF and live preview) */}
           <div className="flex min-h-[56px] items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
@@ -465,6 +462,15 @@ export default function PdfSettingsPage() {
                 aria-label="Text size"
               />
               <span className="w-8 text-right text-sm font-medium text-slate-700 dark:text-slate-300">{textSize}</span>
+              <button
+                type="button"
+                title={textBold ? "Bold (on)" : "Not bold (off)"}
+                onClick={() => setTextBold((b) => !b)}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${textBold ? "border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400" : "border-gray-200 bg-gray-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400"}`}
+                aria-label={textBold ? "Bold" : "Not bold"}
+              >
+                <span className="text-sm font-bold">B</span>
+              </button>
             </div>
           </div>
 
@@ -554,7 +560,7 @@ export default function PdfSettingsPage() {
           )}
         </div>
 
-        {/* Save Changes - app primary button */}
+        {/* Save Changes - app primary button; live preview below reflects these settings */}
         <div className="mt-8">
           <button
             type="button"
@@ -564,67 +570,90 @@ export default function PdfSettingsPage() {
           >
             {saved ? "Saved" : "Save Changes"}
           </button>
+          <p className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
+            Live preview below reflects these settings and PDF generation.
+          </p>
         </div>
 
-        {/* ── Full-width Live Preview ── */}
-        <div className="mt-6">
+        {/* ── WYSIWYG Print-Mirror Preview (exact 25% scale of A4 section) ── */}
+        <div className="mt-6 w-full px-0">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
-            <span className="text-xs text-slate-400">25% of A4 &middot; drag vertically</span>
+            <span className="text-xs text-slate-400">25% scale · drag vertically</span>
           </div>
           <div
             ref={previewContainerRef}
-            className="relative mx-auto w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800"
+            className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800"
             style={{
               aspectRatio: `${A4_W_MM} / ${PDF_SECTION_H_MM}`,
-              maxWidth: "100%",
               touchAction: "none",
             }}
             onPointerMove={handlePreviewPointerMove}
             onPointerUp={handlePreviewPointerUp}
             onPointerLeave={handlePreviewPointerUp}
           >
-            {/* From Address (left) */}
+            {/* From Address (left): text size + bold reflect PDF and preview */}
             <div
               role="button"
               tabIndex={0}
               data-target="from"
-              className={`absolute left-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 transition-shadow ${selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""}`}
+              className={`absolute left-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 text-left transition-shadow ${selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""}`}
               style={{ top: `${(fromYmm / PDF_SECTION_H_MM) * 100}%` }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
             >
-              <p className="text-[7px] font-bold leading-tight text-slate-800 dark:text-slate-200 sm:text-[9px]">FROM:</p>
-              <p className="text-[6px] leading-snug text-slate-600 dark:text-slate-400 sm:text-[8px]">
-                Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043
+              <p className="font-bold leading-tight text-slate-800 dark:text-slate-200" style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.45))}px` }}>FROM:</p>
+              <p className={`leading-snug text-slate-600 dark:text-slate-400 ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${Math.max(5, Math.round(textSize * 0.38))}px` }}>
+                Global Tech Solutions, Silicon Valley.
               </p>
             </div>
 
-            {/* Logo / Center */}
+            {/* Center: Logo (user-uploaded or reference + zoom) or Custom text (size + bold) */}
             <div
               role="button"
               tabIndex={0}
               data-target="logo"
-              className={`absolute left-1/2 cursor-grab select-none rounded-full transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
+              className={`absolute left-1/2 cursor-grab select-none transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
               style={{ top: `${(logoYmm / PDF_SECTION_H_MM) * 100}%`, transform: "translate(-50%, -50%)" }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white shadow sm:h-10 sm:w-10">
-                <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm0 2.18l7 3.89v5.04c0 4.5-3.03 8.72-7 9.82-3.97-1.1-7-5.32-7-9.82V8.07l7-3.89z" /><path d="M12 7l-4.5 2.5v3.5c0 2.76 1.86 5.37 4.5 6 2.64-.63 4.5-3.24 4.5-6V9.5L12 7z" opacity=".6" /></svg>
-              </div>
+              {contentType === "text" ? (
+                <p
+                  className={`max-w-[80px] text-center leading-tight text-slate-800 dark:text-slate-200 ${textBold ? "font-bold" : "font-normal"}`}
+                  style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.4))}px` }}
+                >
+                  {customText.trim() || "Thank you…"}
+                </p>
+              ) : (
+                <img
+                  key={logoPath ?? "reference"}
+                  src={logoPreviewUrl ?? "/reference-logo.png"}
+                  alt=""
+                  className="block rounded-full object-contain"
+                  style={{
+                    width: `${24 * logoZoom}px`,
+                    height: `${24 * logoZoom}px`,
+                    minWidth: 20,
+                    minHeight: 20,
+                    maxWidth: 56,
+                    maxHeight: 56,
+                  }}
+                  draggable={false}
+                />
+              )}
             </div>
 
-            {/* To Address (right) */}
+            {/* To Address (right side, left-aligned): text size + bold reflect PDF and preview */}
             <div
               role="button"
               tabIndex={0}
               data-target="to"
-              className={`absolute right-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 text-right transition-shadow ${selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""}`}
+              className={`absolute right-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 text-left transition-shadow ${selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""}`}
               style={{ top: `${(toYmm / PDF_SECTION_H_MM) * 100}%` }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
             >
-              <p className="text-[7px] font-bold leading-tight text-slate-800 dark:text-slate-200 sm:text-[9px]">TO:</p>
-              <p className="text-[6px] leading-snug text-slate-600 dark:text-slate-400 sm:text-[8px]">
-                Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001
+              <p className="font-bold leading-tight text-slate-800 dark:text-slate-200" style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.45))}px` }}>TO:</p>
+              <p className={`leading-snug text-slate-600 dark:text-slate-400 ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${Math.max(5, Math.round(textSize * 0.38))}px` }}>
+                Anthony Raj, Chennai.
               </p>
             </div>
           </div>

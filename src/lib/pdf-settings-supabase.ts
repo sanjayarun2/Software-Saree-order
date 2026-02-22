@@ -15,6 +15,7 @@ export interface PdfSettingsRow {
   content_type: PdfContentType;
   placement: PdfPlacement;
   text_size: number;
+  text_bold: boolean;
   custom_text: string;
   logo_path: string | null;
   logo_zoom: number;
@@ -28,6 +29,7 @@ const defaultSettings: Omit<PdfSettingsRow, "user_id" | "updated_at"> = {
   content_type: "logo",
   placement: "bottom",
   text_size: 15,
+  text_bold: true,
   custom_text: "",
   logo_path: null,
   logo_zoom: 1.0,
@@ -57,6 +59,7 @@ export async function upsertPdfSettings(
     content_type?: PdfContentType;
     placement?: PdfPlacement;
     text_size?: number;
+    text_bold?: boolean;
     custom_text?: string;
     logo_path?: string | null;
     logo_zoom?: number;

@@ -10,6 +10,7 @@ export type PdfRenderOptions = {
     content_type: "text" | "logo";
     placement: "top" | "bottom";
     text_size: number;
+    text_bold?: boolean;
     custom_text: string;
     logo_zoom: number;
     /** Vertical positions in mm from section top (0–74.25). When set, used by PDF engine. */
@@ -577,7 +578,8 @@ function drawOrderLabel(
   const textSize = options.settings?.text_size ?? 15;
 
   if (contentType === "text" && customText && doc.splitTextToSize) {
-    doc.setFont(FONT_BODY, "normal");
+    const textBold = options.settings?.text_bold !== false;
+    doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
     doc.setFontSize(textSize);
     const maxCenterW = COL_W - 8;
     const lines = doc.splitTextToSize(customText, maxCenterW);
