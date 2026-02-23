@@ -482,7 +482,7 @@ export default function PdfSettingsPage() {
             >
               <span className={`text-sm font-bold ${textBold ? "text-primary-600 dark:text-primary-400" : "text-slate-500 dark:text-slate-400"}`}>B</span>
             </button>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
+            <div className="ml-auto mr-1 flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 onClick={() => setTextSize((s) => Math.max(10, Math.min(24, s + 1)))}
@@ -675,7 +675,7 @@ export default function PdfSettingsPage() {
               role="button"
               tabIndex={0}
               data-target="logo"
-              className={`absolute left-1/2 flex cursor-grab select-none items-center justify-center transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
+              className={`absolute left-1/2 flex cursor-grab select-none items-center justify-center overflow-hidden transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
               style={{
                 top: `${(logoYmm / PDF_SECTION_H_MM) * 100}%`,
                 transform: "translate(-50%, -50%)",
