@@ -368,8 +368,8 @@ export default function DashboardPage() {
         </p>
       )}
 
-      {/* KPI Cards: full width to match highlight, vertical stack, no animation */}
-      <div className="-mx-4 flex w-full flex-col gap-4 px-2 sm:mx-0 sm:max-w-full sm:px-0 lg:-mx-10 lg:px-10">
+      {/* KPI Cards: full width of mobile with very little horizontal spacing, vertical stack, no animation */}
+      <div className="-mx-4 flex w-full flex-col gap-4 px-1.5 sm:mx-0 sm:max-w-full sm:px-0 lg:-mx-10 lg:px-10">
         <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
