@@ -369,14 +369,14 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards: full width, vertical stack, no animation */}
-      <div className="flex w-full flex-col gap-5">
-        <BentoCard className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+      <div className="flex w-full max-w-full flex-col gap-5">
+        <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-primary-500/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Total Orders
             </p>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-600 shadow-none dark:bg-primary-900/50 dark:text-primary-400">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-600 shadow-none [box-shadow:none] dark:bg-primary-900/50 dark:text-primary-400">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
@@ -396,13 +396,13 @@ export default function DashboardPage() {
           )}
         </BentoCard>
 
-        <BentoCard className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+        <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-emerald-500/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Dispatched
             </p>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shadow-none dark:bg-emerald-900/40 dark:text-emerald-400">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shadow-none [box-shadow:none] dark:bg-emerald-900/40 dark:text-emerald-400">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -422,13 +422,13 @@ export default function DashboardPage() {
           )}
         </BentoCard>
 
-        <BentoCard className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+        <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="absolute right-0 top-0 h-24 w-24 translate-x-4 -translate-y-4 rounded-full bg-amber-500/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Pending
             </p>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 shadow-none dark:bg-amber-900/40 dark:text-amber-400">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 shadow-none [box-shadow:none] dark:bg-amber-900/40 dark:text-amber-400">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>

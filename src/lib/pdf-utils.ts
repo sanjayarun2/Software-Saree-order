@@ -552,20 +552,25 @@ function drawOrderLabel(
   const sectionH = SECTION_H;
   const toY = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
   const fromY = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
+  const labelSize = options.settings?.text_size ?? SIZE_LABEL;
+  const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
+  const textBold = options.settings?.text_bold !== false;
+  const lineHeightMm = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.5;
+  const labelToAddressGap = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.4;
   const labelYTo = sectionTop + toY;
-  const addressStartYTo = sectionTop + toY + 6;
+  const addressStartYTo = sectionTop + toY + labelToAddressGap;
   const labelYFrom = sectionTop + fromY;
-  const addressStartYFrom = sectionTop + fromY + 6;
+  const addressStartYFrom = sectionTop + fromY + labelToAddressGap;
 
-  // FROM — left column
-  doc.setFont(FONT_HEADING, "bold");
-  doc.setFontSize(SIZE_LABEL);
+  // FROM — left column (uses settings: text_size, text_bold)
+  doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
+  doc.setFontSize(labelSize);
   doc.text("FROM:", leftX, labelYFrom);
-  doc.setFont(FONT_BODY, "bold");
-  doc.setFontSize(SIZE_ADDRESS);
+  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  doc.setFontSize(addressSize);
   const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
   fromLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
-    doc.text(line, leftX, addressStartYFrom + i * LINE_HEIGHT_ADDRESS);
+    doc.text(line, leftX, addressStartYFrom + i * lineHeightMm);
   });
 
   // Centre: vertical position from settings (logo_y_mm) or placement fallback
@@ -633,14 +638,14 @@ function drawOrderLabel(
   }
 
   // TO — right column, higher so it’s the first focus (delivery address)
-  doc.setFont(FONT_HEADING, "bold");
-  doc.setFontSize(SIZE_LABEL);
+  doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
+  doc.setFontSize(labelSize);
   doc.text("TO:", rightX, labelYTo);
-  doc.setFont(FONT_BODY, "bold");
-  doc.setFontSize(SIZE_ADDRESS);
+  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  doc.setFontSize(addressSize);
   const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
   toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
-    doc.text(line, rightX, addressStartYTo + i * LINE_HEIGHT_ADDRESS);
+    doc.text(line, rightX, addressStartYTo + i * lineHeightMm);
   });
 }
 

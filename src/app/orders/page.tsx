@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
@@ -31,7 +31,17 @@ export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const { query, setQuery } = useSearch();
   const router = useRouter();
-  const [status, setStatus] = useState<OrderStatus>("PENDING");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [status, setStatus] = useState<OrderStatus>(() =>
+    tabParam === "dispatched" ? "DESPATCHED" : "PENDING"
+  );
+
+  // Sync active tab from URL (e.g. when returning from edit-order or back button)
+  useEffect(() => {
+    if (tabParam === "dispatched") setStatus("DESPATCHED");
+    else if (tabParam === "pending") setStatus("PENDING");
+  }, [tabParam]);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [allOrders, setAllOrders] = useState(true);

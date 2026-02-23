@@ -117,7 +117,7 @@ function EditOrderContent() {
       // Clear cached draft on successful save
       recipientField.clear();
       senderField.clear();
-      router.replace("/orders/");
+      router.replace(orderStatus === "DESPATCHED" ? "/orders/?tab=dispatched" : "/orders/?tab=pending");
     } catch (e) {
       setError((e as Error).message || "Update failed");
     } finally {
@@ -149,7 +149,7 @@ function EditOrderContent() {
       <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-6">
         <header className="relative flex min-h-[44px] items-center justify-center pb-4">
           <Link
-            href="/orders/"
+            href={orderStatus === "DESPATCHED" ? "/orders/?tab=dispatched" : "/orders/?tab=pending"}
             className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             aria-label="Back to Orders"
           >

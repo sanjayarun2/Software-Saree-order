@@ -600,16 +600,23 @@ export default function PdfSettingsPage() {
           <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
           <div
             ref={previewContainerRef}
-            className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800"
+            className="relative w-full overflow-hidden bg-white shadow-sm dark:bg-slate-800"
             style={{
               aspectRatio: `${A4_W_MM} / ${PDF_SECTION_H_MM}`,
               touchAction: "none",
+              borderColor: "rgb(200, 200, 200)",
+              borderWidth: "0.3mm",
+              borderLeftStyle: "solid",
+              borderTopStyle: "solid",
+              borderRightStyle: "solid",
+              borderBottomStyle: "dashed",
+              borderStyle: "solid",
             }}
             onPointerMove={handlePreviewPointerMove}
             onPointerUp={handlePreviewPointerUp}
             onPointerLeave={handlePreviewPointerUp}
           >
-            {/* From Address (left): text size + bold reflect PDF and preview */}
+            {/* From Address (left): uses settings textSize + textBold so preview matches PDF */}
             <div
               role="button"
               tabIndex={0}
@@ -618,48 +625,50 @@ export default function PdfSettingsPage() {
               style={{ top: `${(fromYmm / PDF_SECTION_H_MM) * 100}%` }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
             >
-              <p className="font-bold leading-tight text-slate-800 dark:text-slate-200" style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.45))}px` }}>FROM:</p>
-              <p className={`leading-snug text-slate-600 dark:text-slate-400 ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${Math.max(5, Math.round(textSize * 0.38))}px` }}>
+              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt` }}>FROM:</p>
+              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt`, lineHeight: 1.42 }}>
                 Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043.<br />Ph: +1 555 123 4567
               </p>
             </div>
 
-            {/* Center: Logo (user-uploaded or reference + zoom) or Custom text (size + bold) */}
+            {/* Center: Logo (same 40x20mm box + zoom as PDF) or Custom text (text_size pt + text_bold) */}
             <div
               role="button"
               tabIndex={0}
               data-target="logo"
-              className={`absolute left-1/2 cursor-grab select-none transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
-              style={{ top: `${(logoYmm / PDF_SECTION_H_MM) * 100}%`, transform: "translate(-50%, -50%)" }}
+              className={`absolute left-1/2 flex cursor-grab select-none items-center justify-center transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
+              style={{
+                top: `${(logoYmm / PDF_SECTION_H_MM) * 100}%`,
+                transform: "translate(-50%, -50%)",
+                width: `${(40 / A4_W_MM) * 100}%`,
+                height: `${(20 / PDF_SECTION_H_MM) * 100}%`,
+              }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
             >
               {contentType === "text" ? (
                 <p
-                  className={`max-w-[80px] text-center leading-tight text-slate-800 dark:text-slate-200 ${textBold ? "font-bold" : "font-normal"}`}
-                  style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.4))}px` }}
+                  className={`max-w-[85%] text-center leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                  style={{ fontSize: `${textSize}pt` }}
                 >
                   {customText.trim() || "Thank you…"}
                 </p>
               ) : (
-                <img
-                  key={logoPath ?? "reference"}
-                  src={logoPreviewUrl ?? "/reference-logo.png"}
-                  alt=""
-                  className="block rounded-full object-contain"
-                  style={{
-                    width: `${24 * logoZoom}px`,
-                    height: `${24 * logoZoom}px`,
-                    minWidth: 20,
-                    minHeight: 20,
-                    maxWidth: 56,
-                    maxHeight: 56,
-                  }}
-                  draggable={false}
-                />
+                <div
+                  className="h-full w-full overflow-hidden"
+                  style={{ transform: `scale(${logoZoom})` }}
+                >
+                  <img
+                    key={logoPath ?? "reference"}
+                    src={logoPreviewUrl ?? "/reference-logo.png"}
+                    alt=""
+                    className="h-full w-full object-contain object-center"
+                    draggable={false}
+                  />
+                </div>
               )}
             </div>
 
-            {/* To Address (right side, left-aligned): text size + bold reflect PDF and preview */}
+            {/* To Address (right side): uses settings textSize + textBold so preview matches PDF */}
             <div
               role="button"
               tabIndex={0}
@@ -668,8 +677,8 @@ export default function PdfSettingsPage() {
               style={{ top: `${(toYmm / PDF_SECTION_H_MM) * 100}%` }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
             >
-              <p className="font-bold leading-tight text-slate-800 dark:text-slate-200" style={{ fontSize: `${Math.max(6, Math.round(textSize * 0.45))}px` }}>TO:</p>
-              <p className={`leading-snug text-slate-600 dark:text-slate-400 ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${Math.max(5, Math.round(textSize * 0.38))}px` }}>
+              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt` }}>TO:</p>
+              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt`, lineHeight: 1.42 }}>
                 Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001.<br />Ph: +91 98765 43210
               </p>
             </div>
