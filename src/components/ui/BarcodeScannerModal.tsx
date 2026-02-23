@@ -51,6 +51,7 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
 
   const stopNativeScan = useCallback(async () => {
     try {
+      document.documentElement.classList.remove(BODY_SCANNER_CLASS);
       document.body.classList.remove(BODY_SCANNER_CLASS);
       await BarcodeScanner.removeAllListeners();
       await BarcodeScanner.stopScan();
@@ -91,6 +92,7 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
             }
           }
 
+          document.documentElement.classList.add(BODY_SCANNER_CLASS);
           document.body.classList.add(BODY_SCANNER_CLASS);
 
           const listener = await BarcodeScanner.addListener(
@@ -385,11 +387,15 @@ export function BarcodeScannerModal({ open, onClose, onResult }: BarcodeScannerM
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        /* Native: hide rest of app, show only scanner modal; transparent so camera (behind WebView) shows through */
+        html.barcode-scanner-active,
         body.barcode-scanner-active {
           visibility: hidden;
+          background: transparent !important;
         }
         body.barcode-scanner-active .barcode-scanner-modal {
           visibility: visible;
+          background: transparent !important;
         }
       `}</style>
     </div>
