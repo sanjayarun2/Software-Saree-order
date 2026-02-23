@@ -43,6 +43,13 @@ function clampNum(v: number | null | undefined, min: number, max: number, def: n
 }
 
 const A4_W_MM = 210;
+const PDF_MARGIN_MM = 10;
+const PDF_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
+const PDF_ADDRESS_PADDING_MM = 3;
+const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - 4 - 2 * PDF_ADDRESS_PADDING_MM;
+const PDF_FROM_X_MM = PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
+const PDF_TO_X_MM = PDF_MARGIN_MM + (PDF_COL_W_MM + PDF_MARGIN_MM) * 2 + PDF_ADDRESS_PADDING_MM;
+const MM_PER_PT = 25.4 / 72;
 const defaultContentType: PdfContentType = "logo";
 const defaultPlacement: PdfPlacement = "bottom";
 const defaultTextSize = 15;
@@ -84,6 +91,7 @@ export default function PdfSettingsPage() {
   const [selectedTarget, setSelectedTarget] = useState<YTarget>("logo");
   const useNativePicker = useNativeLogoPicker();
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewPxPerMm, setPreviewPxPerMm] = useState(1);
   const dragTargetRef = useRef<YTarget | null>(null);
   const dragStartYRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,6 +139,17 @@ export default function PdfSettingsPage() {
     });
     return () => { cancelled = true; };
   }, [user, logoPath]);
+
+  useEffect(() => {
+    const updatePreviewScale = () => {
+      const rect = previewContainerRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      setPreviewPxPerMm(rect.width / A4_W_MM);
+    };
+    updatePreviewScale();
+    window.addEventListener("resize", updatePreviewScale);
+    return () => window.removeEventListener("resize", updatePreviewScale);
+  }, []);
 
   const validTypes = ["image/png", "image/jpeg", "image/webp"];
 
@@ -279,6 +298,10 @@ export default function PdfSettingsPage() {
 
   const selectedValue = selectedTarget === "logo" ? logoYmm : selectedTarget === "from" ? fromYmm : toYmm;
   const setSelectedValue = selectedTarget === "logo" ? setLogoYmm : selectedTarget === "from" ? setFromYmm : setToYmm;
+  const scaledFontPx = textSize * MM_PER_PT * previewPxPerMm;
+  const scaledAddressLineHeightPx = textSize * 0.5 * previewPxPerMm;
+  const scaledAddressGapPx = textSize * 0.4 * previewPxPerMm;
+  const scaledCenterLineHeightPx = textSize * 0.4 * previewPxPerMm;
   const stepY = (dir: 1 | -1) => {
     setSelectedValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, +(v + dir).toFixed(1))));
   };
@@ -353,10 +376,10 @@ export default function PdfSettingsPage() {
           </p>
         )}
 
-        {/* Single card - app-consistent styling */}
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
+        {/* Single card - app-consistent styling (matches dashboard cards) */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           {/* Row 1: Content Type */}
-          <div className="flex min-h-[56px] items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-slate-700">
+          <div className="flex min-h-[56px] items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700/80">
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
@@ -380,7 +403,7 @@ export default function PdfSettingsPage() {
           </div>
 
           {/* Row 2: Y Position — [Label] [From|Logo|To] [ Up ] [ Value ] [ Down ]; Up = move up, Down = move down */}
-          <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-gray-100 px-4 py-2.5 dark:border-slate-700">
+          <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-slate-100 px-4 py-2.5 dark:border-slate-700/80">
             <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">Y Position</span>
             <div className="flex shrink-0 items-center gap-1">
               <button
@@ -448,7 +471,7 @@ export default function PdfSettingsPage() {
           </div>
 
           {/* Row 3: Text size — label + Bold (next to label), then [Up] [value] [Down] pt — same layout as Y Position */}
-          <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-gray-100 px-4 py-2.5 dark:border-slate-700">
+          <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-slate-100 px-4 py-2.5 dark:border-slate-700/80">
             <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">Text size</span>
             <button
               type="button"
@@ -498,7 +521,7 @@ export default function PdfSettingsPage() {
           <div
             className={
               "flex min-h-[56px] items-center gap-3 px-4 py-3" +
-              (contentType === "logo" ? " border-b border-gray-100 dark:border-slate-700" : "")
+              (contentType === "logo" ? " border-b border-slate-100 dark:border-slate-700/80" : "")
             }
           >
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -600,7 +623,7 @@ export default function PdfSettingsPage() {
           <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
           <div
             ref={previewContainerRef}
-            className="relative w-full overflow-hidden bg-white shadow-sm dark:bg-slate-800"
+            className="relative w-full overflow-hidden bg-white shadow-sm dark:bg-slate-800/50"
             style={{
               aspectRatio: `${A4_W_MM} / ${PDF_SECTION_H_MM}`,
               touchAction: "none",
@@ -621,12 +644,28 @@ export default function PdfSettingsPage() {
               role="button"
               tabIndex={0}
               data-target="from"
-              className={`absolute left-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 text-left transition-shadow ${selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""}`}
-              style={{ top: `${(fromYmm / PDF_SECTION_H_MM) * 100}%` }}
+              className={`absolute cursor-grab select-none text-left transition-shadow ${selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""}`}
+              style={{
+                top: `${(fromYmm / PDF_SECTION_H_MM) * 100}%`,
+                left: `${(PDF_FROM_X_MM / A4_W_MM) * 100}%`,
+                width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
+              }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
             >
-              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt` }}>FROM:</p>
-              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt`, lineHeight: 1.42 }}>
+              <p
+                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledAddressLineHeightPx}px` }}
+              >
+                FROM:
+              </p>
+              <p
+                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                style={{
+                  fontSize: `${scaledFontPx}px`,
+                  lineHeight: `${scaledAddressLineHeightPx}px`,
+                  marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
+                }}
+              >
                 Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043.<br />Ph: +1 555 123 4567
               </p>
             </div>
@@ -647,8 +686,8 @@ export default function PdfSettingsPage() {
             >
               {contentType === "text" ? (
                 <p
-                  className={`max-w-[85%] text-center leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
-                  style={{ fontSize: `${textSize}pt` }}
+                  className={`max-w-[85%] text-center text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                  style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledCenterLineHeightPx}px` }}
                 >
                   {customText.trim() || "Thank you…"}
                 </p>
@@ -673,12 +712,28 @@ export default function PdfSettingsPage() {
               role="button"
               tabIndex={0}
               data-target="to"
-              className={`absolute right-[4%] w-[30%] cursor-grab select-none rounded px-1 py-0.5 text-left transition-shadow ${selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""}`}
-              style={{ top: `${(toYmm / PDF_SECTION_H_MM) * 100}%` }}
+              className={`absolute cursor-grab select-none text-left transition-shadow ${selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""}`}
+              style={{
+                top: `${(toYmm / PDF_SECTION_H_MM) * 100}%`,
+                left: `${(PDF_TO_X_MM / A4_W_MM) * 100}%`,
+                width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
+              }}
               onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
             >
-              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt` }}>TO:</p>
-              <p className={`leading-tight text-[#000] ${textBold ? "font-bold" : "font-normal"}`} style={{ fontSize: `${textSize}pt`, lineHeight: 1.42 }}>
+              <p
+                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledAddressLineHeightPx}px` }}
+              >
+                TO:
+              </p>
+              <p
+                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                style={{
+                  fontSize: `${scaledFontPx}px`,
+                  lineHeight: `${scaledAddressLineHeightPx}px`,
+                  marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
+                }}
+              >
                 Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001.<br />Ph: +91 98765 43210
               </p>
             </div>
