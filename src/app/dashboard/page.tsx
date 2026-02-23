@@ -292,231 +292,31 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
+  // TEMP: extremely simplified layout while we debug the JSX parse issue.
+  // We'll reintroduce the full header + KPI layout after we isolate the problematic snippet.
   return (
-    <div className="flex h-screen min-h-screen flex-col overflow-hidden">
-      {/* Dark header: title, date dropdown, FAB - title size/place matches other page headings */}
-      <div className="relative shrink-0 bg-slate-900 px-4 pb-8 pt-4 dark:bg-slate-950 lg:px-10 lg:pt-6">
-        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
-          <div className="flex-1 space-y-2">
-            <h1 className="text-xl font-bold leading-tight text-white lg:text-2xl">
-              Dashboard
-            </h1>
-            <div className="relative" ref={dateDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setDateDropdownOpen((o) => !o)}
-                className="group flex w-full items-center justify-between gap-3 rounded-xl border border-slate-700/80 bg-slate-800/50 px-4 py-3 text-left transition hover:border-slate-600 hover:bg-slate-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/50 md:min-w-[200px]"
-                aria-expanded={dateDropdownOpen}
-                aria-haspopup="listbox"
-                aria-label="Select date range"
-              >
-                <DateWidgetDisplay period={period} from={range.from} to={range.to} />
-                <span
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition group-hover:bg-slate-700/50 group-hover:text-white ${
-                    dateDropdownOpen ? "rotate-180 bg-slate-700/50" : ""
-                  }`}
-                  aria-hidden
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 6l4 4 4-4" />
-                  </svg>
-                </span>
-              </button>
-              {dateDropdownOpen && (
-                <div
-                  className="absolute left-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-600 dark:bg-slate-800"
-                  role="listbox"
-                >
-                  <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Date range
-                    </p>
-                  </div>
-                  <div className="max-h-[280px] overflow-y-auto py-1">
-                    {PERIOD_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        role="option"
-                        aria-selected={period === opt.value}
-                        onClick={() => {
-                          setPeriod(opt.value);
-                          if (opt.value === "custom" && !customFrom && !customTo) {
-                            const today = new Date().toISOString().slice(0, 10);
-                            setCustomFrom(today);
-                            setCustomTo(today);
-                          }
-                          setDateDropdownOpen(false);
-                        }}
-                        className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition ${
-                          period === opt.value
-                            ? "bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
-                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700/50"
-                        }`}
-                      >
-                        <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs ${
-                            period === opt.value
-                              ? "bg-primary-100 text-primary-600 dark:bg-primary-800/50 dark:text-primary-400"
-                              : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                          }`}
-                          aria-hidden
-                        >
-                          {opt.value === "today" && "📅"}
-                          {opt.value === "yesterday" && "◀"}
-                          {opt.value === "this_week" && "📆"}
-                          {opt.value === "last_week" && "⏪"}
-                          {opt.value === "month" && "🗓"}
-                          {opt.value === "year" && "📅"}
-                          {opt.value === "custom" && "✎"}
-                        </span>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  {period === "custom" && (
-                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-800/80">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Select range
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="date"
-                          value={customFrom}
-                          onChange={(e) => setCustomFrom(e.target.value)}
-                          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
-                        />
-                        <span className="text-slate-400">–</span>
-                        <input
-                          type="date"
-                          value={customTo}
-                          onChange={(e) => setCustomTo(e.target.value)}
-                          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+    <div className="flex min-h-screen flex-col overflow-hidden bg-slate-50">
+      <div className="p-4">
+        <h1 className="text-xl font-bold">Dashboard</h1>
+        {error && (
+          <p className="mt-2 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">
+        <div ref={kpiCardsWrapperRef} className="flex flex-col gap-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            Total Orders: {stats.total.toLocaleString()}
           </div>
-          <Link
-            href="/add-order/"
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white shadow-lg transition hover:bg-primary-600 active:bg-primary-700"
-            aria-label="Add Order"
-          >
-            <span className="text-2xl leading-none">+</span>
-          </Link>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            Dispatched: {stats.dispatched.toLocaleString()}
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            Pending: {stats.pending.toLocaleString()}
+          </div>
         </div>
       </div>
-
-      {/* Content: cards with clear spacing below header - scrolls inside viewport */}
-      <div className="mx-auto min-h-0 flex-1 overflow-y-auto max-w-6xl space-y-6 bg-slate-50 px-4 pb-8 pt-6 dark:bg-slate-900/50 lg:px-10 lg:pt-8">
-      {error && (
-        <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-          {error}
-        </p>
-      )}
-
-      {/* KPI Cards: full width on mobile via negative-margin breakout so width matches viewport; equal px for symmetric spacing; normal on sm+ */}
-      <div className="-mx-4 sm:mx-0 lg:mx-[-2.5rem]">
-        <div
-          ref={kpiCardsWrapperRef}
-          className="flex flex-col gap-4 px-2 sm:px-0 lg:px-10"
-        >
-        <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
-          <div className="relative flex items-start justify-between">
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Total Orders
-            </p>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-600 shadow-none [box-shadow:none] dark:bg-primary-900/50 dark:text-primary-400">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-          </div>
-          {loadingStats ? (
-            <div className="relative h-10 w-24 rounded-lg bg-slate-200 dark:bg-slate-600" />
-          ) : (
-            <div className="relative flex flex-wrap items-baseline gap-2">
-              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
-                {stats.total.toLocaleString()}
-              </p>
-              {prevStats != null && (
-                <PctChange value={pctChange(stats.total, prevStats.total)} />
-              )}
-            </div>
-          )}
-        </BentoCard>
-
-        <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
-          <div className="relative flex items-start justify-between">
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Dispatched
-            </p>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shadow-none [box-shadow:none] dark:bg-emerald-900/40 dark:text-emerald-400">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-          {loadingStats ? (
-            <div className="relative h-10 w-24 rounded-lg bg-slate-200 dark:bg-slate-600" />
-          ) : (
-            <div className="relative flex flex-wrap items-baseline gap-2">
-              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
-                {stats.dispatched.toLocaleString()}
-              </p>
-              {prevStats != null && (
-                <PctChange value={pctChange(stats.dispatched, prevStats.dispatched)} />
-              )}
-            </div>
-          )}
-        </BentoCard>
-
-        <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
-          <div className="relative flex items-start justify-between">
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Pending
-            </p>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 shadow-none [box-shadow:none] dark:bg-amber-900/40 dark:text-amber-400">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-          {loadingStats ? (
-            <div className="relative h-10 w-24 rounded-lg bg-slate-200 dark:bg-slate-600" />
-          ) : (
-            <div className="relative flex flex-wrap items-baseline gap-2">
-              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100 md:text-3xl">
-                {stats.pending.toLocaleString()}
-              </p>
-              {prevStats != null && (
-                <PctChange value={pctChange(stats.pending, prevStats.pending)} />
-              )}
-            </div>
-          )}
-        </BentoCard>
-      </div>
-      </div>
     </div>
-  );
-}
-
-function PctChange({ value }: { value: number | null }) {
-  if (value == null) return null;
-  const isPositive = value >= 0;
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-        isPositive
-          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-          : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-      }`}
-    >
-      {isPositive ? "↑ +" : "↓ "}
-      {Math.abs(value)}%
-    </span>
   );
 }
