@@ -419,7 +419,11 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards: full viewport width on mobile, equal horizontal space left and right; normal on sm+ */}
-      <div ref={kpiCardsWrapperRef} className="relative left-1/2 flex w-[100vw] max-w-none -translate-x-1/2 flex-col gap-4 pl-2 pr-2 sm:relative sm:left-0 sm:mx-0 sm:w-full sm:max-w-full sm:translate-x-0 sm:pl-0 sm:pr-0 lg:-mx-10 lg:px-10">
+      <div
+        ref={kpiCardsWrapperRef}
+        className="relative left-1/2 flex w-[100vw] max-w-none -translate-x-1/2 flex-col gap-4 pl-2 pr-2 sm:relative sm:left-0 sm:mx-0 sm:w-full sm:max-w-full sm:translate-x-0 sm:pl-0 sm:pr-0 lg:-mx-10 lg:px-10"
+        style={{ width: '100dvw' }}
+      >
         <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
