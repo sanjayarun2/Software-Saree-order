@@ -165,8 +165,6 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const dateDropdownRef = useRef<HTMLDivElement>(null);
-  const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const kpiCardsWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -177,58 +175,6 @@ export default function DashboardPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // #region agent log
-  useEffect(() => {
-    const measure = () => {
-      const innerW = typeof window !== "undefined" ? window.innerWidth : 0;
-      const contentEl = contentWrapperRef.current;
-      const kpiEl = kpiCardsWrapperRef.current;
-      const contentRect = contentEl?.getBoundingClientRect();
-      const contentStyle = contentEl ? window.getComputedStyle(contentEl) : null;
-      const kpiRect = kpiEl?.getBoundingClientRect();
-      const kpiStyle = kpiEl ? window.getComputedStyle(kpiEl) : null;
-      const bodyStyle = typeof document !== "undefined" ? window.getComputedStyle(document.body) : null;
-      const payload = {
-        sessionId: "9bc241",
-        hypothesisId: "H1-H5",
-        location: "dashboard/page.tsx:measure",
-        message: "KPI cards layout on mobile",
-        data: {
-          innerWidth: innerW,
-          smBreakpointActive: innerW >= 640,
-          contentLeft: contentRect?.left,
-          contentWidth: contentRect?.width,
-          contentPaddingLeft: contentStyle?.paddingLeft,
-          contentPaddingRight: contentStyle?.paddingRight,
-          kpiLeft: kpiRect?.left,
-          kpiWidth: kpiRect?.width,
-          kpiMarginLeft: kpiStyle?.marginLeft,
-          kpiMarginRight: kpiStyle?.marginRight,
-          kpiPaddingLeft: kpiStyle?.paddingLeft,
-          kpiPaddingRight: kpiStyle?.paddingRight,
-          kpiMaxWidth: kpiStyle?.maxWidth,
-          bodyPaddingLeft: bodyStyle?.paddingLeft,
-          bodyPaddingRight: bodyStyle?.paddingRight,
-          gapFromViewportLeft: kpiRect ? kpiRect.left : null,
-          gapFromViewportRight: kpiRect && innerW ? innerW - (kpiRect.left + kpiRect.width) : null,
-        },
-        timestamp: Date.now(),
-      };
-      fetch("http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
-    };
-    const t = setTimeout(measure, 400);
-    window.addEventListener("resize", measure);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-  // #endregion
 
   const range = getDashboardDateRange(period, customFrom, customTo);
   const prevRange = period !== "custom" ? getPreviousRange(range.from, range.to) : null;
@@ -415,18 +361,15 @@ export default function DashboardPage() {
       </div>
 
       {/* Content: cards with clear spacing below header - scrolls inside viewport */}
-      <div ref={contentWrapperRef} className="mx-auto min-h-0 flex-1 overflow-y-auto max-w-6xl space-y-6 bg-slate-50 px-4 pb-8 pt-6 dark:bg-slate-900/50 lg:px-10 lg:pt-8">
+      <div className="mx-auto min-h-0 flex-1 overflow-y-auto max-w-6xl space-y-6 bg-slate-50 px-4 pb-8 pt-6 dark:bg-slate-900/50 lg:px-10 lg:pt-8">
       {error && (
         <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
           {error}
         </p>
       )}
 
-      {/* KPI Cards: full viewport width on mobile (100vw full-bleed), minimal horizontal gap; normal on sm+ */}
-      <div
-        ref={kpiCardsWrapperRef}
-        className="relative left-1/2 flex w-[100vw] max-w-none -translate-x-1/2 flex-col gap-4 px-1 sm:relative sm:left-0 sm:mx-0 sm:w-full sm:max-w-full sm:translate-x-0 sm:px-0 lg:-mx-10 lg:px-10"
-      >
+      {/* KPI Cards: full viewport width on mobile, equal horizontal space left and right; normal on sm+ */}
+      <div className="relative left-1/2 flex w-[100vw] max-w-none -translate-x-1/2 flex-col gap-4 pl-2 pr-2 sm:relative sm:left-0 sm:mx-0 sm:w-full sm:max-w-full sm:translate-x-0 sm:pl-0 sm:pr-0 lg:-mx-10 lg:px-10">
         <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
