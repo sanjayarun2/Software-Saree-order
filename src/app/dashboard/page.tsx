@@ -165,6 +165,56 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const dateDropdownRef = useRef<HTMLDivElement>(null);
+  const kpiCardsWrapperRef = useRef<HTMLDivElement>(null);
+
+  // #region agent log
+  useEffect(() => {
+    const measure = () => {
+      const innerW = typeof window !== "undefined" ? window.innerWidth : 0;
+      const clientW = typeof document !== "undefined" ? document.documentElement.clientWidth : 0;
+      const wrap = kpiCardsWrapperRef.current;
+      const wrapRect = wrap?.getBoundingClientRect();
+      const firstCard = wrap?.firstElementChild as HTMLElement | null;
+      const cardRect = firstCard?.getBoundingClientRect();
+      const wrapStyle = wrap ? window.getComputedStyle(wrap) : null;
+      const gapLeft = cardRect ? cardRect.left : null;
+      const gapRight = cardRect && innerW ? innerW - cardRect.right : null;
+      const payload = {
+        sessionId: "9bc241",
+        hypothesisId: "H1-H5",
+        location: "dashboard/page.tsx:measure",
+        message: "KPI cards left vs right gap",
+        data: {
+          innerWidth: innerW,
+          clientWidth: clientW,
+          wrapperLeft: wrapRect?.left,
+          wrapperRight: wrapRect?.right,
+          wrapperWidth: wrapRect?.width,
+          cardLeft: cardRect?.left,
+          cardRight: cardRect?.right,
+          cardWidth: cardRect?.width,
+          paddingLeft: wrapStyle?.paddingLeft,
+          paddingRight: wrapStyle?.paddingRight,
+          gapFromViewportLeft: gapLeft,
+          gapFromViewportRight: gapRight,
+          gapDiff: gapLeft != null && gapRight != null ? Math.round((gapRight - gapLeft) * 10) / 10 : null,
+        },
+        timestamp: Date.now(),
+      };
+      fetch("http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    };
+    const t = setTimeout(measure, 500);
+    window.addEventListener("resize", measure);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  // #endregion
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -369,7 +419,7 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards: full viewport width on mobile, equal horizontal space left and right; normal on sm+ */}
-      <div className="relative left-1/2 flex w-[100vw] max-w-none -translate-x-1/2 flex-col gap-4 pl-2 pr-2 sm:relative sm:left-0 sm:mx-0 sm:w-full sm:max-w-full sm:translate-x-0 sm:pl-0 sm:pr-0 lg:-mx-10 lg:px-10">
+      <div ref={kpiCardsWrapperRef} className="relative left-1/2 flex w-[100vw] max-w-none -translate-x-1/2 flex-col gap-4 pl-2 pr-2 sm:relative sm:left-0 sm:mx-0 sm:w-full sm:max-w-full sm:translate-x-0 sm:pl-0 sm:pr-0 lg:-mx-10 lg:px-10">
         <BentoCard className="relative flex w-full max-w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
           <div className="relative flex items-start justify-between">
             <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
