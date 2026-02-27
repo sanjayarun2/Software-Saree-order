@@ -24,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <RailNav
         userInitials={initials}
         userEmail={user?.email}
+        userId={user?.id}
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
       />

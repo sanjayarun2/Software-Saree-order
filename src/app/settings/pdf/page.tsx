@@ -88,6 +88,7 @@ export default function PdfSettingsPage() {
   const [logoYmm, setLogoYmm] = useState(50);
   const [fromYmm, setFromYmm] = useState(27);
   const [toYmm, setToYmm] = useState(8);
+  const [normalizeAddresses, setNormalizeAddresses] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<YTarget>("logo");
   const useNativePicker = useNativeLogoPicker();
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -118,6 +119,7 @@ export default function PdfSettingsPage() {
         setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 50));
         setFromYmm(clampNum(row.from_y_mm, 0, PDF_SECTION_H_MM, 27));
         setToYmm(clampNum(row.to_y_mm, 0, PDF_SECTION_H_MM, 8));
+        setNormalizeAddresses(!!(row as any).normalize_addresses);
         setLogoPath(row.logo_path);
         if (row.logo_path) {
           const url = await getPdfLogoPreviewUrl(user.id, row.logo_path);
@@ -306,6 +308,26 @@ export default function PdfSettingsPage() {
     setSelectedValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, +(v + dir).toFixed(1))));
   };
 
+  const handleReset = () => {
+    // Restore all controls to app defaults; does NOT touch saved data until user presses Save.
+    setContentType(defaultContentType);
+    setPlacement(defaultPlacement);
+    setTextSize(defaultTextSize);
+    setTextBold(true);
+    setCustomText(defaultCustomText);
+    setLogoZoom(1.0);
+    setLogoYmm(50);
+    setFromYmm(27);
+    setToYmm(8);
+    setNormalizeAddresses(false);
+    setLogoPath(null);
+    setLogoPreviewUrl(null);
+    setSelectedTarget("logo");
+    setLowResWarning(null);
+    setSaveError(null);
+    setSaved(false);
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setSaveError(null);
@@ -320,6 +342,7 @@ export default function PdfSettingsPage() {
       logo_y_mm: logoYmm,
       from_y_mm: fromYmm,
       to_y_mm: toYmm,
+      normalize_addresses: normalizeAddresses,
     });
     if (error) {
       setSaveError("Failed to save. Try again.");
@@ -601,18 +624,60 @@ export default function PdfSettingsPage() {
               </div>
             </div>
           )}
+
+          {/* Row 6: Address cleanup toggle (WhatsApp paste normalization for PDF only) */}
+          <div className="flex min-h-[56px] items-center gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-700/80">
+            <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 4.5h15v3h-15zM4.5 10.5h9v3h-9zM4.5 16.5h6v3h-6z" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                Clean WhatsApp addresses for PDF
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                When enabled, FROM / TO are auto-tidied into neat lines in the PDF only. Saved text in the app is not changed.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNormalizeAddresses((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                normalizeAddresses
+                  ? "border-primary-500 bg-primary-500/90"
+                  : "border-gray-300 bg-gray-200 dark:border-slate-600 dark:bg-slate-700"
+              }`}
+              aria-pressed={normalizeAddresses}
+              aria-label="Toggle address cleanup for PDF"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                  normalizeAddresses ? "translate-x-5" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
-        {/* Save Changes - app primary button; live preview below reflects these settings */}
+        {/* Save / Reset - app primary + secondary buttons; live preview below reflects these settings */}
         <div className="mt-8">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={loadingSettings}
-            className="w-full rounded-xl bg-primary-500 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
-          >
-            {saved ? "Saved" : "Save Changes"}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={loadingSettings}
+              className="w-full rounded-xl border border-gray-200 bg-white py-3.5 text-base font-semibold text-slate-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={loadingSettings}
+              className="w-full rounded-xl bg-primary-500 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
+            >
+              {saved ? "Saved" : "Save Changes"}
+            </button>
+          </div>
           <p className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
             Live preview below reflects these settings and PDF generation.
           </p>

@@ -18,8 +18,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Saree Order Book",
-  description: "Book and manage saree orders",
+  title: "Velo",
+  description: "Book and manage saree orders with Velo",
   icons: {
     icon: [
       { url: "/favicon.png", sizes: "32x32", type: "image/png" },

@@ -32,7 +32,7 @@ export function SplashController({ children }: { children: React.ReactNode }) {
           <div className="flex h-14 w-14 shrink-0 items-center justify-center md:h-16 md:w-16">
             <img
               src="/icon.svg"
-              alt="Saree Order Book"
+              alt="Velo"
               className="h-full w-full max-w-[80px] object-contain"
               style={{
                 imageRendering: "auto",

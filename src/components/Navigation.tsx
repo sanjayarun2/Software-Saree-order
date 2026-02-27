@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/theme-context";
+import { logReferralShare } from "@/lib/referral-service";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: "🏠" },
@@ -51,11 +52,12 @@ export function BottomNav() {
 interface RailNavProps {
   userInitials?: string;
   userEmail?: string | null;
+  userId?: string | null;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
 }
 
-export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileClose }: RailNavProps) {
+export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, onMobileClose }: RailNavProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
 
@@ -64,8 +66,44 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
   const navItemInactive =
     "text-gray-700 dark:text-gray-300 font-normal";
 
-  const sidebarContent = (isMobile: boolean) => (
-    <>
+  const sidebarContent = (isMobile: boolean) => {
+    const openWhatsAppGroup = () => {
+      if (typeof window !== "undefined") {
+        window.open(
+          "https://chat.whatsapp.com/HXCJhcTODP81v6RIaRGoFw",
+          "_blank",
+          "noopener,noreferrer"
+        );
+      }
+      if (isMobile && onMobileClose) {
+        onMobileClose();
+      }
+    };
+
+    const openReferFriend = async () => {
+      const driveLink =
+        "https://drive.google.com/drive/u/0/folders/1Mgs7hD22Ei1lBzzLO1mJTgzXgazwO6ex";
+      if (userId) {
+        void logReferralShare({ userId, link: driveLink, channel: "whatsapp" });
+      }
+      const messageLines = [
+        "Hi 👋",
+        "I'm using Velo to manage orders.",
+        "",
+        "You can download / view it here:",
+        driveLink,
+      ];
+      const text = encodeURIComponent(messageLines.join("\n"));
+      if (typeof window !== "undefined") {
+        window.open(`https://wa.me/?text=${text}`, "_blank", "noopener,noreferrer");
+      }
+      if (isMobile && onMobileClose) {
+        onMobileClose();
+      }
+    };
+
+    return (
+      <>
       <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
         <div className="flex items-center gap-3">
           {userInitials && (
@@ -140,6 +178,7 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
       <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
         <button
           type="button"
+          onClick={openReferFriend}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           }`}
@@ -151,6 +190,7 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
         </button>
         <button
           type="button"
+          onClick={openWhatsAppGroup}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           }`}
@@ -188,6 +228,7 @@ export function RailNav({ userInitials, userEmail, mobileOpen = false, onMobileC
       </div>
     </>
   );
+  };
 
   return (
     <>

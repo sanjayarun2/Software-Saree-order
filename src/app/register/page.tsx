@@ -82,10 +82,6 @@ export default function RegisterPage() {
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     console.log("[GMAIL] Detected platform (isMobile):", { isMobile });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_registerOpenGmail`,runId:'pre-fix',hypothesisId:'H3',location:'register/page.tsx:OpenGmailClick',message:'Register Open Gmail clicked',data:{email,isMobile,userAgent:navigator.userAgent},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
-
     if (isMobile) {
       console.log("[GMAIL] Opening Gmail via openGmailApp(email) (system browser / app)");
       openGmailApp(email);

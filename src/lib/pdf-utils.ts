@@ -17,6 +17,8 @@ export type PdfRenderOptions = {
     logo_y_mm?: number;
     from_y_mm?: number;
     to_y_mm?: number;
+    /** When true, normalize FROM/TO address text into tidy lines before rendering. */
+    normalize_addresses?: boolean;
   } | null;
   logoBase64: string | null;
   /** Natural width / height of the logo image (for aspect-ratio-aware scaling). */
@@ -522,6 +524,89 @@ function getAddressLines(
   return lines;
 }
 
+/** Normalize a free-form WhatsApp-style address into a tidy block (Name, door/street, area/city, state+PIN, phone). */
+function normalizeAddressBlock(text: string): string {
+  const raw = text || "";
+  const lines = raw
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((l) => l.trim().replace(/\s+/g, " "))
+    .filter((l) => l.length > 0);
+
+  if (!lines.length) return "";
+
+  const nameCandidates: string[] = [];
+  const doorLines: string[] = [];
+  const cityAreaLines: string[] = [];
+  const pinLines: string[] = [];
+  const phoneLines: string[] = [];
+
+  const phoneRegex = /\b[6-9]\d{9}\b/; // Indian-style mobile numbers
+  const pinRegex = /\b\d{6}\b/;        // 6-digit PIN
+  const doorRegex = /^(door\s*no\.?|d\.?\s*no\.?|flat|apt|apartment|house|plot|no\.?|#|\d+)/i;
+
+  for (const line of lines) {
+    if (phoneRegex.test(line)) {
+      phoneLines.push(line);
+      continue;
+    }
+    if (pinRegex.test(line)) {
+      pinLines.push(line);
+      continue;
+    }
+    if (!nameCandidates.length) {
+      nameCandidates.push(line);
+      continue;
+    }
+    if (doorRegex.test(line)) {
+      doorLines.push(line);
+      continue;
+    }
+    cityAreaLines.push(line);
+  }
+
+  const result: string[] = [];
+
+  if (nameCandidates.length) {
+    result.push(nameCandidates[0]);
+  }
+
+  if (doorLines.length) {
+    result.push(doorLines.join(", "));
+  }
+
+  if (cityAreaLines.length) {
+    if (cityAreaLines.length === 1) {
+      result.push(cityAreaLines[0]);
+    } else {
+      result.push(cityAreaLines[0]);
+      result.push(cityAreaLines.slice(1).join(", "));
+    }
+  }
+
+  if (pinLines.length) {
+    const pinLine = pinLines.join(" ");
+    const last = result[result.length - 1];
+    if (!last || !pinRegex.test(last)) {
+      result.push(pinLine);
+    }
+  }
+
+  if (phoneLines.length) {
+    result.push(phoneLines[0]);
+  }
+
+  // Hard cap: we never want to exceed MAX_ADDRESS_LINES logical lines; merge extras if needed.
+  if (result.length > MAX_ADDRESS_LINES) {
+    const head = result.slice(0, MAX_ADDRESS_LINES - 1);
+    const tail = result.slice(MAX_ADDRESS_LINES - 1).join(", ");
+    head.push(tail);
+    return head.join("\n");
+  }
+
+  return result.join("\n");
+}
+
 const LOGO_MAX_W_MM = 40;   // fixed logo container width (mm)
 const LOGO_MAX_H_MM = 20;   // fixed logo container height (mm)
 
@@ -544,23 +629,88 @@ function drawOrderLabel(
 ) {
   const leftX = MARGIN + ADDRESS_PADDING;
   const centerColStart = MARGIN + COL_W + MARGIN;
-  const centerX = centerColStart + COL_W / 2;
+  let centerX = centerColStart + COL_W / 2;
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
-  const rightX = rightColStart + ADDRESS_PADDING;
+  const rightColEndBase = A4_W - MARGIN - ADDRESS_PADDING;
   const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
 
   const sectionH = SECTION_H;
-  const toY = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
-  const fromY = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
+  const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
+  const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
   const labelSize = options.settings?.text_size ?? SIZE_LABEL;
   const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
   const textBold = options.settings?.text_bold !== false;
   const lineHeightMm = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.5;
   const labelToAddressGap = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.4;
-  const labelYTo = sectionTop + toY;
-  const addressStartYTo = sectionTop + toY + labelToAddressGap;
-  const labelYFrom = sectionTop + fromY;
-  const addressStartYFrom = sectionTop + fromY + labelToAddressGap;
+
+  // Wrapped address lines (limited to MAX_ADDRESS_LINES to avoid runaway height)
+  const shouldNormalize = options.settings?.normalize_addresses === true;
+  const rawFrom = order.sender_details ?? "";
+  const rawTo = order.recipient_details ?? "";
+  const cleanFrom = shouldNormalize ? normalizeAddressBlock(rawFrom) : rawFrom;
+  const cleanTo = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
+
+  const fromLines = getAddressLines(doc, cleanFrom, maxW).slice(0, MAX_ADDRESS_LINES);
+  const toLines = getAddressLines(doc, cleanTo, maxW).slice(0, MAX_ADDRESS_LINES);
+
+  // Placement for logo / center block
+  const placement = options.settings?.placement ?? "bottom";
+  const logoYSetting = options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
+  let thanksCenterY =
+    logoYSetting != null
+      ? sectionTop + logoYSetting
+      : placement === "top"
+        ? sectionTop + 28
+        : sectionTop + SECTION_H - 28;
+
+  // Vertical auto-shift to avoid clipping at the bottom of the section
+  const topPadding = VERTICAL_OFFSET;
+  const bottomPadding = VERTICAL_OFFSET;
+
+  let fromY = fromYBase;
+  let toY = toYBase;
+
+  // Initial positions
+  let labelYFrom = sectionTop + fromY;
+  let addressStartYFrom = sectionTop + fromY + labelToAddressGap;
+  let labelYTo = sectionTop + toY;
+  let addressStartYTo = sectionTop + toY + labelToAddressGap;
+
+  const fromBlockBottom =
+    fromLines.length > 0 ? addressStartYFrom + (fromLines.length - 1) * lineHeightMm : labelYFrom;
+  const toBlockBottom =
+    toLines.length > 0 ? addressStartYTo + (toLines.length - 1) * lineHeightMm : labelYTo;
+  const logoBottom = thanksCenterY + LOGO_MAX_H_MM / 2;
+
+  const sectionBottomLimit = sectionTop + sectionH - bottomPadding;
+  const currentMaxBottom = Math.max(fromBlockBottom, toBlockBottom, logoBottom);
+
+  if (currentMaxBottom > sectionBottomLimit) {
+    const shiftUp = currentMaxBottom - sectionBottomLimit;
+    fromY = fromYBase - shiftUp;
+    toY = toYBase - shiftUp;
+    thanksCenterY -= shiftUp;
+  }
+
+  // Recompute baselines after any vertical shift
+  labelYFrom = sectionTop + fromY;
+  addressStartYFrom = sectionTop + fromY + labelToAddressGap;
+  labelYTo = sectionTop + toY;
+  addressStartYTo = sectionTop + toY + labelToAddressGap;
+
+  // Horizontal auto-shift: when TO is long, slide logo + TO slightly left but never touch FROM or borders
+  let rightColEnd = rightColEndBase;
+  const leftColRight = leftX + maxW;
+  const minGapBetweenFromAndLogo = 5; // mm
+
+  if (toLines.length > 4) {
+    const desiredShift = 6; // mm
+    const maxShiftFromLeft =
+      centerX - (leftColRight + minGapBetweenFromAndLogo + LOGO_MAX_W_MM / 2);
+    const safeShift = Math.max(0, Math.min(desiredShift, maxShiftFromLeft));
+    centerX -= safeShift;
+    rightColEnd -= safeShift;
+  }
 
   // FROM — left column (uses settings: text_size, text_bold)
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
@@ -568,23 +718,18 @@ function drawOrderLabel(
   doc.text("FROM:", leftX, labelYFrom);
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSize);
-  const fromLines = getAddressLines(doc, order.sender_details ?? "", maxW);
-  fromLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
+  fromLines.forEach((line, i) => {
     doc.text(line, leftX, addressStartYFrom + i * lineHeightMm);
   });
 
-  // Centre: vertical position from settings (logo_y_mm) or placement fallback
-  const logoY = options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
-  const placement = options.settings?.placement ?? "bottom";
-  const thanksCenterY =
-    logoY != null ? sectionTop + logoY : (placement === "top" ? sectionTop + 28 : sectionTop + SECTION_H - 28);
+  // Centre: logo or text at adjusted centerX / thanksCenterY
   const contentType = options.settings?.content_type ?? "logo";
   const customText = (options.settings?.custom_text ?? "").trim();
   const textSize = options.settings?.text_size ?? 15;
 
   if (contentType === "text" && customText && doc.splitTextToSize) {
-    const textBold = options.settings?.text_bold !== false;
-    doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+    const textBoldInner = options.settings?.text_bold !== false;
+    doc.setFont(FONT_BODY, textBoldInner ? "bold" : "normal");
     doc.setFontSize(textSize);
     const maxCenterW = COL_W - 8;
     const lines = doc.splitTextToSize(customText, maxCenterW);
@@ -615,8 +760,7 @@ function drawOrderLabel(
     const drawX = centerX - drawW / 2;
     const drawY = thanksCenterY - drawH / 2;
 
-    const needsClip =
-      drawW > LOGO_MAX_W_MM || drawH > LOGO_MAX_H_MM;
+    const needsClip = drawW > LOGO_MAX_W_MM || drawH > LOGO_MAX_H_MM;
 
     if (needsClip && doc.internal) {
       const k = doc.internal.scaleFactor;
@@ -637,15 +781,14 @@ function drawOrderLabel(
     }
   }
 
-  // TO — right column, higher so it’s the first focus (delivery address)
+  // TO — right column, right-aligned so spacing from logo matches FROM→logo
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
-  doc.text("TO:", rightX, labelYTo);
+  doc.text("TO:", rightColEnd, labelYTo, { align: "right" });
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSize);
-  const toLines = getAddressLines(doc, order.recipient_details ?? "", maxW);
-  toLines.slice(0, MAX_ADDRESS_LINES).forEach((line, i) => {
-    doc.text(line, rightX, addressStartYTo + i * lineHeightMm);
+  toLines.forEach((line, i) => {
+    doc.text(line, rightColEnd, addressStartYTo + i * lineHeightMm, { align: "right" });
   });
 }
 
@@ -780,7 +923,7 @@ export async function downloadBusinessReportPdf(
     // Header
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
-    doc.text("Saree Order Sales Report", margin, y);
+    doc.text("Velo Sales Report", margin, y);
     y += 10;
 
     doc.setFontSize(10);

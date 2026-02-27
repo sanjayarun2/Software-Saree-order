@@ -165,56 +165,6 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const dateDropdownRef = useRef<HTMLDivElement>(null);
-  const kpiCardsWrapperRef = useRef<HTMLDivElement>(null);
-
-  // #region agent log
-  useEffect(() => {
-    const measure = () => {
-      const innerW = typeof window !== "undefined" ? window.innerWidth : 0;
-      const clientW = typeof document !== "undefined" ? document.documentElement.clientWidth : 0;
-      const wrap = kpiCardsWrapperRef.current;
-      const wrapRect = wrap?.getBoundingClientRect();
-      const firstCard = wrap?.firstElementChild as HTMLElement | null;
-      const cardRect = firstCard?.getBoundingClientRect();
-      const wrapStyle = wrap ? window.getComputedStyle(wrap) : null;
-      const gapLeft = cardRect ? cardRect.left : null;
-      const gapRight = cardRect && innerW ? innerW - cardRect.right : null;
-      const payload = {
-        sessionId: "9bc241",
-        hypothesisId: "H1-H5",
-        location: "dashboard/page.tsx:measure",
-        message: "KPI cards left vs right gap",
-        data: {
-          innerWidth: innerW,
-          clientWidth: clientW,
-          wrapperLeft: wrapRect?.left,
-          wrapperRight: wrapRect?.right,
-          wrapperWidth: wrapRect?.width,
-          cardLeft: cardRect?.left,
-          cardRight: cardRect?.right,
-          cardWidth: cardRect?.width,
-          paddingLeft: wrapStyle?.paddingLeft,
-          paddingRight: wrapStyle?.paddingRight,
-          gapFromViewportLeft: gapLeft,
-          gapFromViewportRight: gapRight,
-          gapDiff: gapLeft != null && gapRight != null ? Math.round((gapRight - gapLeft) * 10) / 10 : null,
-        },
-        timestamp: Date.now(),
-      };
-      fetch("http://127.0.0.1:7242/ingest/e5ff1efb-b536-4696-aa4a-e6f88c1f3cf2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
-    };
-    const t = setTimeout(measure, 500);
-    window.addEventListener("resize", measure);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-  // #endregion
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -305,7 +255,7 @@ export default function DashboardPage() {
         )}
       </div>
       <div className="flex-1 overflow-y-auto p-4">
-        <div ref={kpiCardsWrapperRef} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             Total Orders: {stats.total.toLocaleString()}
           </div>

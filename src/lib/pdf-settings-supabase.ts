@@ -22,6 +22,8 @@ export interface PdfSettingsRow {
   logo_y_mm: number;
   from_y_mm: number;
   to_y_mm: number;
+   /** When true, PDF engine normalizes WhatsApp-style addresses into tidy lines before rendering. */
+  normalize_addresses: boolean;
   updated_at: string;
 }
 
@@ -36,6 +38,7 @@ const defaultSettings: Omit<PdfSettingsRow, "user_id" | "updated_at"> = {
   logo_y_mm: 50,
   from_y_mm: 27,
   to_y_mm: 8,
+  normalize_addresses: false,
 };
 
 /** Fetch PDF settings for a user from Supabase. Returns null if not found. */
@@ -66,6 +69,7 @@ export async function upsertPdfSettings(
     logo_y_mm?: number;
     from_y_mm?: number;
     to_y_mm?: number;
+    normalize_addresses?: boolean;
   }
 ): Promise<{ error: Error | null }> {
   const { error } = await supabase.from("pdf_settings").upsert(
