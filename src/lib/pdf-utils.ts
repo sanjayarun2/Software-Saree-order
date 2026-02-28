@@ -656,25 +656,21 @@ function drawOrderLabel(
   const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
   const textBold = options.settings?.text_bold !== false;
   const lineHeightMm = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.5;
-  const labelToAddressGap = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.4;
+  const labelToAddressGap = 6; // fixed 6mm gap from FROM/TO label to first address line
 
   // Wrapped address lines (limited to MAX_ADDRESS_LINES to avoid runaway height)
   const shouldNormalize = options.settings?.normalize_addresses === true;
   const rawFrom = order.sender_details ?? "";
   const rawTo = order.recipient_details ?? "";
-  const cleanFrom = shouldNormalize ? normalizeAddressBlock(rawFrom) : rawFrom;
-  const cleanTo = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
+  const fromSource = shouldNormalize ? normalizeAddressBlock(rawFrom) : rawFrom;
+  const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
 
-  const fromLines = shouldNormalize
-    ? getAddressLines(doc, cleanFrom, maxWFrom).slice(0, MAX_ADDRESS_LINES)
-    : getAddressLinesPreserve(rawFrom).slice(0, MAX_ADDRESS_LINES);
+  const fromLines = getAddressLines(doc, fromSource, maxWFrom).slice(0, MAX_ADDRESS_LINES);
   // For TO we compute width from its actual left text start to the right border so we use
   // nearly the entire line up to the 4mm margin.
   const rightTextStart = rightColStart + ADDRESS_PADDING;
   const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
-  const toLines = shouldNormalize
-    ? getAddressLines(doc, cleanTo, maxWTo).slice(0, MAX_ADDRESS_LINES)
-    : getAddressLinesPreserve(rawTo).slice(0, MAX_ADDRESS_LINES);
+  const toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
 
   // Placement for logo / center block
   const placement = options.settings?.placement ?? "bottom";
@@ -721,13 +717,15 @@ function drawOrderLabel(
   labelYTo = sectionTop + toY;
   addressStartYTo = sectionTop + toY + labelToAddressGap;
 
-  // Horizontal auto-shift: when TO is long, slide logo + TO slightly left but never touch FROM or borders
+  // Horizontal auto-shift: when TO is long, slide logo + TO a little left but never touch FROM or borders
   let rightColEnd = rightColEndBase;
   const leftColRight = leftX + maxWFrom;
   const minGapBetweenFromAndLogo = 7; // mm – keep a clear visual gap between FROM text and centre logo
 
   if (toLines.length > 4) {
-    const desiredShift = 6; // mm
+    // Horizontal tweak (up to 12mm) so TO can move noticeably left when very tall,
+    // but still never collide with FROM or cross the 4mm border margins.
+    const desiredShift = 12; // mm – upper bound, real shift is clamped below
     const maxShiftFromLeft =
       centerX - (leftColRight + minGapBetweenFromAndLogo + LOGO_MAX_W_MM / 2);
     const safeShift = Math.max(0, Math.min(desiredShift, maxShiftFromLeft));

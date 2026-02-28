@@ -346,7 +346,8 @@ export default function PdfSettingsPage() {
   const setSelectedValue = selectedTarget === "logo" ? setLogoYmm : selectedTarget === "from" ? setFromYmm : setToYmm;
   const scaledFontPx = textSize * MM_PER_PT * previewPxPerMm;
   const scaledAddressLineHeightPx = textSize * 0.5 * previewPxPerMm;
-  const scaledAddressGapPx = textSize * 0.4 * previewPxPerMm;
+  const LABEL_TO_ADDRESS_GAP_MM = 6;
+  const scaledAddressGapPx = LABEL_TO_ADDRESS_GAP_MM * previewPxPerMm;
   const scaledCenterLineHeightPx = textSize * 0.4 * previewPxPerMm;
   const stepY = (dir: 1 | -1) => {
     setSelectedValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, +(v + dir).toFixed(1))));
@@ -784,7 +785,7 @@ export default function PdfSettingsPage() {
             {(() => {
               const sectionH = PDF_SECTION_H_MM;
               const lineHeightMm = textSize * 0.5;
-              const labelToAddressGapMm = textSize * 0.4;
+              const labelToAddressGapMm = LABEL_TO_ADDRESS_GAP_MM;
               const topPadding = PDF_VERTICAL_OFFSET_MM;
               const bottomPadding = PDF_VERTICAL_OFFSET_MM;
 
