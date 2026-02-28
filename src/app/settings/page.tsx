@@ -32,22 +32,10 @@ export default function SettingsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto flex h-screen min-h-screen max-w-6xl flex-col overflow-hidden px-4 py-4 lg:px-10 lg:py-6">
-        {/* Header: back (left), centered Settings - no X button */}
-        <header className="relative flex min-h-[44px] items-center justify-center pb-4">
-          <Link
-            href="/dashboard"
-            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            aria-label="Back"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-          </Link>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Settings
-          </h1>
-        </header>
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
+          Settings
+        </h1>
 
         {/* One card, matching dashboard card style for dark mode consistency */}
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
@@ -62,8 +50,6 @@ export default function SettingsPage() {
             </svg>
           </Link>
         </div>
-
-        {/* Rest of screen left blank */}
       </div>
     </ErrorBoundary>
   );

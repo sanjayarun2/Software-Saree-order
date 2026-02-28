@@ -77,8 +77,12 @@ export default function AddOrderPage() {
     setBookedMobile(bookedMobileField.value);
   }, [bookedMobileField.value]);
 
-  // Keep courier list in fixed order; do not reorder by recent usage.
-  const courierOptions = useMemo(() => COURIERS, []);
+  // Recently used couriers first, then the rest of COURIERS in fixed order.
+  const courierOptions = useMemo(() => {
+    const recent = (suggestions?.couriers ?? []).filter((c) => COURIERS.includes(c));
+    const rest = COURIERS.filter((c) => !recent.includes(c));
+    return [...recent, ...rest];
+  }, [suggestions?.couriers]);
 
   const senderSuggestions = useMemo(() => {
     if (!suggestions) return [];
@@ -276,9 +280,6 @@ export default function AddOrderPage() {
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              {suggestions?.couriers.length ? (
-                <p className="mt-1 text-base text-gray-500 dark:text-gray-400">Recently used couriers shown first</p>
-              ) : null}
             </div>
 
             <div>
