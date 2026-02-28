@@ -504,7 +504,8 @@ const LINE_HEIGHT_ADDRESS = 6; // matches SIZE_ADDRESS for clean print
 const MAX_ADDRESS_LINES = 7;
 
 // Layout spacing
-const ADDRESS_PADDING = 3;   // horizontal padding so text doesn't touch borders
+const ADDRESS_PADDING = 3;   // base horizontal padding from column edges
+const EDGE_SAFE_GAP = 4;     // extra gap from column edge so text never visually hugs border
 const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
 const THANKS_LINE_GAP = 3;   // slightly increased gap between center lines
 
@@ -640,8 +641,8 @@ function drawOrderLabel(
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
   let rightColStartShifted = rightColStart;
   const rightColEndBase = A4_W - MARGIN - ADDRESS_PADDING;
-  // Allow more horizontal room so jsPDF doesn't wrap early (e.g. splitting "Jawahar Bazaar Road")
-  const maxW = COL_W - ADDRESS_PADDING - 1;
+  // Text width inside each column: keep a small gap from both the left padding and the outer border
+  const maxW = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
 
   const sectionH = SECTION_H;
   const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
@@ -714,7 +715,7 @@ function drawOrderLabel(
   // Horizontal auto-shift: when TO is long, slide logo + TO slightly left but never touch FROM or borders
   let rightColEnd = rightColEndBase;
   const leftColRight = leftX + maxW;
-  const minGapBetweenFromAndLogo = 5; // mm
+  const minGapBetweenFromAndLogo = 7; // mm – keep a clear visual gap between FROM text and centre logo
 
   if (toLines.length > 4) {
     const desiredShift = 6; // mm
