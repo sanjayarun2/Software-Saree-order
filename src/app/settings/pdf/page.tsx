@@ -119,7 +119,12 @@ export default function PdfSettingsPage() {
         setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 50));
         setFromYmm(clampNum(row.from_y_mm, 0, PDF_SECTION_H_MM, 27));
         setToYmm(clampNum(row.to_y_mm, 0, PDF_SECTION_H_MM, 8));
-        setNormalizeAddresses(!!(row as any).normalize_addresses);
+        const hasLocal =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem("pdf_normalize_addresses") != null;
+        if (!hasLocal) {
+          setNormalizeAddresses(!!(row as any).normalize_addresses);
+        }
         setLogoPath(row.logo_path);
         if (row.logo_path) {
           const url = await getPdfLogoPreviewUrl(user.id, row.logo_path);
@@ -132,6 +137,32 @@ export default function PdfSettingsPage() {
     })();
     return () => { cancelled = true; };
   }, [user]);
+
+  // Persist "Formalize address" toggle locally so it stays when user moves between tabs
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("pdf_normalize_addresses");
+      if (raw != null) {
+        const v = raw === "true" || raw === "1" || raw === "yes";
+        setNormalizeAddresses(v);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "pdf_normalize_addresses",
+        normalizeAddresses ? "true" : "false"
+      );
+    } catch {
+      // ignore
+    }
+  }, [normalizeAddresses]);
 
   useEffect(() => {
     if (!user || !logoPath) return;
@@ -632,10 +663,7 @@ export default function PdfSettingsPage() {
             </svg>
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                Clean WhatsApp addresses for PDF
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                When enabled, FROM / TO are auto-tidied into neat lines in the PDF only. Saved text in the app is not changed.
+                Formalize address
               </p>
             </div>
             <button

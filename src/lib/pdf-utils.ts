@@ -631,6 +631,7 @@ function drawOrderLabel(
   const centerColStart = MARGIN + COL_W + MARGIN;
   let centerX = centerColStart + COL_W / 2;
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
+  let rightColStartShifted = rightColStart;
   const rightColEndBase = A4_W - MARGIN - ADDRESS_PADDING;
   const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
 
@@ -709,6 +710,7 @@ function drawOrderLabel(
       centerX - (leftColRight + minGapBetweenFromAndLogo + LOGO_MAX_W_MM / 2);
     const safeShift = Math.max(0, Math.min(desiredShift, maxShiftFromLeft));
     centerX -= safeShift;
+    rightColStartShifted -= safeShift;
     rightColEnd -= safeShift;
   }
 
@@ -781,14 +783,15 @@ function drawOrderLabel(
     }
   }
 
-  // TO — right column, right-aligned so spacing from logo matches FROM→logo
+  // TO — right column, left-aligned within its column
+  const rightX = rightColStartShifted + ADDRESS_PADDING;
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
-  doc.text("TO:", rightColEnd, labelYTo, { align: "right" });
+  doc.text("TO:", rightX, labelYTo);
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSize);
   toLines.forEach((line, i) => {
-    doc.text(line, rightColEnd, addressStartYTo + i * lineHeightMm, { align: "right" });
+    doc.text(line, rightX, addressStartYTo + i * lineHeightMm);
   });
 }
 
