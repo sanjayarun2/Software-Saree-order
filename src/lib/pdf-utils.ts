@@ -621,33 +621,74 @@ export function normalizeAddressBlock(text: string): string {
 const LOGO_MAX_W_MM = 25;   // fixed logo container width (mm)
 const LOGO_MAX_H_MM = 25;   // fixed logo container height (mm)
 
+const MAX_TO_SHIFT_MM = 15;  // max leftward shift for TO text toward logo
+
+type DocShape = {
+  setFont: (f: string, s: string) => void;
+  setFontSize: (n: number) => void;
+  getTextWidth?: (s: string) => number;
+  text: (s: string, x: number, y: number, o?: { align?: string }) => void;
+  splitTextToSize: (s: string, w: number) => string[];
+  setDrawColor: (r: number, g?: number, b?: number) => void;
+  setFillColor: (r: number, g?: number, b?: number) => void;
+  setTextColor: (r: number, g?: number, b?: number) => void;
+  circle: (x: number, y: number, radius: number, style?: string) => void;
+  addImage?: (imageData: string, format: string, x: number, y: number, w: number, h: number) => void;
+  internal?: { write: (s: string) => void; scaleFactor: number };
+};
+
+/**
+ * Compute how many mm the TO text block needs to shift left so no line
+ * touches the right 4mm margin. Returns 0 when no shift is needed.
+ */
+function computeToShiftMm(
+  doc: DocShape,
+  order: Order,
+  options: PdfRenderOptions
+): number {
+  const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
+  const rightColEndBase = A4_W - MARGIN;
+  const rightTextStart = rightColStart + ADDRESS_PADDING;
+  const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
+
+  const shouldNormalize = options.settings?.normalize_addresses === true;
+  const rawTo = order.recipient_details ?? "";
+  const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
+  const toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+
+  const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
+  const textBold = options.settings?.text_bold !== false;
+
+  if (typeof doc.getTextWidth !== "function") return 0;
+
+  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  doc.setFontSize(addressSize);
+
+  let maxLineWidth = 0;
+  for (const line of toLines) {
+    const w = doc.getTextWidth(line);
+    if (w > maxLineWidth) maxLineWidth = w;
+  }
+
+  if (maxLineWidth <= maxWTo - 1) return 0;
+
+  const overflow = maxLineWidth - (maxWTo - 1);
+  return Math.min(overflow + 2, MAX_TO_SHIFT_MM);
+}
+
 function drawOrderLabel(
-  doc: {
-    setFont: (f: string, s: string) => void;
-    setFontSize: (n: number) => void;
-    getTextWidth?: (s: string) => number;
-    text: (s: string, x: number, y: number, o?: { align?: string }) => void;
-    splitTextToSize: (s: string, w: number) => string[];
-    setDrawColor: (r: number, g?: number, b?: number) => void;
-    setFillColor: (r: number, g?: number, b?: number) => void;
-    setTextColor: (r: number, g?: number, b?: number) => void;
-    circle: (x: number, y: number, radius: number, style?: string) => void;
-    addImage?: (imageData: string, format: string, x: number, y: number, w: number, h: number) => void;
-    internal?: { write: (s: string) => void; scaleFactor: number };
-  },
+  doc: DocShape,
   order: Order,
   sectionTop: number,
-  options: PdfRenderOptions
+  options: PdfRenderOptions,
+  toShiftMm: number = 0
 ) {
   const leftX = MARGIN + ADDRESS_PADDING;
   const centerColStart = MARGIN + COL_W + MARGIN;
-  let centerX = centerColStart + COL_W / 2;
+  const centerX = centerColStart + COL_W / 2;  // logo never moves
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
-  let rightColStartShifted = rightColStart;
-  const rightColEndBase = A4_W - MARGIN; // physical right border of section
-  // Text width inside each column:
-  // - FROM uses a fixed width based on column width
-  // - TO uses the full distance from its text start to the right border minus EDGE_SAFE_GAP
+  const rightColStartShifted = rightColStart - toShiftMm;  // only TO shifts left
+  const rightColEndBase = A4_W - MARGIN;
   const maxWFrom = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
 
   const sectionH = SECTION_H;
@@ -657,9 +698,8 @@ function drawOrderLabel(
   const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
   const textBold = options.settings?.text_bold !== false;
   const lineHeightMm = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.5;
-  const labelToAddressGap = 6; // fixed 6mm gap from FROM/TO label to first address line
+  const labelToAddressGap = 6;
 
-  // Wrapped address lines (limited to MAX_ADDRESS_LINES to avoid runaway height)
   const shouldNormalize = options.settings?.normalize_addresses === true;
   const rawFrom = order.sender_details ?? "";
   const rawTo = order.recipient_details ?? "";
@@ -667,41 +707,9 @@ function drawOrderLabel(
   const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
 
   const fromLines = getAddressLines(doc, fromSource, maxWFrom).slice(0, MAX_ADDRESS_LINES);
-  // For TO: use full width up to 4mm from right border. Each block is computed independently.
-  const rightTextStart = rightColStart + ADDRESS_PADDING;
-  let maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
-  let toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
-
-  const leftColRight = leftX + maxWFrom;
-  const minGapBetweenFromAndLogo = 7; // mm – never touch or overlap FROM and logo
-  const maxHorizontalShift = 12; // mm – use space after logo only when needed
-
-  // Horizontal shift only when TO text would overlap the 4mm margin (not always).
-  // Set font for width measurement, then check if any line is too close to the border.
-  let needHorizontalShift = false;
-  if (typeof doc.getTextWidth === "function") {
-    doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
-    doc.setFontSize(addressSize);
-    let maxLineWidth = 0;
-    for (const line of toLines) {
-      const w = doc.getTextWidth(line);
-      if (w > maxLineWidth) maxLineWidth = w;
-    }
-    needHorizontalShift = maxLineWidth > maxWTo - 1; // overlap or within 1mm of border
-  }
-
-  if (needHorizontalShift) {
-    const maxShiftFromLeft =
-      centerX - (leftColRight + minGapBetweenFromAndLogo + LOGO_MAX_W_MM / 2);
-    const safeShift = Math.max(0, Math.min(maxHorizontalShift, maxShiftFromLeft));
-    if (safeShift > 0) {
-      centerX -= safeShift;
-      rightColStartShifted -= safeShift;
-      const rightTextStartNew = rightColStartShifted + ADDRESS_PADDING;
-      maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStartNew;
-      toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
-    }
-  }
+  const rightTextStart = rightColStartShifted + ADDRESS_PADDING;
+  const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
+  const toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
 
   // Placement for logo / center block
   const placement = options.settings?.placement ?? "bottom";
@@ -871,11 +879,12 @@ export async function downloadOrderPdf(order: Order) {
     const renderOptions = await fetchPdfSettingsForRendering(order.user_id);
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const d = doc as unknown as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
-    console.log(`[PDF] Drawing ${SECTIONS_PER_PAGE} sections...`);
+    const d = doc as unknown as DocShape & Parameters<typeof drawSectionBorder>[0];
+    const pageShift = computeToShiftMm(d, order, renderOptions);
+    console.log(`[PDF] Drawing ${SECTIONS_PER_PAGE} sections (TO shift: ${pageShift}mm)...`);
     for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
       drawSectionBorder(d, i * SECTION_H);
-      drawOrderLabel(d, order, i * SECTION_H, renderOptions);
+      drawOrderLabel(d, order, i * SECTION_H, renderOptions, pageShift);
     }
     const filename = buildTimestampedFilename("SareeOrder");
     console.log(`[PDF] Generating blob for filename: ${filename}`);
@@ -906,12 +915,25 @@ export async function downloadOrdersPdf(orders: Order[]) {
   try {
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const d = doc as unknown as Parameters<typeof drawOrderLabel>[0] & Parameters<typeof drawSectionBorder>[0];
+    const d = doc as unknown as DocShape & Parameters<typeof drawSectionBorder>[0];
     let page = 0;
     let slot = 0;
 
     const userId = orders[0].user_id;
     const renderOptions = await fetchPdfSettingsForRendering(userId);
+
+    // Pre-compute per-page TO shift: scan each page's orders, take the max
+    const pageShifts: number[] = [];
+    for (let i = 0; i < orders.length; i += SECTIONS_PER_PAGE) {
+      const pageOrders = orders.slice(i, i + SECTIONS_PER_PAGE);
+      let maxShift = 0;
+      for (const o of pageOrders) {
+        const s = computeToShiftMm(d, o, renderOptions);
+        if (s > maxShift) maxShift = s;
+      }
+      pageShifts.push(maxShift);
+    }
+
     console.log(`[PDF] Drawing ${orders.length} orders...`);
     for (let i = 0; i < orders.length; i++) {
       if (slot === 0 && page > 0) {
@@ -919,8 +941,9 @@ export async function downloadOrdersPdf(orders: Order[]) {
         doc.addPage([A4_W, A4_H], "p");
       }
       const sectionTop = slot * SECTION_H;
+      const currentPageShift = pageShifts[page] ?? 0;
       drawSectionBorder(d, sectionTop);
-      drawOrderLabel(d, orders[i], sectionTop, renderOptions);
+      drawOrderLabel(d, orders[i], sectionTop, renderOptions, currentPageShift);
       slot++;
       if (slot >= SECTIONS_PER_PAGE) {
         slot = 0;

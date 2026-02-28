@@ -52,7 +52,7 @@ const PDF_EDGE_SAFE_GAP_MM = 4;   // must match EDGE_SAFE_GAP in pdf-utils.ts
 const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
 const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
 const PDF_LOGO_BOX_MM = 25; // must match LOGO_MAX_W_MM / LOGO_MAX_H_MM in pdf-utils.ts
-const PDF_MAX_HORIZONTAL_SHIFT_MM = 12; // max shift when TO nears border (pdf-utils.ts)
+const PDF_MAX_TO_SHIFT_MM = 15; // max leftward shift for TO text (logo stays fixed)
 const PDF_FROM_X_MM = PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
 const PDF_TO_X_MM = PDF_MARGIN_MM + (PDF_COL_W_MM + PDF_MARGIN_MM) * 2 + PDF_ADDRESS_PADDING_MM;
 const MM_PER_PT = 25.4 / 72;
@@ -795,12 +795,15 @@ export default function PdfSettingsPage() {
               const fromLinesCount = fromPreviewLines.length;
               const toLinesCount = toPreviewLines.length;
 
-              // When TO has many lines, PDF shifts logo+TO left; preview mimics that (same max 12mm)
-              const previewShiftMm =
-                toLinesCount > 4 ? PDF_MAX_HORIZONTAL_SHIFT_MM : 0;
+              // TO shifts left only when lines exceed available width (logo stays fixed at 50%)
+              const toMaxWMm = (A4_W_MM - PDF_MARGIN_MM) - PDF_EDGE_SAFE_GAP_MM - PDF_TO_X_MM;
+              const longestLineFraction = toLinesCount > 4 ? 1 : 0;
+              const previewToShiftMm = longestLineFraction > 0
+                ? Math.min(PDF_MAX_TO_SHIFT_MM, toMaxWMm * 0.15 + 2)
+                : 0;
               const toLeftPct =
-                ((PDF_TO_X_MM - previewShiftMm) / A4_W_MM) * 100;
-              const logoCenterPct = 50 - (previewShiftMm / A4_W_MM) * 100;
+                ((PDF_TO_X_MM - previewToShiftMm) / A4_W_MM) * 100;
+              const logoCenterPct = 50; // logo never moves
 
               let simFromY = fromYmm;
               let simToY = toYmm;
@@ -927,7 +930,7 @@ export default function PdfSettingsPage() {
                     style={{
                       top: `${toTopPct}%`,
                       left: `${toLeftPct}%`,
-                      width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
+                      width: `${((PDF_ADDRESS_MAX_W_MM + previewToShiftMm) / A4_W_MM) * 100}%`,
                     }}
                     onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
                   >
