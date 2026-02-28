@@ -643,9 +643,11 @@ function drawOrderLabel(
   let centerX = centerColStart + COL_W / 2;
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
   let rightColStartShifted = rightColStart;
-  const rightColEndBase = A4_W - MARGIN - ADDRESS_PADDING;
-  // Text width inside each column: keep a small gap from both the left padding and the outer border
-  const maxW = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
+  const rightColEndBase = A4_W - MARGIN; // physical right border of section
+  // Text width inside each column:
+  // - FROM uses a fixed width based on column width
+  // - TO uses the full distance from its text start to the right border minus EDGE_SAFE_GAP
+  const maxWFrom = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
 
   const sectionH = SECTION_H;
   const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
@@ -664,10 +666,14 @@ function drawOrderLabel(
   const cleanTo = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
 
   const fromLines = shouldNormalize
-    ? getAddressLines(doc, cleanFrom, maxW).slice(0, MAX_ADDRESS_LINES)
+    ? getAddressLines(doc, cleanFrom, maxWFrom).slice(0, MAX_ADDRESS_LINES)
     : getAddressLinesPreserve(rawFrom).slice(0, MAX_ADDRESS_LINES);
+  // For TO we compute width from its actual left text start to the right border so we use
+  // nearly the entire line up to the 4mm margin.
+  const rightTextStart = rightColStart + ADDRESS_PADDING;
+  const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
   const toLines = shouldNormalize
-    ? getAddressLines(doc, cleanTo, maxW).slice(0, MAX_ADDRESS_LINES)
+    ? getAddressLines(doc, cleanTo, maxWTo).slice(0, MAX_ADDRESS_LINES)
     : getAddressLinesPreserve(rawTo).slice(0, MAX_ADDRESS_LINES);
 
   // Placement for logo / center block
@@ -717,7 +723,7 @@ function drawOrderLabel(
 
   // Horizontal auto-shift: when TO is long, slide logo + TO slightly left but never touch FROM or borders
   let rightColEnd = rightColEndBase;
-  const leftColRight = leftX + maxW;
+  const leftColRight = leftX + maxWFrom;
   const minGapBetweenFromAndLogo = 7; // mm – keep a clear visual gap between FROM text and centre logo
 
   if (toLines.length > 4) {
