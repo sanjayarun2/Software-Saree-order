@@ -46,13 +46,14 @@ const A4_W_MM = 210;
 const PDF_MARGIN_MM = 10;
 const PDF_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
 const PDF_ADDRESS_PADDING_MM = 3;
-const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - 4 - 2 * PDF_ADDRESS_PADDING_MM;
+const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - 1;
+const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
 const PDF_FROM_X_MM = PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
 const PDF_TO_X_MM = PDF_MARGIN_MM + (PDF_COL_W_MM + PDF_MARGIN_MM) * 2 + PDF_ADDRESS_PADDING_MM;
 const MM_PER_PT = 25.4 / 72;
 const defaultContentType: PdfContentType = "logo";
 const defaultPlacement: PdfPlacement = "bottom";
-const defaultTextSize = 15;
+const defaultTextSize = 14;
 const defaultCustomText = "";
 
 type YTarget = "from" | "logo" | "to";
@@ -339,8 +340,9 @@ export default function PdfSettingsPage() {
     setSelectedValue((v) => Math.max(0, Math.min(PDF_SECTION_H_MM, +(v + dir).toFixed(1))));
   };
 
-  const handleReset = () => {
-    // Restore all controls to app defaults; does NOT touch saved data until user presses Save.
+  const handleReset = async () => {
+    if (!user) return;
+    // Restore UI controls to app defaults
     setContentType(defaultContentType);
     setPlacement(defaultPlacement);
     setTextSize(defaultTextSize);
@@ -357,6 +359,36 @@ export default function PdfSettingsPage() {
     setLowResWarning(null);
     setSaveError(null);
     setSaved(false);
+
+    // Persist defaults immediately so PDF generation stays in sync
+    const { error } = await upsertPdfSettings(user.id, {
+      content_type: defaultContentType,
+      placement: defaultPlacement,
+      text_size: defaultTextSize,
+      text_bold: true,
+      custom_text: defaultCustomText,
+      logo_path: null,
+      logo_zoom: 1.0,
+      logo_y_mm: 50,
+      from_y_mm: 27,
+      to_y_mm: 8,
+      normalize_addresses: false,
+    });
+
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("pdf_normalize_addresses", "false");
+      }
+    } catch {
+      // ignore localStorage failures
+    }
+
+    if (error) {
+      setSaveError("Failed to save. Try again.");
+      return;
+    }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   const handleSave = async () => {
@@ -686,14 +718,14 @@ export default function PdfSettingsPage() {
           </div>
         </div>
 
-        {/* Save / Reset - app primary + secondary buttons; live preview below reflects these settings */}
+        {/* Save / Reset - app primary (right) + secondary (left), side by side for compact layout */}
         <div className="mt-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={handleReset}
               disabled={loadingSettings}
-              className="w-full rounded-xl border border-gray-200 bg-white py-3.5 text-base font-semibold text-slate-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+              className="min-w-[140px] rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-base font-semibold text-slate-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
             >
               Reset to defaults
             </button>
@@ -701,7 +733,7 @@ export default function PdfSettingsPage() {
               type="button"
               onClick={handleSave}
               disabled={loadingSettings}
-              className="w-full rounded-xl bg-primary-500 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
+              className="min-w-[140px] rounded-xl bg-primary-500 px-4 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
             >
               {saved ? "Saved" : "Save Changes"}
             </button>
@@ -720,116 +752,170 @@ export default function PdfSettingsPage() {
             style={{
               aspectRatio: `${A4_W_MM} / ${PDF_SECTION_H_MM}`,
               touchAction: "none",
-              borderColor: "rgb(200, 200, 200)",
-              borderWidth: "0.3mm",
-              borderLeftStyle: "solid",
-              borderTopStyle: "solid",
-              borderRightStyle: "solid",
               // Match PDF section border: solid left/top/right, dotted (dashed) bottom "cut" line
-              borderBottomStyle: "dashed",
+              borderLeft: "1px solid rgb(200, 200, 200)",
+              borderTop: "1px solid rgb(200, 200, 200)",
+              borderRight: "1px solid rgb(200, 200, 200)",
+              borderBottom: "1px dashed rgb(200, 200, 200)",
             }}
             onPointerMove={handlePreviewPointerMove}
             onPointerUp={handlePreviewPointerUp}
             onPointerLeave={handlePreviewPointerUp}
           >
-            {/* From Address (left): uses settings textSize + textBold so preview matches PDF */}
-            <div
-              role="button"
-              tabIndex={0}
-              data-target="from"
-              className={`absolute cursor-grab select-none text-left transition-shadow ${selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""}`}
-              style={{
-                top: `${(fromYmm / PDF_SECTION_H_MM) * 100}%`,
-                left: `${(PDF_FROM_X_MM / A4_W_MM) * 100}%`,
-                width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
-              }}
-              onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
-            >
-              <p
-                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
-                style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledAddressLineHeightPx}px` }}
-              >
-                FROM:
-              </p>
-              <p
-                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
-                style={{
-                  fontSize: `${scaledFontPx}px`,
-                  lineHeight: `${scaledAddressLineHeightPx}px`,
-                  marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
-                }}
-              >
-                Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043.<br />Ph: +1 555 123 4567
-              </p>
-            </div>
+            {(() => {
+              const sectionH = PDF_SECTION_H_MM;
+              const lineHeightMm = textSize * 0.5;
+              const labelToAddressGapMm = textSize * 0.4;
+              const topPadding = PDF_VERTICAL_OFFSET_MM;
+              const bottomPadding = PDF_VERTICAL_OFFSET_MM;
 
-            {/* Center: Logo (same 40x20mm box + zoom as PDF) or Custom text (text_size pt + text_bold) */}
-            <div
-              role="button"
-              tabIndex={0}
-              data-target="logo"
-              className={`absolute left-1/2 flex cursor-grab select-none items-center justify-center overflow-hidden transition-shadow ${selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""}`}
-              style={{
-                top: `${(logoYmm / PDF_SECTION_H_MM) * 100}%`,
-                transform: "translate(-50%, -50%)",
-                width: `${(40 / A4_W_MM) * 100}%`,
-                height: `${(20 / PDF_SECTION_H_MM) * 100}%`,
-              }}
-              onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
-            >
-              {contentType === "text" ? (
-                <p
-                  className={`max-w-[85%] text-center text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
-                  style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledCenterLineHeightPx}px` }}
-                >
-                  {customText.trim() || "Thank you…"}
-                </p>
-              ) : (
-                <div
-                  className="h-full w-full overflow-hidden"
-                  style={{ transform: `scale(${logoZoom})` }}
-                >
-                  <img
-                    key={logoPath ?? "reference"}
-                    src={logoPreviewUrl ?? "/reference-logo.png"}
-                    alt=""
-                    className="h-full w-full object-contain object-center"
-                    draggable={false}
-                  />
-                </div>
-              )}
-            </div>
+              // Approximate 4 address lines in preview samples
+              const fromLinesCount = 4;
+              const toLinesCount = 4;
 
-            {/* To Address (right side): uses settings textSize + textBold so preview matches PDF */}
-            <div
-              role="button"
-              tabIndex={0}
-              data-target="to"
-              className={`absolute cursor-grab select-none text-left transition-shadow ${selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""}`}
-              style={{
-                top: `${(toYmm / PDF_SECTION_H_MM) * 100}%`,
-                left: `${(PDF_TO_X_MM / A4_W_MM) * 100}%`,
-                width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
-              }}
-              onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
-            >
-              <p
-                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
-                style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledAddressLineHeightPx}px` }}
-              >
-                TO:
-              </p>
-              <p
-                className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
-                style={{
-                  fontSize: `${scaledFontPx}px`,
-                  lineHeight: `${scaledAddressLineHeightPx}px`,
-                  marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
-                }}
-              >
-                Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001.<br />Ph: +91 98765 43210
-              </p>
-            </div>
+              let simFromY = fromYmm;
+              let simToY = toYmm;
+              let simLogoY = logoYmm;
+
+              const labelYFromMm = simFromY;
+              const addressStartYFromMm = simFromY + labelToAddressGapMm;
+              const labelYToMm = simToY;
+              const addressStartYToMm = simToY + labelToAddressGapMm;
+              const fromBlockBottomMm =
+                fromLinesCount > 0
+                  ? addressStartYFromMm + (fromLinesCount - 1) * lineHeightMm
+                  : labelYFromMm;
+              const toBlockBottomMm =
+                toLinesCount > 0
+                  ? addressStartYToMm + (toLinesCount - 1) * lineHeightMm
+                  : labelYToMm;
+              const logoBottomMm = simLogoY + LOGO_MAX_H_MM / 2;
+
+              const sectionBottomLimitMm = sectionH - bottomPadding;
+              const currentMaxBottomMm = Math.max(fromBlockBottomMm, toBlockBottomMm, logoBottomMm);
+
+              if (currentMaxBottomMm > sectionBottomLimitMm) {
+                const shiftUpMm = currentMaxBottomMm - sectionBottomLimitMm;
+                simFromY -= shiftUpMm;
+                simToY -= shiftUpMm;
+                simLogoY -= shiftUpMm;
+              }
+
+              const fromTopPct = (simFromY / sectionH) * 100;
+              const toTopPct = (simToY / sectionH) * 100;
+              const logoTopPct = (simLogoY / sectionH) * 100;
+
+              return (
+                <>
+                  {/* From Address (left): uses settings textSize + textBold so preview matches PDF */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    data-target="from"
+                    className={`absolute cursor-grab select-none text-left transition-shadow ${
+                      selectedTarget === "from" ? "ring-2 ring-primary-500/60" : ""
+                    }`}
+                    style={{
+                      top: `${fromTopPct}%`,
+                      left: `${(PDF_FROM_X_MM / A4_W_MM) * 100}%`,
+                      width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
+                    }}
+                    onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
+                  >
+                    <p
+                      className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                      style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledAddressLineHeightPx}px` }}
+                    >
+                      FROM:
+                    </p>
+                    <p
+                      className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                      style={{
+                        fontSize: `${scaledFontPx}px`,
+                        lineHeight: `${scaledAddressLineHeightPx}px`,
+                        marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
+                      }}
+                    >
+                      Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043.<br />Ph: +1 555 123 4567
+                    </p>
+                  </div>
+
+                  {/* Center: Logo (same square box + zoom as PDF) or Custom text */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    data-target="logo"
+                    className={`absolute left-1/2 flex cursor-grab select-none items-center justify-center overflow-hidden transition-shadow ${
+                      selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""
+                    }`}
+                    style={{
+                      top: `${logoTopPct}%`,
+                      transform: "translate(-50%, -50%)",
+                      width: `${(25 / A4_W_MM) * 100}%`,
+                      height: `${(25 / PDF_SECTION_H_MM) * 100}%`,
+                    }}
+                    onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
+                  >
+                    {contentType === "text" ? (
+                      <p
+                        className={`max-w-[85%] text-center text-[#000] ${
+                          textBold ? "font-bold" : "font-normal"
+                        }`}
+                        style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledCenterLineHeightPx}px` }}
+                      >
+                        {customText.trim() || "Thank you…"}
+                      </p>
+                    ) : (
+                      <div
+                        className="h-full w-full overflow-hidden"
+                        style={{ transform: `scale(${logoZoom})` }}
+                      >
+                        <img
+                          key={logoPath ?? "reference"}
+                          src={logoPreviewUrl ?? "/reference-logo.png"}
+                          alt=""
+                          className="h-full w-full object-contain object-center"
+                          draggable={false}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* To Address (right side): uses settings textSize + textBold so preview matches PDF */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    data-target="to"
+                    className={`absolute cursor-grab select-none text-left transition-shadow ${
+                      selectedTarget === "to" ? "ring-2 ring-primary-500/60" : ""
+                    }`}
+                    style={{
+                      top: `${toTopPct}%`,
+                      left: `${(PDF_TO_X_MM / A4_W_MM) * 100}%`,
+                      width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
+                    }}
+                    onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
+                  >
+                    <p
+                      className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                      style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledAddressLineHeightPx}px` }}
+                    >
+                      TO:
+                    </p>
+                    <p
+                      className={`text-[#000] ${textBold ? "font-bold" : "font-normal"}`}
+                      style={{
+                        fontSize: `${scaledFontPx}px`,
+                        lineHeight: `${scaledAddressLineHeightPx}px`,
+                        marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
+                      }}
+                    >
+                      Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001.<br />Ph: +91 98765 43210
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

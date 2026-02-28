@@ -613,8 +613,9 @@ function normalizeAddressBlock(text: string): string {
   return result.join("\n");
 }
 
-const LOGO_MAX_W_MM = 40;   // fixed logo container width (mm)
-const LOGO_MAX_H_MM = 20;   // fixed logo container height (mm)
+// Square logo container so clipping is symmetric
+const LOGO_MAX_W_MM = 25;   // fixed logo container width (mm)
+const LOGO_MAX_H_MM = 25;   // fixed logo container height (mm)
 
 function drawOrderLabel(
   doc: {
