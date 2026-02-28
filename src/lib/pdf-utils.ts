@@ -524,6 +524,12 @@ function getAddressLines(
   return lines;
 }
 
+/** Preserve user-typed / pasted lines exactly (no auto-wrapping), only splitting on explicit newlines. */
+function getAddressLinesPreserve(text: string): string[] {
+  const raw = text || "-";
+  return raw.replace(/\r\n/g, "\n").split("\n");
+}
+
 /** Normalize a free-form WhatsApp-style address into a tidy block (Name, door/street, area/city, state+PIN, phone). */
 function normalizeAddressBlock(text: string): string {
   const raw = text || "";
@@ -633,7 +639,8 @@ function drawOrderLabel(
   const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
   let rightColStartShifted = rightColStart;
   const rightColEndBase = A4_W - MARGIN - ADDRESS_PADDING;
-  const maxW = COL_W - 4 - 2 * ADDRESS_PADDING;
+  // Allow more horizontal room so jsPDF doesn't wrap early (e.g. splitting "Jawahar Bazaar Road")
+  const maxW = COL_W - ADDRESS_PADDING - 1;
 
   const sectionH = SECTION_H;
   const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
@@ -651,8 +658,12 @@ function drawOrderLabel(
   const cleanFrom = shouldNormalize ? normalizeAddressBlock(rawFrom) : rawFrom;
   const cleanTo = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
 
-  const fromLines = getAddressLines(doc, cleanFrom, maxW).slice(0, MAX_ADDRESS_LINES);
-  const toLines = getAddressLines(doc, cleanTo, maxW).slice(0, MAX_ADDRESS_LINES);
+  const fromLines = shouldNormalize
+    ? getAddressLines(doc, cleanFrom, maxW).slice(0, MAX_ADDRESS_LINES)
+    : getAddressLinesPreserve(rawFrom).slice(0, MAX_ADDRESS_LINES);
+  const toLines = shouldNormalize
+    ? getAddressLines(doc, cleanTo, maxW).slice(0, MAX_ADDRESS_LINES)
+    : getAddressLinesPreserve(rawTo).slice(0, MAX_ADDRESS_LINES);
 
   // Placement for logo / center block
   const placement = options.settings?.placement ?? "bottom";

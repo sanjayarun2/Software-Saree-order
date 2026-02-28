@@ -725,8 +725,8 @@ export default function PdfSettingsPage() {
               borderLeftStyle: "solid",
               borderTopStyle: "solid",
               borderRightStyle: "solid",
+              // Match PDF section border: solid left/top/right, dotted (dashed) bottom "cut" line
               borderBottomStyle: "dashed",
-              borderStyle: "solid",
             }}
             onPointerMove={handlePreviewPointerMove}
             onPointerUp={handlePreviewPointerUp}
