@@ -505,7 +505,7 @@ const MAX_ADDRESS_LINES = 7;
 
 // Layout spacing
 const ADDRESS_PADDING = 3;   // base horizontal padding from column edges
-const EDGE_SAFE_GAP = 4;     // extra gap from column edge so text never visually hugs border
+const EDGE_SAFE_GAP = 6;     // extra gap from column edge so text never visually hugs border
 const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
 const THANKS_LINE_GAP = 3;   // slightly increased gap between center lines
 

@@ -46,7 +46,7 @@ const A4_W_MM = 210;
 const PDF_MARGIN_MM = 10;
 const PDF_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
 const PDF_ADDRESS_PADDING_MM = 3;
-const PDF_EDGE_SAFE_GAP_MM = 4; // must match EDGE_SAFE_GAP in pdf-utils.ts
+const PDF_EDGE_SAFE_GAP_MM = 6; // must match EDGE_SAFE_GAP in pdf-utils.ts
 const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
 const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
 const PDF_LOGO_BOX_MM = 25; // must match LOGO_MAX_W_MM / LOGO_MAX_H_MM in pdf-utils.ts
@@ -88,7 +88,7 @@ export default function PdfSettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lowResWarning, setLowResWarning] = useState<string | null>(null);
-  const [logoYmm, setLogoYmm] = useState(50);
+  const [logoYmm, setLogoYmm] = useState(40);
   const [fromYmm, setFromYmm] = useState(27);
   const [toYmm, setToYmm] = useState(8);
   const [normalizeAddresses, setNormalizeAddresses] = useState(false);
@@ -119,7 +119,7 @@ export default function PdfSettingsPage() {
         setTextBold(row.text_bold !== false);
         setCustomText(row.custom_text ?? "");
         setLogoZoom(row.logo_zoom ?? 1.0);
-        setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 50));
+        setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 40));
         setFromYmm(clampNum(row.from_y_mm, 0, PDF_SECTION_H_MM, 27));
         setToYmm(clampNum(row.to_y_mm, 0, PDF_SECTION_H_MM, 8));
         const hasLocal =
@@ -351,7 +351,7 @@ export default function PdfSettingsPage() {
     setTextBold(true);
     setCustomText(defaultCustomText);
     setLogoZoom(1.0);
-    setLogoYmm(50);
+    setLogoYmm(40);
     setFromYmm(27);
     setToYmm(8);
     setNormalizeAddresses(false);
@@ -371,7 +371,7 @@ export default function PdfSettingsPage() {
       custom_text: defaultCustomText,
       logo_path: null,
       logo_zoom: 1.0,
-      logo_y_mm: 50,
+      logo_y_mm: 40,
       from_y_mm: 27,
       to_y_mm: 8,
       normalize_addresses: false,
@@ -720,14 +720,14 @@ export default function PdfSettingsPage() {
           </div>
         </div>
 
-        {/* Save / Reset - app primary (right) + secondary (left), side by side for compact layout */}
+        {/* Save / Reset - two equal-width buttons with even spacing to match app layout */}
         <div className="mt-8">
-          <div className="flex justify-end gap-3">
+          <div className="flex gap-3">
             <button
               type="button"
               onClick={handleReset}
               disabled={loadingSettings}
-              className="min-w-[140px] rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-base font-semibold text-slate-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+              className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-base font-semibold text-slate-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
             >
               Reset to defaults
             </button>
@@ -735,7 +735,7 @@ export default function PdfSettingsPage() {
               type="button"
               onClick={handleSave}
               disabled={loadingSettings}
-              className="min-w-[140px] rounded-xl bg-primary-500 px-4 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
+              className="flex-1 rounded-xl bg-primary-500 px-4 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
             >
               {saved ? "Saved" : "Save Changes"}
             </button>
@@ -754,16 +754,23 @@ export default function PdfSettingsPage() {
             style={{
               aspectRatio: `${A4_W_MM} / ${PDF_SECTION_H_MM}`,
               touchAction: "none",
-              // Match PDF section border: solid left/top/right, dotted (dashed) bottom "cut" line
-              borderLeft: "1px solid rgb(200, 200, 200)",
-              borderTop: "1px solid rgb(200, 200, 200)",
-              borderRight: "1px solid rgb(200, 200, 200)",
-              borderBottom: "1px dashed rgb(200, 200, 200)",
             }}
             onPointerMove={handlePreviewPointerMove}
             onPointerUp={handlePreviewPointerUp}
             onPointerLeave={handlePreviewPointerUp}
           >
+            {/* Inner section border inset by 10mm from full page width, to match PDF margins */}
+            <div
+              className="pointer-events-none absolute inset-y-0"
+              style={{
+                left: `${(PDF_MARGIN_MM / A4_W_MM) * 100}%`,
+                right: `${(PDF_MARGIN_MM / A4_W_MM) * 100}%`,
+                borderLeft: "1px solid rgb(200, 200, 200)",
+                borderTop: "1px solid rgb(200, 200, 200)",
+                borderRight: "1px solid rgb(200, 200, 200)",
+                borderBottom: "1px dashed rgb(200, 200, 200)",
+              }}
+            />
             {(() => {
               const sectionH = PDF_SECTION_H_MM;
               const lineHeightMm = textSize * 0.5;
