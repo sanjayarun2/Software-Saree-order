@@ -48,6 +48,7 @@ const PDF_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
 const PDF_ADDRESS_PADDING_MM = 3;
 const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - 1;
 const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
+const PDF_LOGO_BOX_MM = 25; // must match LOGO_MAX_W_MM / LOGO_MAX_H_MM in pdf-utils.ts
 const PDF_FROM_X_MM = PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
 const PDF_TO_X_MM = PDF_MARGIN_MM + (PDF_COL_W_MM + PDF_MARGIN_MM) * 2 + PDF_ADDRESS_PADDING_MM;
 const MM_PER_PT = 25.4 / 72;
@@ -789,7 +790,7 @@ export default function PdfSettingsPage() {
                 toLinesCount > 0
                   ? addressStartYToMm + (toLinesCount - 1) * lineHeightMm
                   : labelYToMm;
-              const logoBottomMm = simLogoY + LOGO_MAX_H_MM / 2;
+                  const logoBottomMm = simLogoY + PDF_LOGO_BOX_MM / 2;
 
               const sectionBottomLimitMm = sectionH - bottomPadding;
               const currentMaxBottomMm = Math.max(fromBlockBottomMm, toBlockBottomMm, logoBottomMm);
@@ -851,8 +852,8 @@ export default function PdfSettingsPage() {
                     style={{
                       top: `${logoTopPct}%`,
                       transform: "translate(-50%, -50%)",
-                      width: `${(25 / A4_W_MM) * 100}%`,
-                      height: `${(25 / PDF_SECTION_H_MM) * 100}%`,
+                      width: `${(PDF_LOGO_BOX_MM / A4_W_MM) * 100}%`,
+                      height: `${(PDF_LOGO_BOX_MM / PDF_SECTION_H_MM) * 100}%`,
                     }}
                     onPointerDown={(e) => handlePreviewPointerDown(e, "logo")}
                   >
