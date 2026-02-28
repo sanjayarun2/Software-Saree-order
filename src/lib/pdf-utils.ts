@@ -625,6 +625,7 @@ function drawOrderLabel(
   doc: {
     setFont: (f: string, s: string) => void;
     setFontSize: (n: number) => void;
+    getTextWidth?: (s: string) => number;
     text: (s: string, x: number, y: number, o?: { align?: string }) => void;
     splitTextToSize: (s: string, w: number) => string[];
     setDrawColor: (r: number, g?: number, b?: number) => void;
@@ -666,11 +667,41 @@ function drawOrderLabel(
   const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
 
   const fromLines = getAddressLines(doc, fromSource, maxWFrom).slice(0, MAX_ADDRESS_LINES);
-  // For TO we compute width from its actual left text start to the right border so we use
-  // nearly the entire line up to the 4mm margin.
+  // For TO: use full width up to 4mm from right border. Each block is computed independently.
   const rightTextStart = rightColStart + ADDRESS_PADDING;
-  const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
-  const toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+  let maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
+  let toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+
+  const leftColRight = leftX + maxWFrom;
+  const minGapBetweenFromAndLogo = 7; // mm – never touch or overlap FROM and logo
+  const maxHorizontalShift = 12; // mm – use space after logo only when needed
+
+  // Horizontal shift only when TO text would overlap the 4mm margin (not always).
+  // Set font for width measurement, then check if any line is too close to the border.
+  let needHorizontalShift = false;
+  if (typeof doc.getTextWidth === "function") {
+    doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+    doc.setFontSize(addressSize);
+    let maxLineWidth = 0;
+    for (const line of toLines) {
+      const w = doc.getTextWidth(line);
+      if (w > maxLineWidth) maxLineWidth = w;
+    }
+    needHorizontalShift = maxLineWidth > maxWTo - 1; // overlap or within 1mm of border
+  }
+
+  if (needHorizontalShift) {
+    const maxShiftFromLeft =
+      centerX - (leftColRight + minGapBetweenFromAndLogo + LOGO_MAX_W_MM / 2);
+    const safeShift = Math.max(0, Math.min(maxHorizontalShift, maxShiftFromLeft));
+    if (safeShift > 0) {
+      centerX -= safeShift;
+      rightColStartShifted -= safeShift;
+      const rightTextStartNew = rightColStartShifted + ADDRESS_PADDING;
+      maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStartNew;
+      toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+    }
+  }
 
   // Placement for logo / center block
   const placement = options.settings?.placement ?? "bottom";
@@ -682,14 +713,13 @@ function drawOrderLabel(
         ? sectionTop + 28
         : sectionTop + SECTION_H - 28;
 
-  // Vertical auto-shift to avoid clipping at the bottom of the section
+  // Vertical auto-shift per block: so this section's FROM/TO/logo stay inside bottom border
   const topPadding = VERTICAL_OFFSET;
   const bottomPadding = VERTICAL_OFFSET;
 
   let fromY = fromYBase;
   let toY = toYBase;
 
-  // Initial positions
   let labelYFrom = sectionTop + fromY;
   let addressStartYFrom = sectionTop + fromY + labelToAddressGap;
   let labelYTo = sectionTop + toY;
@@ -711,28 +741,11 @@ function drawOrderLabel(
     thanksCenterY -= shiftUp;
   }
 
-  // Recompute baselines after any vertical shift
+  // Recompute baselines after vertical shift
   labelYFrom = sectionTop + fromY;
   addressStartYFrom = sectionTop + fromY + labelToAddressGap;
   labelYTo = sectionTop + toY;
   addressStartYTo = sectionTop + toY + labelToAddressGap;
-
-  // Horizontal auto-shift: when TO is long, slide logo + TO a little left but never touch FROM or borders
-  let rightColEnd = rightColEndBase;
-  const leftColRight = leftX + maxWFrom;
-  const minGapBetweenFromAndLogo = 7; // mm – keep a clear visual gap between FROM text and centre logo
-
-  if (toLines.length > 4) {
-    // Horizontal tweak (up to 12mm) so TO can move noticeably left when very tall,
-    // but still never collide with FROM or cross the 4mm border margins.
-    const desiredShift = 12; // mm – upper bound, real shift is clamped below
-    const maxShiftFromLeft =
-      centerX - (leftColRight + minGapBetweenFromAndLogo + LOGO_MAX_W_MM / 2);
-    const safeShift = Math.max(0, Math.min(desiredShift, maxShiftFromLeft));
-    centerX -= safeShift;
-    rightColStartShifted -= safeShift;
-    rightColEnd -= safeShift;
-  }
 
   // FROM — left column (uses settings: text_size, text_bold)
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");

@@ -49,11 +49,11 @@ export default function SettingsPage() {
           </h1>
         </header>
 
-        {/* One white card, 24px radius, single row: PDF Settings */}
-        <div className="overflow-hidden rounded-[24px] bg-[#FFFFFF] shadow-sm dark:bg-white">
+        {/* One card, matching dashboard card style for dark mode consistency */}
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <Link
             href="/settings/pdf"
-            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-50 dark:active:bg-slate-100"
+            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
           >
             <PdfIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
             <span className="flex-1 text-base font-medium">PDF Settings</span>

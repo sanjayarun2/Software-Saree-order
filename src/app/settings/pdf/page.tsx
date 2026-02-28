@@ -52,6 +52,7 @@ const PDF_EDGE_SAFE_GAP_MM = 4;   // must match EDGE_SAFE_GAP in pdf-utils.ts
 const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
 const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
 const PDF_LOGO_BOX_MM = 25; // must match LOGO_MAX_W_MM / LOGO_MAX_H_MM in pdf-utils.ts
+const PDF_MAX_HORIZONTAL_SHIFT_MM = 12; // max shift when TO nears border (pdf-utils.ts)
 const PDF_FROM_X_MM = PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
 const PDF_TO_X_MM = PDF_MARGIN_MM + (PDF_COL_W_MM + PDF_MARGIN_MM) * 2 + PDF_ADDRESS_PADDING_MM;
 const MM_PER_PT = 25.4 / 72;
@@ -476,7 +477,7 @@ export default function PdfSettingsPage() {
         )}
 
         {/* Single card - app-consistent styling (matches dashboard cards) */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           {/* Row 1: Content Type */}
           <div className="flex min-h-[56px] items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700/80">
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -789,9 +790,17 @@ export default function PdfSettingsPage() {
               const topPadding = PDF_VERTICAL_OFFSET_MM;
               const bottomPadding = PDF_VERTICAL_OFFSET_MM;
 
-              // Approximate 4 address lines in preview samples
-              const fromLinesCount = 4;
-              const toLinesCount = 4;
+              const fromPreviewLines = previewFromText.split("\n");
+              const toPreviewLines = previewToText.split("\n");
+              const fromLinesCount = fromPreviewLines.length;
+              const toLinesCount = toPreviewLines.length;
+
+              // When TO has many lines, PDF shifts logo+TO left; preview mimics that (same max 12mm)
+              const previewShiftMm =
+                toLinesCount > 4 ? PDF_MAX_HORIZONTAL_SHIFT_MM : 0;
+              const toLeftPct =
+                ((PDF_TO_X_MM - previewShiftMm) / A4_W_MM) * 100;
+              const logoCenterPct = 50 - (previewShiftMm / A4_W_MM) * 100;
 
               let simFromY = fromYmm;
               let simToY = toYmm;
@@ -865,16 +874,17 @@ export default function PdfSettingsPage() {
                     </p>
                   </div>
 
-                  {/* Center: Logo (same square box + zoom as PDF) or Custom text */}
+                  {/* Center: Logo (same square box + zoom as PDF) or Custom text; shifts left when TO is long */}
                   <div
                     role="button"
                     tabIndex={0}
                     data-target="logo"
-                    className={`absolute left-1/2 flex cursor-grab select-none items-center justify-center overflow-hidden transition-shadow ${
+                    className={`absolute flex cursor-grab select-none items-center justify-center overflow-hidden transition-shadow ${
                       selectedTarget === "logo" ? "ring-2 ring-primary-500/60" : ""
                     }`}
                     style={{
                       top: `${logoTopPct}%`,
+                      left: `${logoCenterPct}%`,
                       transform: "translate(-50%, -50%)",
                       width: `${(PDF_LOGO_BOX_MM / A4_W_MM) * 100}%`,
                       height: `${(PDF_LOGO_BOX_MM / PDF_SECTION_H_MM) * 100}%`,
@@ -906,7 +916,7 @@ export default function PdfSettingsPage() {
                     )}
                   </div>
 
-                  {/* To Address (right side): uses settings textSize + textBold so preview matches PDF */}
+                  {/* To Address (right side): shifts left when many lines, synced with PDF */}
                   <div
                     role="button"
                     tabIndex={0}
@@ -916,7 +926,7 @@ export default function PdfSettingsPage() {
                     }`}
                     style={{
                       top: `${toTopPct}%`,
-                      left: `${(PDF_TO_X_MM / A4_W_MM) * 100}%`,
+                      left: `${toLeftPct}%`,
                       width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
                     }}
                     onPointerDown={(e) => handlePreviewPointerDown(e, "to")}

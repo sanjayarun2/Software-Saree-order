@@ -4,6 +4,8 @@ export type DashboardDatePeriod =
   | "this_week"
   | "last_week"
   | "month"
+  | "last_month"
+  | "quarter"
   | "year"
   | "custom";
 
@@ -76,6 +78,22 @@ export function getDashboardDateRange(
       to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
       to.setHours(23, 59, 59, 999);
       label = from.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      break;
+    }
+    case "last_month": {
+      from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      to = new Date(today.getFullYear(), today.getMonth(), 0);
+      to.setHours(23, 59, 59, 999);
+      label = from.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      break;
+    }
+    case "quarter": {
+      const qMonth = Math.floor(today.getMonth() / 3) * 3;
+      from = new Date(today.getFullYear(), qMonth, 1);
+      to = new Date(today);
+      to.setHours(23, 59, 59, 999);
+      const qNum = Math.floor(qMonth / 3) + 1;
+      label = `Q${qNum} ${today.getFullYear()}`;
       break;
     }
     case "year": {
