@@ -504,8 +504,11 @@ const LINE_HEIGHT_ADDRESS = 6; // matches SIZE_ADDRESS for clean print
 const MAX_ADDRESS_LINES = 7;
 
 // Layout spacing
-const ADDRESS_PADDING = 3;   // base horizontal padding from column edges
-const EDGE_SAFE_GAP = 6;     // extra gap from column edge so text never visually hugs border
+// ADDRESS_PADDING = distance from vertical border line to start of text inside a column.
+// EDGE_SAFE_GAP   = extra gap from the *other* side so text stays away from the opposite border.
+// With both set to 4mm, FROM/TO text always has a 4mm margin from left *and* right borders.
+const ADDRESS_PADDING = 4;   // 4mm from column border to text start
+const EDGE_SAFE_GAP = 4;     // 4mm from text end to opposite border
 const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
 const THANKS_LINE_GAP = 3;   // slightly increased gap between center lines
 
@@ -532,7 +535,7 @@ function getAddressLinesPreserve(text: string): string[] {
 }
 
 /** Normalize a free-form WhatsApp-style address into a tidy block (Name, door/street, area/city, state+PIN, phone). */
-function normalizeAddressBlock(text: string): string {
+export function normalizeAddressBlock(text: string): string {
   const raw = text || "";
   const lines = raw
     .replace(/\r\n/g, "\n")

@@ -15,6 +15,7 @@ import {
   type PdfContentType,
   type PdfPlacement,
 } from "@/lib/pdf-settings-supabase";
+import { normalizeAddressBlock } from "@/lib/pdf-utils";
 import {
   pickLogoImageNative,
   useNativeLogoPicker,
@@ -45,8 +46,9 @@ function clampNum(v: number | null | undefined, min: number, max: number, def: n
 const A4_W_MM = 210;
 const PDF_MARGIN_MM = 10;
 const PDF_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
-const PDF_ADDRESS_PADDING_MM = 3;
-const PDF_EDGE_SAFE_GAP_MM = 6; // must match EDGE_SAFE_GAP in pdf-utils.ts
+// 4mm margin from the section border on both left and right, matching PDF engine.
+const PDF_ADDRESS_PADDING_MM = 4; // must match ADDRESS_PADDING in pdf-utils.ts
+const PDF_EDGE_SAFE_GAP_MM = 4;   // must match EDGE_SAFE_GAP in pdf-utils.ts
 const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
 const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
 const PDF_LOGO_BOX_MM = 25; // must match LOGO_MAX_W_MM / LOGO_MAX_H_MM in pdf-utils.ts
@@ -100,6 +102,14 @@ export default function PdfSettingsPage() {
   const dragStartYRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingYRef = useRef<{ logo?: number; from?: number; to?: number } | null>(null);
+
+  // Sample addresses used in live preview; when "Formalize address" is ON we run them through
+  // the same normalizeAddressBlock function that PDF generation uses so behaviour matches.
+  const previewFromRaw = "Global Tech Solutions\n123   Innovation   Drive,\nSilicon  Valley ,  CA   94043.\nPh:   +1  555 123 4567";
+  const previewToRaw =
+    "Anthony   Raj,\nNo.  45, Park View   Apartments,\nChennai ,   Tamil  Nadu  600001.\nPh: +91   98765  43210";
+  const previewFromText = normalizeAddresses ? normalizeAddressBlock(previewFromRaw) : previewFromRaw;
+  const previewToText = normalizeAddresses ? normalizeAddressBlock(previewToRaw) : previewToRaw;
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -845,7 +855,12 @@ export default function PdfSettingsPage() {
                         marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
                       }}
                     >
-                      Global Tech Solutions,<br />123 Innovation Drive,<br />Silicon Valley, CA 94043.<br />Ph: +1 555 123 4567
+                      {previewFromText.split("\n").map((line, idx) => (
+                        <span key={idx}>
+                          {line}
+                          {idx < previewFromText.split("\n").length - 1 && <br />}
+                        </span>
+                      ))}
                     </p>
                   </div>
 
@@ -919,7 +934,12 @@ export default function PdfSettingsPage() {
                         marginTop: `${scaledAddressGapPx - scaledAddressLineHeightPx}px`,
                       }}
                     >
-                      Anthony Raj,<br />No. 45, Park View Apartments,<br />Chennai, TN 600001.<br />Ph: +91 98765 43210
+                      {previewToText.split("\n").map((line, idx) => (
+                        <span key={idx}>
+                          {line}
+                          {idx < previewToText.split("\n").length - 1 && <br />}
+                        </span>
+                      ))}
                     </p>
                   </div>
                 </>
