@@ -910,7 +910,7 @@ export default function PdfSettingsPage() {
                       >
                         <img
                           key={logoPath ?? "reference"}
-                          src={logoPreviewUrl ?? "/reference-logo.png"}
+                          src={logoPreviewUrl ?? "/logo2.png"}
                           alt=""
                           className="h-full w-full object-contain object-center"
                           draggable={false}

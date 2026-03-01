@@ -279,22 +279,39 @@ async function registerFileWithSystem(path: string): Promise<string | null> {
   }
 }
 
-/** Load default thank-you logo from public folder; returns base64 data URL or null. */
+/** Default logo filenames in public folder (try in order for robustness). */
+const DEFAULT_LOGO_PATHS = ["/logo2.png", "/logo.png"];
+
+/** Load default logo from public folder; returns base64 data URL or null. Tries multiple paths and full URL for all devices/OS. */
 async function loadDefaultLogoBase64(): Promise<string | null> {
   if (typeof window === "undefined") return null;
-  try {
-    const res = await fetch("/thank-you-purchase-logo.png");
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return await new Promise<string | null>((resolve) => {
-      const r = new FileReader();
-      r.onloadend = () => resolve(typeof r.result === "string" ? r.result : null);
-      r.onerror = () => resolve(null);
-      r.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  const tryFetch = async (url: string): Promise<string | null> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string | null>((resolve) => {
+        const r = new FileReader();
+        r.onloadend = () => resolve(typeof r.result === "string" ? r.result : null);
+        r.onerror = () => resolve(null);
+        r.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  for (const path of DEFAULT_LOGO_PATHS) {
+    const fromRoot = await tryFetch(path);
+    if (fromRoot) return fromRoot;
+    if (origin) {
+      const fromOrigin = await tryFetch(origin + path);
+      if (fromOrigin) return fromOrigin;
+    }
   }
+  return null;
 }
 
 /** Returns width/height ratio of a base64 image (browser only). */
