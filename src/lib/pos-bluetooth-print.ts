@@ -310,16 +310,9 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
     addPrinterLog("printers.scan", "Scan flow started");
     const plugin = await loadPluginRobust();
     addPrinterLog("printers.scan", "Plugin loaded");
-    const { result: isEnabled } = await withTimeout(
-      plugin.bluetoothIsEnabled(),
-      5000,
-      "Checking Bluetooth status"
-    );
-    addPrinterLog("printers.scan", "Bluetooth status checked", { isEnabled });
-    if (!isEnabled) {
-      addPrinterLog("printers.scan", "Bluetooth is OFF", undefined, "error");
-      return { success: false, printers: [], error: "Bluetooth is turned off." };
-    }
+    // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
+    // listPrinters() in the native plugin already validates Bluetooth state.
+    addPrinterLog("printers.scan", "Skipping bluetoothIsEnabled pre-check");
     addPrinterLog("printers.scan", "Starting printer discovery");
     const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
     const printers = normalizePrinters(printersObj as Record<string, PrinterInfoLike>).map((p) => ({
@@ -358,15 +351,8 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
   }
   try {
     const plugin = await loadPluginRobust();
-    const { result: isEnabled } = await withTimeout(
-      plugin.bluetoothIsEnabled(),
-      5000,
-      "Checking Bluetooth status"
-    );
-    if (!isEnabled) {
-      addPrinterLog("printer.test", "Bluetooth is OFF", undefined, "error");
-      return { success: false, error: "Bluetooth is turned off." };
-    }
+    // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
+    addPrinterLog("printer.test", "Skipping bluetoothIsEnabled pre-check");
 
     const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
     const printerEntries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
@@ -448,17 +434,8 @@ export async function printOrdersViaBluetooth(
 
   try {
     const plugin = await loadPluginRobust();
-
-    const { result: isEnabled } = await withTimeout(
-      plugin.bluetoothIsEnabled(), 5000, "Checking Bluetooth status"
-    );
-    if (!isEnabled) {
-      addPrinterLog("orders.print", "Bluetooth is OFF", undefined, "error");
-      return {
-        success: false,
-        error: "Bluetooth is turned off. Please enable Bluetooth on your device.",
-      };
-    }
+    // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
+    addPrinterLog("orders.print", "Skipping bluetoothIsEnabled pre-check");
 
     const printers = await discoverBluetoothPrintersWithPermission(plugin);
     const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
