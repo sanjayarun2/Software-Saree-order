@@ -20,11 +20,13 @@ const A4_MARGIN = 10;
 const SECTION_H = 74.25; // 297 / 4
 const COL_W = (A4_W - A4_MARGIN * 4) / 3; // ≈56.67mm
 
-// POS page: rotated A4 section at 1:1 scale (no distortion).
-// Width  = A4 section height (74.25mm) → fits within 80mm POS paper
-// Height = A4 section content width (190mm) + top/bottom margins
-const POS_PAGE_W = SECTION_H; // 74.25mm — the "vertical" dimension of an A4 block
-const POS_PAGE_H = A4_W - 2 * A4_MARGIN + 2 * A4_MARGIN; // 210mm — room for 190mm content + margins
+// POS page sized to fit one rotated A4 section at 1:1 (no font distortion).
+// POS width  = SECTION_H = 74.25mm (fits 80mm POS paper; A4 section's vertical
+//              dimension becomes the narrow horizontal dimension of the strip)
+// POS height = A4_W = 210mm (A4 section's full horizontal span becomes the
+//              long vertical dimension of the strip)
+const POS_PAGE_W = SECTION_H; // 74.25mm
+const POS_PAGE_H = A4_W;      // 210mm
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -115,20 +117,42 @@ async function getImageAspectRatio(base64: string): Promise<number | null> {
 
 // ─── POS label drawing ──────────────────────────────────────────────────────
 //
-// Strategy: use a 1:1 coordinate mapping (no scaling) so fonts/spacing are
-// identical to A4. The POS page is sized to exactly fit one rotated A4 section.
+// GOAL: Take one A4 address block and rotate it 90° clockwise onto POS paper
+// so when the strip is turned sideways, it reads: FROM | LOGO | TO
 //
-// In A4, each section is drawn with:
-//   • X-axis = horizontal (left→right): FROM col | Center col | TO col
-//   • Y-axis = vertical (top→bottom):   label → address lines
+// A4 block (normal orientation):
+//   ┌──────────────────────────────────────────────┐ ← sectionTop
+//   │  FROM:        [LOGO]           TO:           │
+//   │  addr...                       addr...       │
+//   │  ...                           ...           │
+//   └──────────────────────────────────────────────┘ ← sectionTop + 74.25
+//   ↑ x=10                                    x=200↑
 //
-// On POS paper (rotated 90° clockwise for horizontal pasting):
-//   • POS Y-axis (top→bottom) = A4 X-axis (FROM→Center→TO)
-//   • POS X-axis (left→right) = A4 Y-axis INVERTED (A4 bottom→top)
+// POS strip (rotated 90° CW — what jsPDF actually draws):
+//   ┌──74.25mm──┐
+//   │  TO:      │ ← top of strip (was RIGHT side of A4)
+//   │  addr...  │
+//   │           │
+//   │  [LOGO]   │ ← middle
+//   │           │
+//   │  FROM:    │
+//   │  addr...  │ ← bottom of strip (was LEFT side of A4)
+//   └───────────┘
+//     210mm tall
 //
-// So to rotate: posX = pageW - a4Y,  posY = a4X
-// With jsPDF angle:90, text at (posX, posY) flows downward = reads left-to-right
-// when the strip is turned sideways.
+// When you cut & rotate the strip 90° counter-clockwise to paste on parcel:
+//   FROM | LOGO | TO  (reads left-to-right ✓)
+//
+// COORDINATE MAPPING:
+//   A4 x (horizontal, 10→200) → POS y (vertical, 10→200, same direction)
+//     But REVERSED because we want FROM at bottom, TO at top:
+//     posY = POS_PAGE_H - a4X
+//   A4 y (vertical, 0→74.25, top of section to bottom) → POS x (horizontal)
+//     posX = a4Y  (same direction: A4 top → POS left)
+//
+// With jsPDF angle: 90, text at (posX, posY) renders characters going downward
+// from the anchor point. The anchor is the text baseline, so characters extend
+// ABOVE (to the left in POS-x). Each successive line should be at higher posX.
 
 function drawPosLabel(
   doc: jsPDF,
@@ -154,14 +178,13 @@ function drawPosLabel(
   const fromLines = getAddressLines(doc as any, fromSource, maxWFrom).slice(0, MAX_ADDRESS_LINES);
   const toLines = getAddressLines(doc as any, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
 
-  // ── A4-space positions (exactly as in drawOrderLabel) ──
-  // Horizontal column positions (A4 X-axis):
-  const a4LeftX = A4_MARGIN + ADDRESS_PADDING;                    // FROM text start = 14mm
-  const a4CenterColStart = A4_MARGIN + COL_W + A4_MARGIN;         // center column left edge
-  const a4CenterX = a4CenterColStart + COL_W / 2;                 // logo center ≈105mm
-  const a4RightX = A4_MARGIN + (COL_W + A4_MARGIN) * 2 + ADDRESS_PADDING; // TO text start
+  // ── A4-space column X positions (horizontal in A4) ──
+  const a4FromX = A4_MARGIN + ADDRESS_PADDING;                              // 14mm
+  const a4CenterColStart = A4_MARGIN + COL_W + A4_MARGIN;                   // ≈76.67mm
+  const a4CenterX = a4CenterColStart + COL_W / 2;                           // ≈105mm
+  const a4ToX = A4_MARGIN + (COL_W + A4_MARGIN) * 2 + ADDRESS_PADDING;      // ≈147.33mm
 
-  // Vertical positions (A4 Y-axis, relative to section top = 0):
+  // ── A4-space vertical Y positions (top-to-bottom within section) ──
   const fromYBase = options.settings?.from_y_mm != null
     ? clamp(options.settings.from_y_mm, 0, SECTION_H) : 27;
   const toYBase = options.settings?.to_y_mm != null
@@ -174,10 +197,10 @@ function drawPosLabel(
     ? logoYSetting
     : placement === "top" ? 28 : SECTION_H - 28;
 
-  // Vertical auto-shift (same as A4)
   let fromY = fromYBase;
   let toY = toYBase;
 
+  // Vertical auto-shift
   const fromBlockBottom = fromY + labelToAddressGap + (fromLines.length > 0 ? (fromLines.length - 1) * lineHeightMm : 0);
   const toBlockBottom = toY + labelToAddressGap + (toLines.length > 0 ? (toLines.length - 1) * lineHeightMm : 0);
   const logoBottom = thanksCenterA4Y + LOGO_MAX_H_MM / 2;
@@ -191,44 +214,50 @@ function drawPosLabel(
     thanksCenterA4Y -= shiftUp;
   }
 
-  // ── Coordinate transform: A4 → POS (1:1, no scaling) ──
-  // posX = POS_PAGE_W - a4Y   (A4 vertical flipped to POS horizontal)
-  // posY = a4X                 (A4 horizontal to POS vertical)
-  // The A4 section left border is at A4_MARGIN (10mm). We map that to posY = A4_MARGIN.
-  const px = (a4Y: number) => POS_PAGE_W - a4Y;
-  const py = (a4X: number) => a4X;
+  // ── Coordinate transform ──
+  // posY: A4 x → POS y, REVERSED so FROM (left in A4) is at bottom of strip
+  //       and TO (right in A4) is at top of strip
+  const posY = (a4X: number) => POS_PAGE_H - a4X;
+  // posX: A4 y → POS x, same direction (A4 section-top → POS left edge)
+  //       With angle:90, text flows downward from anchor. Each new address line
+  //       is further "down" in A4 (higher a4Y), so posX increases → moves right.
+  const posX = (a4Y: number) => a4Y;
 
   // ── Draw border ──
-  const borderL = 0;
-  const borderR = POS_PAGE_W;
-  const borderT = A4_MARGIN;
-  const borderB = POS_PAGE_H - A4_MARGIN;
-
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.3);
   doc.setLineDashPattern([], 0);
-  doc.line(borderL, borderT, borderL, borderB);
-  doc.line(borderL, borderT, borderR, borderT);
-  doc.line(borderR, borderT, borderR, borderB);
+  // Left border at x=0
+  doc.line(0, A4_MARGIN, 0, POS_PAGE_H - A4_MARGIN);
+  // Top border
+  doc.line(0, A4_MARGIN, POS_PAGE_W, A4_MARGIN);
+  // Right border at x=SECTION_H
+  doc.line(POS_PAGE_W, A4_MARGIN, POS_PAGE_W, POS_PAGE_H - A4_MARGIN);
+  // Bottom dashed (cut line)
   doc.setLineDashPattern([2, 2], 0);
-  doc.line(borderL, borderB, borderR, borderB);
+  doc.line(0, POS_PAGE_H - A4_MARGIN, POS_PAGE_W, POS_PAGE_H - A4_MARGIN);
   doc.setLineDashPattern([], 0);
 
-  // ── FROM ──
+  // ── FROM (left column in A4 → bottom of POS strip) ──
+  const fromAnchorX = posX(fromY);
+  const fromAnchorY = posY(a4FromX);
+
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
-  doc.text("FROM:", px(fromY), py(a4LeftX), { angle: 90 });
+  doc.text("FROM:", fromAnchorX, fromAnchorY, { angle: 90 });
 
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSize);
   fromLines.forEach((line, i) => {
-    doc.text(line, px(fromY + labelToAddressGap + i * lineHeightMm), py(a4LeftX), { angle: 90 });
+    doc.text(line, posX(fromY + labelToAddressGap + i * lineHeightMm), fromAnchorY, { angle: 90 });
   });
 
   // ── CENTRE (logo or text) ──
   const contentType = options.settings?.content_type ?? "logo";
   const customText = (options.settings?.custom_text ?? "").trim();
   const textSize = options.settings?.text_size ?? 15;
+
+  const logoCenterPosY = posY(a4CenterX);
 
   if (contentType === "text" && customText) {
     doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
@@ -239,7 +268,7 @@ function drawPosLabel(
     const totalH = lines.length * lh;
     lines.forEach((line: string, i: number) => {
       const lineA4Y = thanksCenterA4Y - totalH / 2 + i * lh;
-      doc.text(line, px(lineA4Y), py(a4CenterX), { angle: 90, align: "center" });
+      doc.text(line, posX(lineA4Y), logoCenterPosY, { angle: 90, align: "center" });
     });
   } else if (options.logoBase64) {
     const zoom = Math.max(0.5, Math.min(options.settings?.logo_zoom ?? 1, 2));
@@ -253,33 +282,35 @@ function drawPosLabel(
     const drawW = fitW * zoom;
     const drawH = fitH * zoom;
 
-    // In A4 space the logo is centered at (a4CenterX, thanksCenterA4Y).
-    // In POS space (rotated 90° CW):
-    //   The logo image needs to appear correctly when the strip is turned sideways.
-    //   addImage doesn't rotate, so we place it in POS coordinates where:
-    //   - POS X maps to A4 Y (inverted): logo center at px(thanksCenterA4Y)
-    //   - POS Y maps to A4 X: logo center at py(a4CenterX)
-    //   The A4 "width" of the logo (horizontal) becomes POS "height" (vertical)
-    //   The A4 "height" of the logo (vertical) becomes POS "width" (horizontal)
-    const imgPosX = px(thanksCenterA4Y) - drawH / 2;
-    const imgPosY = py(a4CenterX) - drawW / 2;
+    // Logo addImage doesn't rotate. In POS coordinates:
+    // A4 logo horizontal center (a4CenterX) → POS vertical center (posY)
+    // A4 logo vertical center (thanksCenterA4Y) → POS horizontal center (posX)
+    // A4 logo width (horizontal span) maps to POS height (vertical span)
+    // A4 logo height (vertical span) maps to POS width (horizontal span)
+    const imgCenterPosX = posX(thanksCenterA4Y);
+    const imgCenterPosY = logoCenterPosY;
+    const imgX = imgCenterPosX - drawH / 2;
+    const imgY = imgCenterPosY - drawW / 2;
 
     try {
-      doc.addImage(options.logoBase64, "PNG", imgPosX, imgPosY, drawH, drawW);
+      doc.addImage(options.logoBase64, "PNG", imgX, imgY, drawH, drawW);
     } catch {
       // Logo render failed; skip
     }
   }
 
-  // ── TO ──
+  // ── TO (right column in A4 → top of POS strip) ──
+  const toAnchorX = posX(toY);
+  const toAnchorY = posY(a4ToX);
+
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
-  doc.text("TO:", px(toY), py(a4RightX), { angle: 90 });
+  doc.text("TO:", toAnchorX, toAnchorY, { angle: 90 });
 
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSize);
   toLines.forEach((line, i) => {
-    doc.text(line, px(toY + labelToAddressGap + i * lineHeightMm), py(a4RightX), { angle: 90 });
+    doc.text(line, posX(toY + labelToAddressGap + i * lineHeightMm), toAnchorY, { angle: 90 });
   });
 }
 
