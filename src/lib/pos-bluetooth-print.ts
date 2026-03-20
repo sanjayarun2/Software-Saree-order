@@ -22,8 +22,13 @@ const PLUGIN_LOAD_TIMEOUT_MS = 20_000; // slow/cold Android starts can exceed 5s
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
 const PRINT_DISPATCH_GRACE_MS = 3_500;
+const POS_ADDRESS_LINE_FEED_MM = "6"; // mirror A4 address line height (SIZE_ADDRESS(12) * 0.5 = 6mm)
+const PRINTER_CHARS_PER_LINE = 32; // plugin uses printerNbrCharactersPerLine=32 by default
 const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
 const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
+const AGENT_DEBUG_INGEST_URL =
+  "http://127.0.0.1:7242/ingest/ee5546e0-5de3-43aa-a6c6-7022a2b471d7";
+const AGENT_RUN_ID = `pos_match_pre_${Date.now()}`;
 
 type PrinterInfoLike = {
   address?: string;
@@ -220,7 +225,7 @@ async function printWithVariants(
         type,
         id,
         text,
-        mmFeedPaper: "20",
+        mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
         initializeBeforeSend: true,
         sendDelay: "30",
         chunkSize: "512",
@@ -230,7 +235,7 @@ async function printWithVariants(
         id,
         text,
         address: printer.address || undefined,
-        mmFeedPaper: "20",
+        mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
         initializeBeforeSend: true,
         useEscPosAsterik: true,
         sendDelay: "60",
@@ -249,6 +254,34 @@ async function printWithVariants(
         chunkSize: payload.chunkSize,
         useEscPosAsterik: payload.useEscPosAsterik ?? false,
       });
+
+      // #region agent log POS print payload
+      fetch(AGENT_DEBUG_INGEST_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "9bc241",
+        },
+        body: JSON.stringify({
+          sessionId: "9bc241",
+          runId: AGENT_RUN_ID,
+          hypothesisId: "C_pos_mmfeed_variant",
+          location: "src/lib/pos-bluetooth-print.ts",
+          message: "Trying printFormattedText payload",
+          data: {
+            printerKey: printer.key,
+            printerAddress: printer.address,
+            variantId: payload.id,
+            type: payload.type,
+            mmFeedPaper: payload.mmFeedPaper,
+            sendDelay: payload.sendDelay,
+            chunkSize: payload.chunkSize,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
       await dispatchPrint(plugin, payload);
       addPrinterLog("print.variant", "Print payload succeeded", {
         id: payload.id,
@@ -397,26 +430,78 @@ function formatOrderForEscPos(order: Order, normalize: boolean): string {
   const to = normalize ? normalizeAddressBlock(rawTo) : rawTo;
 
   const SEPARATOR = "--------------------------------";
+
+  // Wrap each normalized address line to the printer width so it matches PDF wrapping better.
+  const wrapLine = (s: string): string => {
+    const words = (s || "").trim().split(/\s+/g).filter(Boolean);
+    if (words.length <= 1) {
+      const str = (s || "").trim();
+      return str.length > PRINTER_CHARS_PER_LINE
+        ? str.match(new RegExp(`.{1,${PRINTER_CHARS_PER_LINE}}`, "g"))?.join("\n") ?? str
+        : str;
+    }
+    const out: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (next.length > PRINTER_CHARS_PER_LINE) {
+        if (cur) out.push(cur);
+        cur = w;
+      } else {
+        cur = next;
+      }
+    }
+    if (cur) out.push(cur);
+    return out.join("\n");
+  };
+
+  const wrappedFrom = (from || "").split("\n").map((l) => wrapLine(l)).join("\n");
+  const wrappedTo = (to || "").split("\n").map((l) => wrapLine(l)).join("\n");
+
+  // POS PDF address block is only: FROM | logo/text | TO
+  // So for POS Bluetooth printing we keep the same: remove courier/qty and print a centered logo placeholder.
   const lines: string[] = [
     SEPARATOR,
-    "[C]<b>FROM:</b>",
-    `[L]${from.replace(/\n/g, "\n[L]")}`,
+    "[L]<b>FROM:</b>",
+    `[L]${wrappedFrom.replace(/\n/g, "\n[L]")}`,
+    "",
+    "[C]Thank you for your purchase",
+    "[C]Warm wishes from Saree Orders",
     "",
     SEPARATOR,
-    "[C]<b>TO:</b>",
-    `[L]${to.replace(/\n/g, "\n[L]")}`,
+    "[L]<b>TO:</b>",
+    `[L]${wrappedTo.replace(/\n/g, "\n[L]")}`,
     "",
     SEPARATOR,
+    "",
   ];
 
-  if (order.courier_name) {
-    lines.push(`[L]Courier: ${order.courier_name}`);
-  }
-  if (order.quantity) {
-    lines.push(`[L]Qty: ${order.quantity}`);
-  }
-  lines.push(SEPARATOR);
-  lines.push(""); // feed
+  // #region agent log POS formatted text
+  fetch(AGENT_DEBUG_INGEST_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "9bc241",
+    },
+    body: JSON.stringify({
+      sessionId: "9bc241",
+      runId: AGENT_RUN_ID,
+      hypothesisId: "B_pos_text_layout",
+      location: "src/lib/pos-bluetooth-print.ts",
+      message: "Built POS formatted text for one order",
+      data: {
+        normalize,
+        rawFromLen: rawFrom.length,
+        rawToLen: rawTo.length,
+        normalizedFromLineCount: (from || "").split("\n").filter(Boolean).length,
+        normalizedToLineCount: (to || "").split("\n").filter(Boolean).length,
+        formattedLineCount: lines.length,
+        sampleFirstLines: lines.slice(0, 4).join(" | ").slice(0, 220),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   return lines.join("\n");
 }
@@ -464,6 +549,31 @@ export async function printOrdersViaBluetooth(
       type: printer.type,
       orders: orders.length,
     });
+
+    // #region agent log POS selected printer
+    fetch(AGENT_DEBUG_INGEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "9bc241",
+      },
+      body: JSON.stringify({
+        sessionId: "9bc241",
+        runId: AGENT_RUN_ID,
+        hypothesisId: "A_pos_printer_selection",
+        location: "src/lib/pos-bluetooth-print.ts",
+        message: "Selected printer for POS print",
+        data: {
+          printerKey: printer.key,
+          printerName: printer.name,
+          printerAddress: printer.address,
+          bondState: printer.bondState,
+          ordersCount: orders.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     for (const order of orders) {
       const text = formatOrderForEscPos(order, normalize);
