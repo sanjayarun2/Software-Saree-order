@@ -360,6 +360,92 @@ async function dispatchPdfPrint(
   if (resolved) return;
 }
 
+async function printPdfWithVariants(
+  plugin: typeof ESCPOSPlugin,
+  printer: PrinterCandidate,
+  pdfBase64: string
+): Promise<void> {
+  const idCandidates = ["first", printer.key, printer.address, printer.name].filter(Boolean);
+  const uniqueIds = Array.from(new Set(idCandidates));
+
+  const variants = uniqueIds.flatMap((id) => [
+    {
+      type: "bluetooth", // force plugin transport type; scanned `type` can be numeric like "3"
+      id,
+      address: printer.address || undefined,
+      pdfBase64,
+      mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
+      initializeBeforeSend: true,
+      sendDelay: "40",
+      chunkSize: "512",
+      printerDpi: 203,
+      printerWidthMM: 72,
+      printerNbrCharactersPerLine: 48,
+    },
+    {
+      type: "bluetooth",
+      id,
+      pdfBase64,
+      mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
+      initializeBeforeSend: true,
+      useEscPosAsterik: true,
+      sendDelay: "60",
+      chunkSize: "256",
+      printerDpi: 203,
+      printerWidthMM: 72,
+      printerNbrCharactersPerLine: 48,
+    },
+  ]);
+
+  let lastError: unknown = null;
+  for (const payload of variants) {
+    try {
+      addPrinterLog("print.pdf.variant", "Trying PDF print payload", {
+        id: payload.id,
+        type: payload.type,
+        address: payload.address ?? null,
+        sendDelay: payload.sendDelay,
+        chunkSize: payload.chunkSize,
+        useEscPosAsterik: payload.useEscPosAsterik ?? false,
+      });
+
+      // #region agent log PDF variant attempt
+      fetch(AGENT_DEBUG_INGEST_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
+        body: JSON.stringify({
+          sessionId: "9bc241",
+          runId: AGENT_RUN_ID,
+          hypothesisId: "F_pdf_variant_fallback",
+          location: "src/lib/pos-bluetooth-print.ts",
+          message: "Trying printPdfBase64 variant",
+          data: {
+            id: payload.id,
+            type: payload.type,
+            address: payload.address ?? null,
+            sendDelay: payload.sendDelay,
+            chunkSize: payload.chunkSize,
+            useEscPosAsterik: payload.useEscPosAsterik ?? false,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
+      await dispatchPdfPrint(plugin, payload);
+      addPrinterLog("print.pdf.variant", "PDF print payload succeeded", {
+        id: payload.id,
+        type: payload.type,
+      });
+      return;
+    } catch (e) {
+      lastError = e;
+      addPrinterLog("print.pdf.variant", "PDF print payload failed", String(e), "error");
+    }
+  }
+  throw lastError ?? new Error("All PDF print variants failed");
+}
+
 export async function listBluetoothPrinters(): Promise<{ success: boolean; printers: SavedPosPrinter[]; error?: string }> {
   if (!Capacitor.isNativePlatform()) {
     addPrinterLog("printers.scan", "Not native platform", undefined, "error");
@@ -672,20 +758,13 @@ export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<Pri
     if (!printer) {
       return { success: false, error: "No usable Bluetooth printer found." };
     }
-
-    const payload = {
-      type: printer.type || "bluetooth",
-      id: printer.key || printer.address || "first",
-      address: printer.address || undefined,
-      pdfBase64,
-      mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
-      initializeBeforeSend: true,
-      sendDelay: "40",
-      chunkSize: "512",
-      printerDpi: 203,
-      printerWidthMM: 72,
-      printerNbrCharactersPerLine: 48,
-    };
+    if (typeof (plugin as any).printPdfBase64 !== "function") {
+      return {
+        success: false,
+        error:
+          "Printer plugin not updated in this build. Please install the latest APK with native plugin patch.",
+      };
+    }
 
     // #region agent log PDF direct print payload
     fetch(AGENT_DEBUG_INGEST_URL, {
@@ -701,17 +780,16 @@ export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<Pri
           printerKey: printer.key,
           printerName: printer.name,
           printerAddress: printer.address,
-          payloadType: payload.type,
-          payloadId: payload.id,
-          printerWidthMM: payload.printerWidthMM,
-          printerDpi: payload.printerDpi,
+          forcedTransportType: "bluetooth",
+          pluginMethodPresent: typeof (plugin as any).printPdfBase64 === "function",
+          idCandidates: ["first", printer.key, printer.address, printer.name].filter(Boolean),
         },
         timestamp: Date.now(),
       }),
     }).catch(() => {});
     // #endregion
 
-    await dispatchPdfPrint(plugin, payload);
+    await printPdfWithVariants(plugin, printer, pdfBase64);
     return { success: true };
   } catch (e: any) {
     const msg = e?.message ?? String(e);
