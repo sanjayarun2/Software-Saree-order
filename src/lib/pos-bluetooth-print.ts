@@ -25,33 +25,6 @@ const PRINT_DISPATCH_GRACE_MS = 3_500;
 const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
 const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
 
-function emitRuntimeDebug(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data?: unknown
-) {
-  // #region agent log
-  fetch("http://127.0.0.1:7242/ingest/ee5546e0-5de3-43aa-a6c6-7022a2b471d7", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "9bc241",
-    },
-    body: JSON.stringify({
-      sessionId: "9bc241",
-      runId,
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 type PrinterInfoLike = {
   address?: string;
   name?: string;
@@ -163,7 +136,6 @@ async function discoverBluetoothPrintersWithPermission(
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       addPrinterLog("printers.scan", `Scan attempt ${attempt} started`);
-      emitRuntimeDebug("scan", "H1", "pos-bluetooth-print.ts:discoverBluetoothPrintersWithPermission", "scan attempt started", { attempt });
       // If permission is missing, plugin asks permission internally and may reject once.
       // Retry once after short wait so scan succeeds right after user grants it.
       const printersObj = await withTimeout(
@@ -172,13 +144,11 @@ async function discoverBluetoothPrintersWithPermission(
         "Searching for printers"
       );
       addPrinterLog("printers.scan", `Scan attempt ${attempt} success`);
-      emitRuntimeDebug("scan", "H1", "pos-bluetooth-print.ts:discoverBluetoothPrintersWithPermission", "scan attempt success", { attempt, keys: Object.keys((printersObj as Record<string, unknown>) || {}) });
       return printersObj as Record<string, PrinterInfoLike>;
     } catch (e: any) {
       lastErr = e;
       const msg = e?.message ?? String(e);
       addPrinterLog("printers.scan", `Scan attempt ${attempt} failed`, msg, "error");
-      emitRuntimeDebug("scan", "H1", "pos-bluetooth-print.ts:discoverBluetoothPrintersWithPermission", "scan attempt failed", { attempt, msg });
       if (!isPermissionError(msg) || attempt === 2) break;
       await new Promise((r) => setTimeout(r, 1400));
     }
@@ -270,10 +240,6 @@ async function printWithVariants(
   );
 
   let lastError: unknown = null;
-  emitRuntimeDebug("test-print", "H2", "pos-bluetooth-print.ts:printWithVariants", "variants generated", {
-    printer: { key: printer.key, name: printer.name, address: printer.address, type: printer.type },
-    variantCount: variants.length,
-  });
   for (const payload of variants) {
     try {
       addPrinterLog("print.variant", "Trying print payload", {
@@ -288,19 +254,10 @@ async function printWithVariants(
         id: payload.id,
         type: payload.type,
       });
-      emitRuntimeDebug("test-print", "H2", "pos-bluetooth-print.ts:printWithVariants", "variant success", {
-        id: payload.id,
-        type: payload.type,
-      });
       return;
     } catch (e) {
       lastError = e;
       addPrinterLog("print.variant", "Print payload failed", String(e), "error");
-      emitRuntimeDebug("test-print", "H2", "pos-bluetooth-print.ts:printWithVariants", "variant failed", {
-        id: payload.id,
-        type: payload.type,
-        err: String(e),
-      });
     }
   }
   throw lastError ?? new Error("All print variants failed");
@@ -335,17 +292,14 @@ async function dispatchPrint(
 
   if (rejectedError) {
     addPrinterLog("print.dispatch", "Plugin rejected print", String(rejectedError), "error");
-    emitRuntimeDebug("test-print", "H3", "pos-bluetooth-print.ts:dispatchPrint", "plugin rejected", { err: String(rejectedError), id: payload.id, type: payload.type });
     throw rejectedError;
   }
   if (resolved) {
     addPrinterLog("print.dispatch", "Plugin resolved print");
-    emitRuntimeDebug("test-print", "H3", "pos-bluetooth-print.ts:dispatchPrint", "plugin resolved", { id: payload.id, type: payload.type });
     return;
   }
   // If still pending after grace and no rejection, treat as sent to printer.
   addPrinterLog("print.dispatch", "Plugin did not reject; treated as dispatched");
-  emitRuntimeDebug("test-print", "H3", "pos-bluetooth-print.ts:dispatchPrint", "plugin pending treated as dispatched", { id: payload.id, type: payload.type });
 }
 
 export async function listBluetoothPrinters(): Promise<{ success: boolean; printers: SavedPosPrinter[]; error?: string }> {
@@ -356,7 +310,6 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
   try {
     addPrinterLog("printers.scan", "Scan flow started");
     const { plugin } = await loadPluginRobust();
-    emitRuntimeDebug("scan", "H6", "pos-bluetooth-print.ts:listBluetoothPrinters", "plugin object received by caller");
     addPrinterLog("printers.scan", "Plugin loaded");
     // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
     // listPrinters() in the native plugin already validates Bluetooth state.
@@ -390,7 +343,6 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
 }
 
 export async function testSavedPosPrinter(): Promise<PrintResult> {
-  emitRuntimeDebug("test-print", "H4", "pos-bluetooth-print.ts:testSavedPosPrinter", "entered");
   if (!Capacitor.isNativePlatform()) {
     addPrinterLog("printer.test", "Not native platform", undefined, "error");
     return {
@@ -400,13 +352,10 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
   }
   try {
     const { plugin } = await loadPluginRobust();
-    emitRuntimeDebug("test-print", "H6", "pos-bluetooth-print.ts:testSavedPosPrinter", "plugin object received by caller");
-    emitRuntimeDebug("test-print", "H4", "pos-bluetooth-print.ts:testSavedPosPrinter", "plugin loaded");
     // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
     addPrinterLog("printer.test", "Skipping bluetoothIsEnabled pre-check");
 
     const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
-    emitRuntimeDebug("test-print", "H4", "pos-bluetooth-print.ts:testSavedPosPrinter", "discovery finished", { keys: Object.keys((printersObj as Record<string, unknown>) || {}) });
     const printerEntries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
     const printer = pickBestPrinter(printerEntries);
     if (!printer) {
@@ -414,13 +363,6 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
       return { success: false, error: "No usable Bluetooth printer found." };
     }
     addPrinterLog("printer.test", "Using printer", {
-      key: printer.key,
-      name: printer.name,
-      address: printer.address,
-      bondState: printer.bondState,
-      type: printer.type,
-    });
-    emitRuntimeDebug("test-print", "H5", "pos-bluetooth-print.ts:testSavedPosPrinter", "selected printer", {
       key: printer.key,
       name: printer.name,
       address: printer.address,
@@ -441,11 +383,9 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
 
     await printWithVariants(plugin, printer, testText);
     addPrinterLog("printer.test", "Test print sent");
-    emitRuntimeDebug("test-print", "H5", "pos-bluetooth-print.ts:testSavedPosPrinter", "test print sent");
     return { success: true };
   } catch (e: any) {
     addPrinterLog("printer.test", "Test print failed", e?.message ?? String(e), "error");
-    emitRuntimeDebug("test-print", "H5", "pos-bluetooth-print.ts:testSavedPosPrinter", "test print failed", { err: e?.message ?? String(e) });
     return { success: false, error: e?.message ?? String(e) };
   }
 }
@@ -495,7 +435,6 @@ export async function printOrdersViaBluetooth(
 
   try {
     const { plugin } = await loadPluginRobust();
-    emitRuntimeDebug("orders-print", "H6", "pos-bluetooth-print.ts:printOrdersViaBluetooth", "plugin object received by caller");
     // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
     addPrinterLog("orders.print", "Skipping bluetoothIsEnabled pre-check");
 
