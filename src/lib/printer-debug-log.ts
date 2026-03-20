@@ -25,7 +25,11 @@ function readLogs(): PrinterDebugEntry[] {
 
 function writeLogs(logs: PrinterDebugEntry[]): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(-MAX_LOGS)));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(-MAX_LOGS)));
+  } catch {
+    // Never break app flow because of logging/storage limits.
+  }
 }
 
 export function addPrinterLog(
@@ -34,15 +38,19 @@ export function addPrinterLog(
   data?: unknown,
   level: PrinterDebugLevel = "info"
 ): void {
-  const logs = readLogs();
-  logs.push({
-    ts: new Date().toISOString(),
-    level,
-    step,
-    message,
-    data,
-  });
-  writeLogs(logs);
+  try {
+    const logs = readLogs();
+    logs.push({
+      ts: new Date().toISOString(),
+      level,
+      step,
+      message,
+      data,
+    });
+    writeLogs(logs);
+  } catch {
+    // Logging should never throw.
+  }
 }
 
 export function getPrinterLogs(): PrinterDebugEntry[] {

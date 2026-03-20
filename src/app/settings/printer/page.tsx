@@ -27,6 +27,8 @@ export default function PrinterSetupPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [logs, setLogs] = useState<PrinterDebugEntry[]>([]);
+  const [manualName, setManualName] = useState("");
+  const [manualAddress, setManualAddress] = useState("");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -116,6 +118,28 @@ export default function PrinterSetupPage() {
     } catch {
       setError("Could not copy logs.");
     }
+  };
+
+  const saveManualPrinter = () => {
+    setError(null);
+    setInfo(null);
+    const address = manualAddress.trim();
+    if (!address) {
+      setError("Enter printer Bluetooth MAC address.");
+      return;
+    }
+    const manual: SavedPosPrinter = {
+      id: address,
+      address,
+      name: manualName.trim() || "Manual POS Printer",
+      type: "bluetooth",
+      driver: "escpos",
+    };
+    savePosPrinter(manual);
+    setSaved(manual);
+    setInfo(`Saved manual printer: ${manual.name} (${address})`);
+    setManualName("");
+    setManualAddress("");
   };
 
   if (loading) {
@@ -227,6 +251,36 @@ export default function PrinterSetupPage() {
             ))}
           </div>
         ) : null}
+
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manual Add (fallback)</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            If scan does not list your printer, enter MAC address from printer slip and save.
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <input
+              type="text"
+              value={manualName}
+              onChange={(e) => setManualName(e.target.value)}
+              placeholder="Printer name (optional)"
+              className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
+            />
+            <input
+              type="text"
+              value={manualAddress}
+              onChange={(e) => setManualAddress(e.target.value)}
+              placeholder="MAC address (e.g. 00:29:F3:4F:63:DA)"
+              className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={saveManualPrinter}
+            className="mt-3 min-h-[40px] rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+          >
+            Save Manual Printer
+          </button>
+        </div>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <div className="flex items-center justify-between gap-2 px-4 py-3">
