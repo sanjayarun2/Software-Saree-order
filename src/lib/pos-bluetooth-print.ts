@@ -15,6 +15,7 @@ export interface SavedPosPrinter {
 }
 
 const SAVED_PRINTER_KEY = "saree_pos_saved_printer_v1";
+const PLUGIN_LOAD_TIMEOUT_MS = 20_000; // slow/cold Android starts can exceed 5s
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
 const PRINT_DISPATCH_GRACE_MS = 3_500;
@@ -81,6 +82,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 async function getPlugin() {
   const { ESCPOSPlugin } = await import("@albgen/capacitor-escpos-plugin");
   return ESCPOSPlugin;
+}
+
+async function loadPluginRobust() {
+  // RawBT-like behavior: don't fail too early on first cold start.
+  // Try once, warm up bridge, then retry.
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const plugin = await withTimeout(getPlugin(), PLUGIN_LOAD_TIMEOUT_MS, "Loading print plugin");
+      try {
+        await withTimeout(plugin.echo({ value: "warmup" }), 5000, "Warming plugin");
+      } catch {
+        // warmup is best-effort
+      }
+      return plugin;
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+  throw lastErr ?? new Error("Failed to load print plugin");
 }
 
 function normalizePrinters(printers: Record<string, PrinterInfoLike>): PrinterCandidate[] {
@@ -219,7 +241,7 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
     return { success: false, printers: [], error: "Bluetooth printer setup is only available in Android app." };
   }
   try {
-    const plugin = await withTimeout(getPlugin(), 5000, "Loading print plugin");
+    const plugin = await loadPluginRobust();
     const { result: hasPerms } = await withTimeout(
       plugin.bluetoothHasPermissions(),
       5000,
@@ -296,7 +318,7 @@ export async function printOrdersViaBluetooth(
   }
 
   try {
-    const plugin = await withTimeout(getPlugin(), 5000, "Loading print plugin");
+    const plugin = await loadPluginRobust();
 
     const { result: hasPerms } = await withTimeout(
       plugin.bluetoothHasPermissions(), 5000, "Checking Bluetooth permissions"
