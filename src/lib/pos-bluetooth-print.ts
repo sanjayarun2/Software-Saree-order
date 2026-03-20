@@ -7,6 +7,20 @@ interface PrintResult {
   error?: string;
 }
 
+const PRINT_TIMEOUT_MS = 15_000; // 15 seconds max per operation
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms / 1000}s`)),
+      ms
+    );
+    promise
+      .then((v) => { clearTimeout(timer); resolve(v); })
+      .catch((e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
 async function getPlugin() {
   const { ESCPOSPlugin } = await import("@albgen/capacitor-escpos-plugin");
   return ESCPOSPlugin;
@@ -55,9 +69,11 @@ export async function printOrdersViaBluetooth(
   }
 
   try {
-    const plugin = await getPlugin();
+    const plugin = await withTimeout(getPlugin(), 5000, "Loading print plugin");
 
-    const { result: hasPerms } = await plugin.bluetoothHasPermissions();
+    const { result: hasPerms } = await withTimeout(
+      plugin.bluetoothHasPermissions(), 5000, "Checking Bluetooth permissions"
+    );
     if (!hasPerms) {
       return {
         success: false,
@@ -65,7 +81,9 @@ export async function printOrdersViaBluetooth(
       };
     }
 
-    const { result: isEnabled } = await plugin.bluetoothIsEnabled();
+    const { result: isEnabled } = await withTimeout(
+      plugin.bluetoothIsEnabled(), 5000, "Checking Bluetooth status"
+    );
     if (!isEnabled) {
       return {
         success: false,
@@ -73,7 +91,9 @@ export async function printOrdersViaBluetooth(
       };
     }
 
-    const printers = await plugin.listPrinters({ type: "bluetooth" });
+    const printers = await withTimeout(
+      plugin.listPrinters({ type: "bluetooth" }), 10000, "Searching for printers"
+    );
     const printerEntries = Object.values(printers);
     if (!printerEntries.length) {
       return {
@@ -82,23 +102,32 @@ export async function printOrdersViaBluetooth(
       };
     }
 
-    // Use the first bonded printer found
     const printer = printerEntries.find((p) => p.bondState === "BOND_BONDED") ?? printerEntries[0];
 
     for (const order of orders) {
       const text = formatOrderForEscPos(order, normalize);
-      await plugin.printFormattedText({
-        type: "bluetooth",
-        id: printer.address,
-        text,
-        mmFeedPaper: "20",
-        initializeBeforeSend: true,
-      });
+      await withTimeout(
+        plugin.printFormattedText({
+          type: "bluetooth",
+          id: printer.address,
+          text,
+          mmFeedPaper: "20",
+          initializeBeforeSend: true,
+        }),
+        PRINT_TIMEOUT_MS,
+        "Printing"
+      );
     }
 
     return { success: true };
   } catch (e: any) {
     const msg = e?.message ?? String(e);
+    if (msg.includes("timed out")) {
+      return {
+        success: false,
+        error: "Printer not responding. Make sure the POS printer is turned on, paired, and nearby.",
+      };
+    }
     if (msg.toLowerCase().includes("connect") || msg.toLowerCase().includes("socket")) {
       return {
         success: false,
