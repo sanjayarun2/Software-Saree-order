@@ -9,6 +9,7 @@ interface PrintResult {
 
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
+const PRINT_DISPATCH_GRACE_MS = 3_500;
 const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
 const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
 
@@ -90,7 +91,7 @@ async function printWithVariants(
   printer: PrinterCandidate,
   text: string
 ): Promise<void> {
-  const idCandidates = [printer.key, printer.address, printer.name].filter(Boolean);
+  const idCandidates = ["first", printer.key, printer.address, printer.name].filter(Boolean);
   const typeCandidates = [printer.type, "bluetooth"].filter(Boolean);
 
   const variants = idCandidates.flatMap((id) =>
@@ -121,13 +122,49 @@ async function printWithVariants(
   let lastError: unknown = null;
   for (const payload of variants) {
     try {
-      await withTimeout(plugin.printFormattedText(payload), PRINT_TIMEOUT_MS, "Printing");
+      await dispatchPrint(plugin, payload);
       return;
     } catch (e) {
       lastError = e;
     }
   }
   throw lastError ?? new Error("All print variants failed");
+}
+
+async function dispatchPrint(
+  plugin: Awaited<ReturnType<typeof getPlugin>>,
+  payload: Parameters<Awaited<ReturnType<typeof getPlugin>>["printFormattedText"]>[0]
+): Promise<void> {
+  // Plugin quirk: Android implementation rejects on error, but does not resolve on success.
+  // We treat "no reject within grace period" as dispatched successfully.
+  let rejectedError: unknown = null;
+  let resolved = false;
+
+  const op = plugin.printFormattedText(payload)
+    .then(() => {
+      resolved = true;
+    })
+    .catch((e) => {
+      rejectedError = e;
+    });
+
+  const grace = withTimeout(
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, PRINT_DISPATCH_GRACE_MS);
+    }),
+    PRINT_TIMEOUT_MS,
+    "Printing"
+  );
+
+  await Promise.race([op, grace]);
+
+  if (rejectedError) {
+    throw rejectedError;
+  }
+  if (resolved) {
+    return;
+  }
+  // If still pending after grace and no rejection, treat as sent to printer.
 }
 
 function formatOrderForEscPos(order: Order, normalize: boolean): string {
