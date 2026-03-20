@@ -476,6 +476,13 @@ function formatOrderForEscPos(order: Order, normalize: boolean): string {
     "",
   ];
 
+  const printableLines = lines
+    .map((l) => l.replace(/\[(L|C|R)\]/g, "").replace(/<[^>]+>/g, ""))
+    .filter((l) => l.trim().length > 0);
+  const maxPrintableLineLen = printableLines.reduce((m, l) => Math.max(m, l.length), 0);
+  const centerLines = lines.filter((l) => l.startsWith("[C]")).length;
+  const leftLines = lines.filter((l) => l.startsWith("[L]")).length;
+
   // #region agent log POS formatted text
   fetch(AGENT_DEBUG_INGEST_URL, {
     method: "POST",
@@ -496,7 +503,10 @@ function formatOrderForEscPos(order: Order, normalize: boolean): string {
         normalizedFromLineCount: (from || "").split("\n").filter(Boolean).length,
         normalizedToLineCount: (to || "").split("\n").filter(Boolean).length,
         formattedLineCount: lines.length,
-        sampleFirstLines: lines.slice(0, 4).join(" | ").slice(0, 220),
+        maxPrintableLineLen,
+        centerLines,
+        leftLines,
+        separatorCount: lines.filter((l) => l === SEPARATOR).length,
       },
       timestamp: Date.now(),
     }),
