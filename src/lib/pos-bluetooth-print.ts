@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { ESCPOSPlugin } from "@albgen/capacitor-escpos-plugin";
 import type { Order } from "./db-types";
 import { normalizeAddressBlock } from "./pdf-utils";
 import { addPrinterLog } from "./printer-debug-log";
@@ -96,7 +97,6 @@ function isPermissionError(msg: string): boolean {
 }
 
 async function getPlugin() {
-  const { ESCPOSPlugin } = await import("@albgen/capacitor-escpos-plugin");
   return ESCPOSPlugin;
 }
 
@@ -106,6 +106,9 @@ async function loadPluginRobust() {
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
+      const cap = (globalThis as any)?.Capacitor;
+      const pluginInBridge = !!cap?.Plugins?.ESCPOSPlugin;
+      addPrinterLog("plugin.load", `Bridge plugin present: ${pluginInBridge}`);
       addPrinterLog("plugin.load", `Attempt ${attempt} starting`);
       const plugin = await withTimeout(getPlugin(), PLUGIN_LOAD_TIMEOUT_MS, "Loading print plugin");
       try {
@@ -329,8 +332,16 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
     });
     return { success: true, printers };
   } catch (e: any) {
-    addPrinterLog("printers.scan", "Scan failed", e?.message ?? String(e), "error");
-    return { success: false, printers: [], error: e?.message ?? String(e) };
+    const msg = e?.message ?? String(e);
+    addPrinterLog("printers.scan", "Scan failed", msg, "error");
+    const isPluginLoadTimeout = msg.toLowerCase().includes("loading print plugin timed out");
+    return {
+      success: false,
+      printers: [],
+      error: isPluginLoadTimeout
+        ? "Printer plugin not available in this app build. Please install the latest APK build (native rebuild required)."
+        : msg,
+    };
   }
 }
 
