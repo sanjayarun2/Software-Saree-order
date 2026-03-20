@@ -381,6 +381,7 @@ export default function OrdersPage() {
           </div>
         )}
 
+        {status === "PENDING" && (
         <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 md:bottom-8 md:right-8">
           <button
             type="button"
@@ -425,6 +426,7 @@ export default function OrdersPage() {
             </a>
           )}
         </div>
+        )}
       </div>
 
       {/* ── Dispatch confirmation modal ── */}
