@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 import { normalizeAddressBlock } from "./pdf-utils";
+import { addPrinterLog } from "./printer-debug-log";
 
 interface PrintResult {
   success: boolean;
@@ -105,15 +106,20 @@ async function loadPluginRobust() {
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
+      addPrinterLog("plugin.load", `Attempt ${attempt} starting`);
       const plugin = await withTimeout(getPlugin(), PLUGIN_LOAD_TIMEOUT_MS, "Loading print plugin");
       try {
         await withTimeout(plugin.echo({ value: "warmup" }), 5000, "Warming plugin");
+        addPrinterLog("plugin.load", `Attempt ${attempt} warmup success`);
       } catch {
         // warmup is best-effort
+        addPrinterLog("plugin.load", `Attempt ${attempt} warmup failed (ignored)`);
       }
+      addPrinterLog("plugin.load", `Attempt ${attempt} success`);
       return plugin;
     } catch (e) {
       lastErr = e;
+      addPrinterLog("plugin.load", `Attempt ${attempt} failed`, String(e), "error");
       await new Promise((r) => setTimeout(r, 800));
     }
   }
@@ -126,6 +132,7 @@ async function discoverBluetoothPrintersWithPermission(
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
+      addPrinterLog("printers.scan", `Scan attempt ${attempt} started`);
       // If permission is missing, plugin asks permission internally and may reject once.
       // Retry once after short wait so scan succeeds right after user grants it.
       const printersObj = await withTimeout(
@@ -133,10 +140,12 @@ async function discoverBluetoothPrintersWithPermission(
         PRINTER_DISCOVERY_TIMEOUT_MS,
         "Searching for printers"
       );
+      addPrinterLog("printers.scan", `Scan attempt ${attempt} success`);
       return printersObj as Record<string, PrinterInfoLike>;
     } catch (e: any) {
       lastErr = e;
       const msg = e?.message ?? String(e);
+      addPrinterLog("printers.scan", `Scan attempt ${attempt} failed`, msg, "error");
       if (!isPermissionError(msg) || attempt === 2) break;
       await new Promise((r) => setTimeout(r, 1400));
     }
@@ -230,10 +239,22 @@ async function printWithVariants(
   let lastError: unknown = null;
   for (const payload of variants) {
     try {
+      addPrinterLog("print.variant", "Trying print payload", {
+        id: payload.id,
+        type: payload.type,
+        sendDelay: payload.sendDelay,
+        chunkSize: payload.chunkSize,
+        useEscPosAsterik: payload.useEscPosAsterik ?? false,
+      });
       await dispatchPrint(plugin, payload);
+      addPrinterLog("print.variant", "Print payload succeeded", {
+        id: payload.id,
+        type: payload.type,
+      });
       return;
     } catch (e) {
       lastError = e;
+      addPrinterLog("print.variant", "Print payload failed", String(e), "error");
     }
   }
   throw lastError ?? new Error("All print variants failed");
@@ -267,16 +288,20 @@ async function dispatchPrint(
   await Promise.race([op, grace]);
 
   if (rejectedError) {
+    addPrinterLog("print.dispatch", "Plugin rejected print", String(rejectedError), "error");
     throw rejectedError;
   }
   if (resolved) {
+    addPrinterLog("print.dispatch", "Plugin resolved print");
     return;
   }
   // If still pending after grace and no rejection, treat as sent to printer.
+  addPrinterLog("print.dispatch", "Plugin did not reject; treated as dispatched");
 }
 
 export async function listBluetoothPrinters(): Promise<{ success: boolean; printers: SavedPosPrinter[]; error?: string }> {
   if (!Capacitor.isNativePlatform()) {
+    addPrinterLog("printers.scan", "Not native platform", undefined, "error");
     return { success: false, printers: [], error: "Bluetooth printer setup is only available in Android app." };
   }
   try {
@@ -287,6 +312,7 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
       "Checking Bluetooth status"
     );
     if (!isEnabled) {
+      addPrinterLog("printers.scan", "Bluetooth is OFF", undefined, "error");
       return { success: false, printers: [], error: "Bluetooth is turned off." };
     }
     const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
@@ -297,14 +323,20 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
       type: "bluetooth",
       driver: "escpos" as const,
     }));
+    addPrinterLog("printers.scan", "Printers discovered", {
+      count: printers.length,
+      items: printers.map((p) => ({ id: p.id, name: p.name, address: p.address })),
+    });
     return { success: true, printers };
   } catch (e: any) {
+    addPrinterLog("printers.scan", "Scan failed", e?.message ?? String(e), "error");
     return { success: false, printers: [], error: e?.message ?? String(e) };
   }
 }
 
 export async function testSavedPosPrinter(): Promise<PrintResult> {
   if (!Capacitor.isNativePlatform()) {
+    addPrinterLog("printer.test", "Not native platform", undefined, "error");
     return {
       success: false,
       error: "Printer test is only available in the Android app.",
@@ -318,6 +350,7 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
       "Checking Bluetooth status"
     );
     if (!isEnabled) {
+      addPrinterLog("printer.test", "Bluetooth is OFF", undefined, "error");
       return { success: false, error: "Bluetooth is turned off." };
     }
 
@@ -325,8 +358,16 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
     const printerEntries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
     const printer = pickBestPrinter(printerEntries);
     if (!printer) {
+      addPrinterLog("printer.test", "No usable printer found", undefined, "error");
       return { success: false, error: "No usable Bluetooth printer found." };
     }
+    addPrinterLog("printer.test", "Using printer", {
+      key: printer.key,
+      name: printer.name,
+      address: printer.address,
+      bondState: printer.bondState,
+      type: printer.type,
+    });
 
     const testText = [
       "[C]<b>Saree Order App</b>",
@@ -340,8 +381,10 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
     ].join("\n");
 
     await printWithVariants(plugin, printer, testText);
+    addPrinterLog("printer.test", "Test print sent");
     return { success: true };
   } catch (e: any) {
+    addPrinterLog("printer.test", "Test print failed", e?.message ?? String(e), "error");
     return { success: false, error: e?.message ?? String(e) };
   }
 }
@@ -382,6 +425,7 @@ export async function printOrdersViaBluetooth(
   normalize = true
 ): Promise<PrintResult> {
   if (!Capacitor.isNativePlatform()) {
+    addPrinterLog("orders.print", "Not native platform", undefined, "error");
     return {
       success: false,
       error: "Bluetooth printing is only available in the Android app.",
@@ -395,6 +439,7 @@ export async function printOrdersViaBluetooth(
       plugin.bluetoothIsEnabled(), 5000, "Checking Bluetooth status"
     );
     if (!isEnabled) {
+      addPrinterLog("orders.print", "Bluetooth is OFF", undefined, "error");
       return {
         success: false,
         error: "Bluetooth is turned off. Please enable Bluetooth on your device.",
@@ -404,6 +449,7 @@ export async function printOrdersViaBluetooth(
     const printers = await discoverBluetoothPrintersWithPermission(plugin);
     const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
     if (!printerEntries.length) {
+      addPrinterLog("orders.print", "No paired printers found", undefined, "error");
       return {
         success: false,
         error: "No paired Bluetooth printers found. Please pair your POS printer first.",
@@ -412,11 +458,20 @@ export async function printOrdersViaBluetooth(
 
     const printer = pickBestPrinter(printerEntries);
     if (!printer) {
+      addPrinterLog("orders.print", "No usable printer", undefined, "error");
       return {
         success: false,
         error: "No usable Bluetooth printer found.",
       };
     }
+    addPrinterLog("orders.print", "Selected printer", {
+      key: printer.key,
+      name: printer.name,
+      address: printer.address,
+      bondState: printer.bondState,
+      type: printer.type,
+      orders: orders.length,
+    });
 
     for (const order of orders) {
       const text = formatOrderForEscPos(order, normalize);
@@ -426,6 +481,7 @@ export async function printOrdersViaBluetooth(
     return { success: true };
   } catch (e: any) {
     const msg = e?.message ?? String(e);
+    addPrinterLog("orders.print", "Print failed", msg, "error");
     if (msg.includes("timed out")) {
       return {
         success: false,

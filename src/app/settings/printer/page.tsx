@@ -13,6 +13,7 @@ import {
   testSavedPosPrinter,
   type SavedPosPrinter,
 } from "@/lib/pos-bluetooth-print";
+import { clearPrinterLogs, getPrinterLogs, type PrinterDebugEntry } from "@/lib/printer-debug-log";
 
 export default function PrinterSetupPage() {
   const { user, loading } = useAuth();
@@ -25,6 +26,7 @@ export default function PrinterSetupPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [logs, setLogs] = useState<PrinterDebugEntry[]>([]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -32,6 +34,7 @@ export default function PrinterSetupPage() {
 
   useEffect(() => {
     setSaved(getSavedPosPrinter());
+    setLogs(getPrinterLogs());
   }, []);
 
   const isAndroidNative = useMemo(
@@ -47,10 +50,12 @@ export default function PrinterSetupPage() {
     setScanning(false);
     if (!result.success) {
       setError(result.error ?? "Unable to scan printers.");
+      setLogs(getPrinterLogs());
       return;
     }
     setPrinters(result.printers);
     setInfo(result.printers.length ? `Found ${result.printers.length} printer(s).` : "No paired printers found.");
+    setLogs(getPrinterLogs());
   };
 
   const handleSave = async (printer: SavedPosPrinter) => {
@@ -66,6 +71,7 @@ export default function PrinterSetupPage() {
       setError("Could not save printer preference.");
     } finally {
       setSavingId(null);
+      setLogs(getPrinterLogs());
     }
   };
 
@@ -77,9 +83,25 @@ export default function PrinterSetupPage() {
     setTesting(false);
     if (!result.success) {
       setError(result.error ?? "Test print failed.");
+      setLogs(getPrinterLogs());
       return;
     }
     setInfo("Test print sent successfully.");
+    setLogs(getPrinterLogs());
+  };
+
+  const copyLogs = async () => {
+    const current = getPrinterLogs();
+    setLogs(current);
+    const text = current
+      .map((l) => `${l.ts} [${l.level.toUpperCase()}] ${l.step}: ${l.message}${l.data ? ` | ${JSON.stringify(l.data)}` : ""}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text || "No logs.");
+      setInfo("Debug logs copied.");
+    } catch {
+      setError("Could not copy logs.");
+    }
   };
 
   if (loading) {
@@ -191,6 +213,46 @@ export default function PrinterSetupPage() {
             ))}
           </div>
         ) : null}
+
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <div className="flex items-center justify-between gap-2 px-4 py-3">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Debug Logs</h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={copyLogs}
+                className="min-h-[36px] rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+              >
+                Copy Logs
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearPrinterLogs();
+                  setLogs([]);
+                  setInfo("Debug logs cleared.");
+                }}
+                className="min-h-[36px] rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+              >
+                Clear Logs
+              </button>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-auto border-t border-white/30 px-4 py-3 text-xs text-slate-700 dark:border-white/10 dark:text-slate-300">
+            {logs.length === 0 ? (
+              <p>No logs yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {logs.slice().reverse().map((l, idx) => (
+                  <p key={`${l.ts}-${idx}`} className="break-words">
+                    <span className="font-medium">{l.ts}</span> [{l.level.toUpperCase()}] {l.step}: {l.message}
+                    {l.data ? ` | ${JSON.stringify(l.data)}` : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </ErrorBoundary>
   );
