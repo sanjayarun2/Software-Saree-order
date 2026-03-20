@@ -7,9 +7,12 @@ import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { OrderListSkeleton } from "@/components/ui/SkeletonLoader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { IconEdit, IconDispatch, IconUndo, IconPdf, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
+import { IconEdit, IconDispatch, IconUndo, IconPdf, IconPrint, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
+import FormatSelectionModal from "@/components/ui/FormatSelectionModal";
 import { downloadOrdersPdf } from "@/lib/pdf-utils";
+import { downloadOrdersPosPdf } from "@/lib/pos-pdf-utils";
+import { printOrdersViaBluetooth } from "@/lib/pos-bluetooth-print";
 import { useSearch } from "@/lib/search-context";
 import {
   getOrders as svcGetOrders,
@@ -54,6 +57,8 @@ export default function OrdersPage() {
   const [trackingNumber, setTrackingNumber] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [showFormatModal, setShowFormatModal] = useState<"pdf" | "print" | null>(null);
+  const [printing, setPrinting] = useState(false);
   const trackingInputRef = useRef<HTMLInputElement>(null);
 
   const openWhatsAppForOrder = (order: Order) => {
@@ -383,38 +388,38 @@ export default function OrdersPage() {
 
         {status === "PENDING" && (
         <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 md:bottom-8 md:right-8">
-          <button
-            type="button"
-            onClick={async () => {
-              if (filteredOrders.length === 0 || downloadingPdf) {
-                console.log("[Orders] PDF button clicked but disabled (no orders or already downloading)");
-                return;
-              }
-              console.log(`[Orders] PDF button clicked, generating PDF for ${filteredOrders.length} orders`);
-              setPdfFallbackUrl(null);
-              setDownloadingPdf(true);
-              try {
-                console.log("[Orders] Calling downloadOrdersPdf...");
-                await downloadOrdersPdf(filteredOrders);
-                console.log("[Orders] PDF download completed successfully");
-              } catch (e) {
-                console.error("[Orders] PDF download failed:", e);
-                const errorMsg = e instanceof Error ? e.message : "Unknown error";
-                alert(`Failed to generate PDF: ${errorMsg}\n\nCheck browser console for details.`);
-              } finally {
-                setDownloadingPdf(false);
-                console.log("[Orders] PDF download state reset");
-              }
-            }}
-            disabled={filteredOrders.length === 0 || downloadingPdf}
-            className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
-            title="Download all as PDF"
-          >
-            <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
-            <span className="text-sm font-medium">
-              {downloadingPdf ? "Generating…" : "PDF"}
-            </span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (filteredOrders.length === 0) return;
+                setShowFormatModal("print");
+              }}
+              disabled={filteredOrders.length === 0 || printing}
+              className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl border border-primary-500 bg-white px-4 py-3 text-primary-600 shadow-lg transition active:bg-primary-50 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
+              title="Print labels"
+            >
+              <IconPrint className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
+              <span className="text-sm font-medium">
+                {printing ? "Printing…" : "Print"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (filteredOrders.length === 0 || downloadingPdf) return;
+                setShowFormatModal("pdf");
+              }}
+              disabled={filteredOrders.length === 0 || downloadingPdf}
+              className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
+              title="Download all as PDF"
+            >
+              <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
+              <span className="text-sm font-medium">
+                {downloadingPdf ? "Generating…" : "PDF"}
+              </span>
+            </button>
+          </div>
           {pdfFallbackUrl && (
             <a
               href={pdfFallbackUrl}
@@ -502,6 +507,66 @@ export default function OrdersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Format selection modal (A4 / POS) ── */}
+      {showFormatModal && (
+        <FormatSelectionModal
+          title={showFormatModal === "pdf" ? "Download PDF" : "Print Labels"}
+          onSelectA4={async () => {
+            if (showFormatModal === "pdf") {
+              setPdfFallbackUrl(null);
+              setDownloadingPdf(true);
+              try {
+                await downloadOrdersPdf(filteredOrders);
+              } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : "Unknown error";
+                alert(`Failed to generate PDF: ${errorMsg}`);
+              } finally {
+                setDownloadingPdf(false);
+              }
+            } else {
+              setPdfFallbackUrl(null);
+              setDownloadingPdf(true);
+              try {
+                await downloadOrdersPdf(filteredOrders);
+              } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : "Unknown error";
+                alert(`Failed to generate PDF: ${errorMsg}`);
+              } finally {
+                setDownloadingPdf(false);
+              }
+            }
+          }}
+          onSelectPOS={async () => {
+            if (showFormatModal === "pdf") {
+              setPdfFallbackUrl(null);
+              setDownloadingPdf(true);
+              try {
+                await downloadOrdersPosPdf(filteredOrders);
+              } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : "Unknown error";
+                alert(`Failed to generate POS PDF: ${errorMsg}`);
+              } finally {
+                setDownloadingPdf(false);
+              }
+            } else {
+              setPrinting(true);
+              try {
+                const result = await printOrdersViaBluetooth(filteredOrders);
+                if (!result.success) {
+                  alert(result.error ?? "POS printer not connected");
+                }
+              } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : "Unknown error";
+                alert(`Printing failed: ${errorMsg}`);
+              } finally {
+                setPrinting(false);
+              }
+            }
+          }}
+          onClose={() => setShowFormatModal(null)}
+        />
       )}
 
       <BarcodeScannerModal

@@ -25,6 +25,7 @@
     "compress:icons": "node scripts/compress-icons.js"
   },
   "dependencies": {
+    "@albgen/capacitor-escpos-plugin": "^1.0.18",
     "@capacitor-community/file-opener": "^6.0.1",
     "@capacitor-mlkit/barcode-scanning": "^6.2.0",
     "@capacitor/android": "^6.1.2",
