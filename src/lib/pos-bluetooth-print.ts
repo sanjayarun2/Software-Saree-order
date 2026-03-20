@@ -123,7 +123,7 @@ function isPermissionError(msg: string): boolean {
   );
 }
 
-async function loadPluginRobust() {
+async function loadPluginRobust(): Promise<{ plugin: typeof ESCPOSPlugin }> {
   // RawBT-like behavior: don't fail too early on first cold start.
   // Try once, warm up bridge, then retry.
   let lastErr: unknown = null;
@@ -145,7 +145,8 @@ async function loadPluginRobust() {
         addPrinterLog("plugin.load", `Attempt ${attempt} warmup failed (ignored)`);
       }
       addPrinterLog("plugin.load", `Attempt ${attempt} success`);
-      return plugin;
+      // Return plain wrapper object to avoid thenable-assimilation stalls.
+      return { plugin };
     } catch (e) {
       lastErr = e;
       addPrinterLog("plugin.load", `Attempt ${attempt} failed`, String(e), "error");
@@ -354,7 +355,8 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
   }
   try {
     addPrinterLog("printers.scan", "Scan flow started");
-    const plugin = await loadPluginRobust();
+    const { plugin } = await loadPluginRobust();
+    emitRuntimeDebug("scan", "H6", "pos-bluetooth-print.ts:listBluetoothPrinters", "plugin object received by caller");
     addPrinterLog("printers.scan", "Plugin loaded");
     // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
     // listPrinters() in the native plugin already validates Bluetooth state.
@@ -397,7 +399,8 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
     };
   }
   try {
-    const plugin = await loadPluginRobust();
+    const { plugin } = await loadPluginRobust();
+    emitRuntimeDebug("test-print", "H6", "pos-bluetooth-print.ts:testSavedPosPrinter", "plugin object received by caller");
     emitRuntimeDebug("test-print", "H4", "pos-bluetooth-print.ts:testSavedPosPrinter", "plugin loaded");
     // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
     addPrinterLog("printer.test", "Skipping bluetoothIsEnabled pre-check");
@@ -491,7 +494,8 @@ export async function printOrdersViaBluetooth(
   }
 
   try {
-    const plugin = await loadPluginRobust();
+    const { plugin } = await loadPluginRobust();
+    emitRuntimeDebug("orders-print", "H6", "pos-bluetooth-print.ts:printOrdersViaBluetooth", "plugin object received by caller");
     // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
     addPrinterLog("orders.print", "Skipping bluetoothIsEnabled pre-check");
 
