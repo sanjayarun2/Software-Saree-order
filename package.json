@@ -22,7 +22,8 @@
     "debug:webview": "powershell -ExecutionPolicy Bypass -File enable-webview-debug.ps1",
     "monitor:pdf": "powershell -ExecutionPolicy Bypass -File monitor-pdf-issue.ps1",
     "test:pdf:auto": "powershell -ExecutionPolicy Bypass -File auto-test-pdf.ps1",
-    "compress:icons": "node scripts/compress-icons.js"
+    "compress:icons": "node scripts/compress-icons.js",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@albgen/capacitor-escpos-plugin": "^1.0.18",
@@ -56,6 +57,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "15.0.5",
+    "patch-package": "^8.0.1",
     "postcss": "^8.4.47",
     "sharp": "^0.33.5",
     "tailwindcss": "^3.4.14",

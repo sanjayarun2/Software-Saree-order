@@ -1,0 +1,114 @@
+diff --git a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
+index 4f0c81d..df786ba 100644
+--- a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
++++ b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
+@@ -4,6 +4,10 @@ import android.Manifest;
+ import android.bluetooth.BluetoothAdapter;
+ import android.graphics.Bitmap;
+ import android.graphics.BitmapFactory;
++import android.graphics.Canvas;
++import android.graphics.Color;
++import android.graphics.pdf.PdfRenderer;
++import android.os.ParcelFileDescriptor;
+ import android.util.Log;
+ 
+ 
+@@ -30,12 +34,15 @@ import com.dantsu.escposprinter.connection.bluetooth.BluetoothPrintersConnection
+ import com.dantsu.escposprinter.connection.tcp.TcpConnection;
+ import com.dantsu.escposprinter.connection.usb.UsbConnection;
+ import com.dantsu.escposprinter.connection.usb.UsbConnections;
++import com.dantsu.escposprinter.textparser.PrinterTextParserImg;
+ 
+ import org.json.JSONObject;
+ import org.json.JSONException;
+ 
+ import java.util.HashMap;
+ import java.util.Objects;
++import java.io.File;
++import java.io.FileOutputStream;
+ 
+ @CapacitorPlugin(
+         name = "ESCPOSPlugin",
+@@ -256,6 +263,82 @@ public class ESCPOSPlugin extends Plugin {
+         }
+     }
+ 
++    @PluginMethod
++    public void printPdfBase64(PluginCall call) throws Exception {
++        try {
++            JSONObject data = new JSObject();
++            data.put("action", call.getString("action"));
++            data.put("mmFeedPaper", call.getString("mmFeedPaper"));
++            data.put("id", call.getString("id"));
++            data.put("address", call.getString("address"));
++            data.put("type", call.getString("type"));
++            data.put("port", call.getString("port"));
++            data.put("useEscPosAsterik", call.getBoolean("useEscPosAsterik", false));
++            data.put("initializeBeforeSend", call.getBoolean("initializeBeforeSend", false));
++            data.put("charsetEncoding", call.getObject("charsetEncoding"));
++            data.put("sendDelay", call.getString("sendDelay","0"));
++            data.put("chunkSize", call.getString("chunkSize","0"));
++            data.put("printerDpi", call.getInt("printerDpi", 203));
++            data.put("printerWidthMM", call.getDouble("printerWidthMM", 72.0));
++            data.put("printerNbrCharactersPerLine", call.getInt("printerNbrCharactersPerLine", 48));
++
++            String pdfBase64 = call.getString("pdfBase64");
++            if (pdfBase64 == null || pdfBase64.isEmpty()) {
++                throw new JSONException("Missing pdfBase64");
++            }
++
++            if (call.getString("type").equals("bluetooth")) {
++                if (!bluetoothIsEnabled()) throw new JSONException("Bluetooth not enabled");
++                if (!bluetoothHasPermissions()) {
++                    askForBTPermissionIfNotHaveAlready(call);
++                    throw new JSONException("Missing permission for bluetooth");
++                }
++            }
++
++            EscPosPrinter printer = this.getPrinter(data);
++            printer.useEscAsteriskCommand(data.getBoolean("useEscPosAsterik"));
++            printer.setChunkSize(data.optInt("chunkSize",0));
++
++            String cleanBase64 = pdfBase64.contains(",") ? pdfBase64.substring(pdfBase64.indexOf(",") + 1) : pdfBase64;
++            byte[] pdfBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT);
++            File tempPdf = File.createTempFile("escpos_print_", ".pdf", getContext().getCacheDir());
++            FileOutputStream fos = new FileOutputStream(tempPdf);
++            fos.write(pdfBytes);
++            fos.close();
++
++            ParcelFileDescriptor pfd = ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY);
++            PdfRenderer renderer = new PdfRenderer(pfd);
++            int targetWidthPx = Math.max(384, (int) ((data.optDouble("printerWidthMM", 72.0) / 25.4) * data.optInt("printerDpi", 203)));
++            int dotsFeedPaper = data.has("mmFeedPaper")
++                    ? printer.mmToPx((float) data.getDouble("mmFeedPaper"))
++                    : data.optInt("dotsFeedPaper", 20);
++
++            for (int i = 0; i < renderer.getPageCount(); i++) {
++                PdfRenderer.Page page = renderer.openPage(i);
++                float ratio = (float) targetWidthPx / (float) page.getWidth();
++                int bmpW = targetWidthPx;
++                int bmpH = Math.max(1, Math.round(page.getHeight() * ratio));
++                Bitmap bitmap = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888);
++                Canvas canvas = new Canvas(bitmap);
++                canvas.drawColor(Color.WHITE);
++                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
++                page.close();
++
++                String hex = PrinterTextParserImg.bitmapToHexadecimalString(printer, bitmap);
++                printer.printFormattedText("[C]<img>" + hex + "</img>", dotsFeedPaper);
++                bitmap.recycle();
++            }
++
++            renderer.close();
++            pfd.close();
++            //noinspection ResultOfMethodCallIgnored
++            tempPdf.delete();
++            call.resolve();
++        } catch (Exception ex) {
++            call.reject(ex.getMessage(), "COD07");
++        }
++    }
++
+     @PluginMethod
+     public void logCat(PluginCall call)  {
+         try

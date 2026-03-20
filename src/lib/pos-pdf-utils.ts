@@ -1,7 +1,8 @@
 import { jsPDF } from "jspdf";
-import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 import { savePdfBlob, normalizeAddressBlock, type PdfRenderOptions } from "./pdf-utils";
+import { printPdfBase64ViaBluetooth } from "./pos-bluetooth-print";
+import { addPrinterLog } from "./printer-debug-log";
 
 // ─── Constants mirrored exactly from A4 pdf-utils.ts ────────────────────────
 const FONT_HEADING = "helvetica";
@@ -325,36 +326,6 @@ function renderOrdersToPosPdfDoc(orders: Order[], renderOptions: PdfRenderOption
   return doc;
 }
 
-async function openNativePdfForPrint(uri: string, filename: string): Promise<void> {
-  // Open with native app so user can print the exact same POS PDF.
-  try {
-    const { FileOpener } = await import("@capacitor-community/file-opener");
-    await FileOpener.open({
-      filePath: uri,
-      contentType: "application/pdf",
-      openWithDefault: true,
-    });
-    return;
-  } catch {
-    // continue to share fallback
-  }
-  try {
-    const { Share } = await import("@capacitor/share");
-    const canShare = await Share.canShare();
-    if (canShare.value) {
-      await Share.share({ title: filename, url: uri, dialogTitle: "Print POS PDF" });
-      return;
-    }
-  } catch {
-    // continue to final fallback
-  }
-  try {
-    (window as any).open(uri, "_system");
-  } catch {
-    // nothing else to do
-  }
-}
-
 function printPdfBlobInBrowser(blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const iframe = document.createElement("iframe");
@@ -419,18 +390,28 @@ export async function printOrdersPosPdf(orders: Order[]) {
     const userId = orders[0].user_id;
     const renderOptions = await fetchPosRenderOptions(userId);
     const doc = renderOrdersToPosPdfDoc(orders, renderOptions);
-    const filename = buildTimestampedFilename("SareeOrders_POS_Print");
     const blob = doc.output("blob");
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onloadend = () => {
+        const result = typeof r.result === "string" ? r.result : "";
+        const onlyBase64 = result.includes(",") ? result.split(",", 2)[1] : result;
+        if (!onlyBase64) {
+          reject(new Error("Failed to encode POS PDF for printer."));
+          return;
+        }
+        resolve(onlyBase64);
+      };
+      r.onerror = () => reject(new Error("Failed to read POS PDF blob."));
+      r.readAsDataURL(blob);
+    });
 
-    if (Capacitor.isNativePlatform()) {
-      const uri = await savePdfBlob(blob, filename);
-      if (uri) {
-        await openNativePdfForPrint(uri, filename);
-      }
-      return;
+    const directResult = await printPdfBase64ViaBluetooth(base64);
+    if (!directResult.success) {
+      addPrinterLog("orders.print", "PDF direct print failed", directResult.error, "error");
+      throw new Error(directResult.error ?? "POS printer not connected");
     }
-
-    printPdfBlobInBrowser(blob);
+    addPrinterLog("orders.print", "PDF direct print sent");
   } catch (e) {
     console.error("[POS-PDF] printOrdersPosPdf failed:", e);
     throw e;

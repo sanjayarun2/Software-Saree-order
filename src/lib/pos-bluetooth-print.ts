@@ -335,6 +335,31 @@ async function dispatchPrint(
   addPrinterLog("print.dispatch", "Plugin did not reject; treated as dispatched");
 }
 
+async function dispatchPdfPrint(
+  plugin: typeof ESCPOSPlugin,
+  payload: Record<string, unknown>
+): Promise<void> {
+  let rejectedError: unknown = null;
+  let resolved = false;
+  const op = (plugin as any).printPdfBase64(payload)
+    .then(() => {
+      resolved = true;
+    })
+    .catch((e: unknown) => {
+      rejectedError = e;
+    });
+
+  const grace = withTimeout(
+    new Promise<void>((resolve) => setTimeout(resolve, PRINT_DISPATCH_GRACE_MS)),
+    PRINT_TIMEOUT_MS,
+    "Printing PDF"
+  );
+
+  await Promise.race([op, grace]);
+  if (rejectedError) throw rejectedError;
+  if (resolved) return;
+}
+
 export async function listBluetoothPrinters(): Promise<{ success: boolean; printers: SavedPosPrinter[]; error?: string }> {
   if (!Capacitor.isNativePlatform()) {
     addPrinterLog("printers.scan", "Not native platform", undefined, "error");
@@ -610,5 +635,86 @@ export async function printOrdersViaBluetooth(
       success: false,
       error: `Printing failed: ${msg}`,
     };
+  }
+}
+
+export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<PrintResult> {
+  if (!Capacitor.isNativePlatform()) {
+    return { success: false, error: "Bluetooth printing is only available in the Android app." };
+  }
+  try {
+    // #region agent log PDF direct print entry
+    fetch(AGENT_DEBUG_INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
+      body: JSON.stringify({
+        sessionId: "9bc241",
+        runId: AGENT_RUN_ID,
+        hypothesisId: "D_pdf_raster_entry",
+        location: "src/lib/pos-bluetooth-print.ts",
+        message: "Starting printPdfBase64ViaBluetooth",
+        data: { pdfBase64Length: pdfBase64.length },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    const { plugin } = await loadPluginRobust();
+    const printers = await discoverBluetoothPrintersWithPermission(plugin);
+    const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
+    if (!printerEntries.length) {
+      return {
+        success: false,
+        error: "No paired Bluetooth printers found. Please pair your POS printer first.",
+      };
+    }
+    const printer = pickBestPrinter(printerEntries);
+    if (!printer) {
+      return { success: false, error: "No usable Bluetooth printer found." };
+    }
+
+    const payload = {
+      type: printer.type || "bluetooth",
+      id: printer.key || printer.address || "first",
+      address: printer.address || undefined,
+      pdfBase64,
+      mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
+      initializeBeforeSend: true,
+      sendDelay: "40",
+      chunkSize: "512",
+      printerDpi: 203,
+      printerWidthMM: 72,
+      printerNbrCharactersPerLine: 48,
+    };
+
+    // #region agent log PDF direct print payload
+    fetch(AGENT_DEBUG_INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
+      body: JSON.stringify({
+        sessionId: "9bc241",
+        runId: AGENT_RUN_ID,
+        hypothesisId: "E_pdf_raster_payload",
+        location: "src/lib/pos-bluetooth-print.ts",
+        message: "Dispatching printPdfBase64 payload",
+        data: {
+          printerKey: printer.key,
+          printerName: printer.name,
+          printerAddress: printer.address,
+          payloadType: payload.type,
+          payloadId: payload.id,
+          printerWidthMM: payload.printerWidthMM,
+          printerDpi: payload.printerDpi,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    await dispatchPdfPrint(plugin, payload);
+    return { success: true };
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
+    return { success: false, error: `Printing failed: ${msg}` };
   }
 }
