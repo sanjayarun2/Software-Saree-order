@@ -12,6 +12,7 @@ export interface SavedPosPrinter {
   name?: string;
   address?: string;
   type?: string;
+  driver?: "escpos";
 }
 
 const SAVED_PRINTER_KEY = "saree_pos_saved_printer_v1";
@@ -59,7 +60,12 @@ export function getSavedPosPrinter(): SavedPosPrinter | null {
 export function savePosPrinter(printer: SavedPosPrinter): void {
   if (typeof window === "undefined") return;
   if (!printer?.id) return;
-  window.localStorage.setItem(SAVED_PRINTER_KEY, JSON.stringify(printer));
+  const normalized: SavedPosPrinter = {
+    ...printer,
+    type: printer.type || "bluetooth",
+    driver: "escpos",
+  };
+  window.localStorage.setItem(SAVED_PRINTER_KEY, JSON.stringify(normalized));
 }
 
 export function clearSavedPosPrinter(): void {
@@ -268,10 +274,66 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
       name: p.name,
       address: p.address,
       type: "bluetooth",
+      driver: "escpos" as const,
     }));
     return { success: true, printers };
   } catch (e: any) {
     return { success: false, printers: [], error: e?.message ?? String(e) };
+  }
+}
+
+export async function testSavedPosPrinter(): Promise<PrintResult> {
+  if (!Capacitor.isNativePlatform()) {
+    return {
+      success: false,
+      error: "Printer test is only available in the Android app.",
+    };
+  }
+  try {
+    const plugin = await loadPluginRobust();
+    const { result: hasPerms } = await withTimeout(
+      plugin.bluetoothHasPermissions(),
+      5000,
+      "Checking Bluetooth permissions"
+    );
+    if (!hasPerms) {
+      return { success: false, error: "Bluetooth permission not granted." };
+    }
+    const { result: isEnabled } = await withTimeout(
+      plugin.bluetoothIsEnabled(),
+      5000,
+      "Checking Bluetooth status"
+    );
+    if (!isEnabled) {
+      return { success: false, error: "Bluetooth is turned off." };
+    }
+
+    const printersObj = await withTimeout(
+      plugin.listPrinters({ type: "bluetooth" }),
+      PRINTER_DISCOVERY_TIMEOUT_MS,
+      "Searching for printers"
+    );
+    const printerEntries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
+    const printer = pickBestPrinter(printerEntries);
+    if (!printer) {
+      return { success: false, error: "No usable Bluetooth printer found." };
+    }
+
+    const testText = [
+      "[C]<b>Saree Order App</b>",
+      "[C]POS Printer Test",
+      "[L]Printer: " + (printer.name || "Unknown"),
+      "[L]Address: " + (printer.address || "N/A"),
+      "[L]Status: Connected",
+      "",
+      "------------------------------",
+      "",
+    ].join("\n");
+
+    await printWithVariants(plugin, printer, testText);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? String(e) };
   }
 }
 

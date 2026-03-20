@@ -10,6 +10,7 @@ import {
   getSavedPosPrinter,
   listBluetoothPrinters,
   savePosPrinter,
+  testSavedPosPrinter,
   type SavedPosPrinter,
 } from "@/lib/pos-bluetooth-print";
 
@@ -23,6 +24,7 @@ export default function PrinterSetupPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -56,14 +58,28 @@ export default function PrinterSetupPage() {
     setError(null);
     setInfo(null);
     try {
-      savePosPrinter(printer);
-      setSaved(printer);
-      setInfo(`Saved printer: ${printer.name || printer.address || printer.id}`);
+      const withDriver: SavedPosPrinter = { ...printer, driver: "escpos" };
+      savePosPrinter(withDriver);
+      setSaved(withDriver);
+      setInfo(`Saved printer: ${withDriver.name || withDriver.address || withDriver.id}`);
     } catch {
       setError("Could not save printer preference.");
     } finally {
       setSavingId(null);
     }
+  };
+
+  const handleTest = async () => {
+    setError(null);
+    setInfo(null);
+    setTesting(true);
+    const result = await testSavedPosPrinter();
+    setTesting(false);
+    if (!result.success) {
+      setError(result.error ?? "Test print failed.");
+      return;
+    }
+    setInfo("Test print sent successfully.");
   };
 
   if (loading) {
@@ -85,6 +101,9 @@ export default function PrinterSetupPage() {
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Save your preferred POS printer once. Print will auto-use this printer for stable connectivity.
           </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Driver: ESC/POS (same as RawBT driver selection)
+          </p>
 
           {!isAndroidNative ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-300">
@@ -104,6 +123,16 @@ export default function PrinterSetupPage() {
             {saved ? (
               <button
                 type="button"
+                onClick={handleTest}
+                disabled={!isAndroidNative || testing}
+                className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+              >
+                {testing ? "Testing..." : "Test Printer"}
+              </button>
+            ) : null}
+            {saved ? (
+              <button
+                type="button"
                 onClick={() => {
                   clearSavedPosPrinter();
                   setSaved(null);
@@ -118,7 +147,7 @@ export default function PrinterSetupPage() {
 
           {saved ? (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Current saved printer: <span className="font-semibold">{saved.name || saved.address || saved.id}</span>
+              Current saved printer: <span className="font-semibold">{saved.name || saved.address || saved.id}</span> ({saved.driver ?? "escpos"})
             </div>
           ) : null}
 
