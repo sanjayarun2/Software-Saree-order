@@ -85,6 +85,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+function isPermissionError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("missing permission") ||
+    m.includes("permission") ||
+    m.includes("denied")
+  );
+}
+
 async function getPlugin() {
   const { ESCPOSPlugin } = await import("@albgen/capacitor-escpos-plugin");
   return ESCPOSPlugin;
@@ -109,6 +118,30 @@ async function loadPluginRobust() {
     }
   }
   throw lastErr ?? new Error("Failed to load print plugin");
+}
+
+async function discoverBluetoothPrintersWithPermission(
+  plugin: Awaited<ReturnType<typeof getPlugin>>
+): Promise<Record<string, PrinterInfoLike>> {
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      // If permission is missing, plugin asks permission internally and may reject once.
+      // Retry once after short wait so scan succeeds right after user grants it.
+      const printersObj = await withTimeout(
+        plugin.listPrinters({ type: "bluetooth" }),
+        PRINTER_DISCOVERY_TIMEOUT_MS,
+        "Searching for printers"
+      );
+      return printersObj as Record<string, PrinterInfoLike>;
+    } catch (e: any) {
+      lastErr = e;
+      const msg = e?.message ?? String(e);
+      if (!isPermissionError(msg) || attempt === 2) break;
+      await new Promise((r) => setTimeout(r, 1400));
+    }
+  }
+  throw lastErr ?? new Error("Could not scan Bluetooth printers");
 }
 
 function normalizePrinters(printers: Record<string, PrinterInfoLike>): PrinterCandidate[] {
@@ -248,14 +281,6 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
   }
   try {
     const plugin = await loadPluginRobust();
-    const { result: hasPerms } = await withTimeout(
-      plugin.bluetoothHasPermissions(),
-      5000,
-      "Checking Bluetooth permissions"
-    );
-    if (!hasPerms) {
-      return { success: false, printers: [], error: "Bluetooth permission not granted." };
-    }
     const { result: isEnabled } = await withTimeout(
       plugin.bluetoothIsEnabled(),
       5000,
@@ -264,11 +289,7 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
     if (!isEnabled) {
       return { success: false, printers: [], error: "Bluetooth is turned off." };
     }
-    const printersObj = await withTimeout(
-      plugin.listPrinters({ type: "bluetooth" }),
-      PRINTER_DISCOVERY_TIMEOUT_MS,
-      "Searching for printers"
-    );
+    const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
     const printers = normalizePrinters(printersObj as Record<string, PrinterInfoLike>).map((p) => ({
       id: p.address || p.name || p.key,
       name: p.name,
@@ -291,14 +312,6 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
   }
   try {
     const plugin = await loadPluginRobust();
-    const { result: hasPerms } = await withTimeout(
-      plugin.bluetoothHasPermissions(),
-      5000,
-      "Checking Bluetooth permissions"
-    );
-    if (!hasPerms) {
-      return { success: false, error: "Bluetooth permission not granted." };
-    }
     const { result: isEnabled } = await withTimeout(
       plugin.bluetoothIsEnabled(),
       5000,
@@ -308,11 +321,7 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
       return { success: false, error: "Bluetooth is turned off." };
     }
 
-    const printersObj = await withTimeout(
-      plugin.listPrinters({ type: "bluetooth" }),
-      PRINTER_DISCOVERY_TIMEOUT_MS,
-      "Searching for printers"
-    );
+    const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
     const printerEntries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
     const printer = pickBestPrinter(printerEntries);
     if (!printer) {
@@ -382,16 +391,6 @@ export async function printOrdersViaBluetooth(
   try {
     const plugin = await loadPluginRobust();
 
-    const { result: hasPerms } = await withTimeout(
-      plugin.bluetoothHasPermissions(), 5000, "Checking Bluetooth permissions"
-    );
-    if (!hasPerms) {
-      return {
-        success: false,
-        error: "Bluetooth permission not granted. Please enable Bluetooth permissions in your device settings.",
-      };
-    }
-
     const { result: isEnabled } = await withTimeout(
       plugin.bluetoothIsEnabled(), 5000, "Checking Bluetooth status"
     );
@@ -402,9 +401,7 @@ export async function printOrdersViaBluetooth(
       };
     }
 
-    const printers = await withTimeout(
-      plugin.listPrinters({ type: "bluetooth" }), PRINTER_DISCOVERY_TIMEOUT_MS, "Searching for printers"
-    );
+    const printers = await discoverBluetoothPrintersWithPermission(plugin);
     const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
     if (!printerEntries.length) {
       return {
