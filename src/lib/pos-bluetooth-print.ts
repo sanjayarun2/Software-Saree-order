@@ -7,7 +7,27 @@ interface PrintResult {
   error?: string;
 }
 
-const PRINT_TIMEOUT_MS = 15_000; // 15 seconds max per operation
+const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
+const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
+const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
+const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
+
+type PrinterInfoLike = {
+  address?: string;
+  name?: string;
+  bondState?: string;
+  type?: string;
+  deviceClass?: string;
+  majorDeviceClass?: string;
+};
+
+type PrinterCandidate = {
+  key: string;
+  address: string;
+  name: string;
+  bondState: string;
+  type: string;
+};
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -24,6 +44,90 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 async function getPlugin() {
   const { ESCPOSPlugin } = await import("@albgen/capacitor-escpos-plugin");
   return ESCPOSPlugin;
+}
+
+function normalizePrinters(printers: Record<string, PrinterInfoLike>): PrinterCandidate[] {
+  return Object.entries(printers).map(([key, p]) => ({
+    key,
+    address: (p?.address ?? "").trim(),
+    name: (p?.name ?? "").trim(),
+    bondState: (p?.bondState ?? "").trim(),
+    type: (p?.type ?? "").trim() || "bluetooth",
+  }));
+}
+
+function pickBestPrinter(printers: PrinterCandidate[]): PrinterCandidate | null {
+  if (!printers.length) return null;
+
+  // 1) Prefer exact device reported by user
+  const exact = printers.find(
+    (p) =>
+      p.address.toLowerCase() === PREFERRED_PRINTER_ADDRESS.toLowerCase() ||
+      p.name.toLowerCase() === PREFERRED_PRINTER_NAME.toLowerCase()
+  );
+  if (exact) return exact;
+
+  // 2) Prefer bonded printers with common POS naming
+  const posNamedBonded = printers.find((p) => {
+    const n = p.name.toLowerCase();
+    return (
+      p.bondState === "BOND_BONDED" &&
+      (n.includes("kpc") || n.includes("pos") || n.includes("printer") || n.includes("epson"))
+    );
+  });
+  if (posNamedBonded) return posNamedBonded;
+
+  // 3) Any bonded device
+  const bonded = printers.find((p) => p.bondState === "BOND_BONDED");
+  if (bonded) return bonded;
+
+  // 4) Fallback first
+  return printers[0];
+}
+
+async function printWithVariants(
+  plugin: Awaited<ReturnType<typeof getPlugin>>,
+  printer: PrinterCandidate,
+  text: string
+): Promise<void> {
+  const idCandidates = [printer.key, printer.address, printer.name].filter(Boolean);
+  const typeCandidates = [printer.type, "bluetooth"].filter(Boolean);
+
+  const variants = idCandidates.flatMap((id) =>
+    typeCandidates.flatMap((type) => [
+      {
+        type,
+        id,
+        text,
+        mmFeedPaper: "20",
+        initializeBeforeSend: true,
+        sendDelay: "30",
+        chunkSize: "512",
+      },
+      {
+        type,
+        id,
+        text,
+        address: printer.address || undefined,
+        mmFeedPaper: "20",
+        initializeBeforeSend: true,
+        useEscPosAsterik: true,
+        sendDelay: "60",
+        chunkSize: "256",
+      },
+    ])
+  );
+
+  let lastError: unknown = null;
+  for (const payload of variants) {
+    try {
+      await withTimeout(plugin.printFormattedText(payload), PRINT_TIMEOUT_MS, "Printing");
+      return;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError ?? new Error("All print variants failed");
 }
 
 function formatOrderForEscPos(order: Order, normalize: boolean): string {
@@ -92,9 +196,9 @@ export async function printOrdersViaBluetooth(
     }
 
     const printers = await withTimeout(
-      plugin.listPrinters({ type: "bluetooth" }), 10000, "Searching for printers"
+      plugin.listPrinters({ type: "bluetooth" }), PRINTER_DISCOVERY_TIMEOUT_MS, "Searching for printers"
     );
-    const printerEntries = Object.values(printers);
+    const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
     if (!printerEntries.length) {
       return {
         success: false,
@@ -102,21 +206,17 @@ export async function printOrdersViaBluetooth(
       };
     }
 
-    const printer = printerEntries.find((p) => p.bondState === "BOND_BONDED") ?? printerEntries[0];
+    const printer = pickBestPrinter(printerEntries);
+    if (!printer) {
+      return {
+        success: false,
+        error: "No usable Bluetooth printer found.",
+      };
+    }
 
     for (const order of orders) {
       const text = formatOrderForEscPos(order, normalize);
-      await withTimeout(
-        plugin.printFormattedText({
-          type: "bluetooth",
-          id: printer.address,
-          text,
-          mmFeedPaper: "20",
-          initializeBeforeSend: true,
-        }),
-        PRINT_TIMEOUT_MS,
-        "Printing"
-      );
+      await printWithVariants(plugin, printer, text);
     }
 
     return { success: true };
