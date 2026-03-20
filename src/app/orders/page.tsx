@@ -11,8 +11,7 @@ import { IconEdit, IconDispatch, IconUndo, IconPdf, IconPrint, IconTrash, IconWh
 import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
 import FormatSelectionModal from "@/components/ui/FormatSelectionModal";
 import { downloadOrdersPdf } from "@/lib/pdf-utils";
-import { downloadOrdersPosPdf } from "@/lib/pos-pdf-utils";
-import { printOrdersViaBluetooth } from "@/lib/pos-bluetooth-print";
+import { downloadOrdersPosPdf, printOrdersPosPdf } from "@/lib/pos-pdf-utils";
 import { useSearch } from "@/lib/search-context";
 import {
   getOrders as svcGetOrders,
@@ -553,10 +552,7 @@ export default function OrdersPage() {
             } else {
               setPrinting(true);
               try {
-                const result = await printOrdersViaBluetooth(filteredOrders);
-                if (!result.success) {
-                  alert(result.error ?? "POS printer not connected");
-                }
+                await printOrdersPosPdf(filteredOrders);
               } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Unknown error";
                 alert(`Printing failed: ${errorMsg}`);

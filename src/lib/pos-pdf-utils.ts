@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 import { savePdfBlob, normalizeAddressBlock, type PdfRenderOptions } from "./pdf-utils";
 
@@ -89,7 +90,8 @@ async function loadDefaultLogo(): Promise<string | null> {
     for (const url of [p, origin ? origin + p : ""]) {
       if (!url) continue;
       try {
-        const res = await fetch(url);
+        const cacheBustUrl = `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`;
+        const res = await fetch(cacheBustUrl, { cache: "no-store" });
         if (!res.ok) continue;
         const blob = await res.blob();
         const result = await new Promise<string | null>((resolve) => {
@@ -314,6 +316,69 @@ function drawPosLabel(
   });
 }
 
+function renderOrdersToPosPdfDoc(orders: Order[], renderOptions: PdfRenderOptions): jsPDF {
+  const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
+  for (let i = 0; i < orders.length; i++) {
+    if (i > 0) doc.addPage([POS_PAGE_W, POS_PAGE_H], "p");
+    drawPosLabel(doc, orders[i], renderOptions);
+  }
+  return doc;
+}
+
+async function openNativePdfForPrint(uri: string, filename: string): Promise<void> {
+  // Open with native app so user can print the exact same POS PDF.
+  try {
+    const { FileOpener } = await import("@capacitor-community/file-opener");
+    await FileOpener.open({
+      filePath: uri,
+      contentType: "application/pdf",
+      openWithDefault: true,
+    });
+    return;
+  } catch {
+    // continue to share fallback
+  }
+  try {
+    const { Share } = await import("@capacitor/share");
+    const canShare = await Share.canShare();
+    if (canShare.value) {
+      await Share.share({ title: filename, url: uri, dialogTitle: "Print POS PDF" });
+      return;
+    }
+  } catch {
+    // continue to final fallback
+  }
+  try {
+    (window as any).open(uri, "_system");
+  } catch {
+    // nothing else to do
+  }
+}
+
+function printPdfBlobInBrowser(blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.src = url;
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } finally {
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        iframe.remove();
+      }, 1500);
+    }
+  };
+  document.body.appendChild(iframe);
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function downloadOrderPosPdf(order: Order) {
@@ -337,18 +402,37 @@ export async function downloadOrdersPosPdf(orders: Order[]) {
   try {
     const userId = orders[0].user_id;
     const renderOptions = await fetchPosRenderOptions(userId);
-    const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
-
-    for (let i = 0; i < orders.length; i++) {
-      if (i > 0) doc.addPage([POS_PAGE_W, POS_PAGE_H], "p");
-      drawPosLabel(doc, orders[i], renderOptions);
-    }
-
+    const doc = renderOrdersToPosPdfDoc(orders, renderOptions);
     const filename = buildTimestampedFilename("SareeOrders_POS");
     const blob = doc.output("blob");
     await savePdfBlob(blob, filename);
   } catch (e) {
     console.error("[POS-PDF] downloadOrdersPosPdf failed:", e);
+    throw e;
+  }
+}
+
+export async function printOrdersPosPdf(orders: Order[]) {
+  if (typeof window === "undefined") return;
+  if (orders.length === 0) return;
+  try {
+    const userId = orders[0].user_id;
+    const renderOptions = await fetchPosRenderOptions(userId);
+    const doc = renderOrdersToPosPdfDoc(orders, renderOptions);
+    const filename = buildTimestampedFilename("SareeOrders_POS_Print");
+    const blob = doc.output("blob");
+
+    if (Capacitor.isNativePlatform()) {
+      const uri = await savePdfBlob(blob, filename);
+      if (uri) {
+        await openNativePdfForPrint(uri, filename);
+      }
+      return;
+    }
+
+    printPdfBlobInBrowser(blob);
+  } catch (e) {
+    console.error("[POS-PDF] printOrdersPosPdf failed:", e);
     throw e;
   }
 }
