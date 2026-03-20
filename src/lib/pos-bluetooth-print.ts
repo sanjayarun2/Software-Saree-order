@@ -24,6 +24,8 @@ const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
 const PRINT_DISPATCH_GRACE_MS = 3_500;
 const POS_ADDRESS_LINE_FEED_MM = "6"; // mirror A4 address line height (SIZE_ADDRESS(12) * 0.5 = 6mm)
 const PRINTER_CHARS_PER_LINE = 32; // plugin uses printerNbrCharactersPerLine=32 by default
+/** Must match POS PDF page width in pos-pdf-utils (SECTION_H / POS_PAGE_W = 74.25mm). */
+const POS_PAPER_WIDTH_MM = 74.25;
 const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
 const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
 const AGENT_DEBUG_INGEST_URL =
@@ -379,7 +381,7 @@ async function printPdfWithVariants(
       sendDelay: "40",
       chunkSize: "512",
       printerDpi: 203,
-      printerWidthMM: 72,
+      printerWidthMM: POS_PAPER_WIDTH_MM,
       printerNbrCharactersPerLine: 48,
     },
     {
@@ -392,7 +394,7 @@ async function printPdfWithVariants(
       sendDelay: "60",
       chunkSize: "256",
       printerDpi: 203,
-      printerWidthMM: 72,
+      printerWidthMM: POS_PAPER_WIDTH_MM,
       printerNbrCharactersPerLine: 48,
     },
   ]);

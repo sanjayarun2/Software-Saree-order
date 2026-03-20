@@ -1,5 +1,5 @@
 diff --git a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
-index 4f0c81d..df786ba 100644
+index 4f0c81d..cdd627d 100644
 --- a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
 +++ b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
 @@ -4,6 +4,10 @@ import android.Manifest;
@@ -29,7 +29,7 @@ index 4f0c81d..df786ba 100644
  
  @CapacitorPlugin(
          name = "ESCPOSPlugin",
-@@ -256,6 +263,82 @@ public class ESCPOSPlugin extends Plugin {
+@@ -256,6 +263,96 @@ public class ESCPOSPlugin extends Plugin {
          }
      }
  
@@ -78,10 +78,15 @@ index 4f0c81d..df786ba 100644
 +
 +            ParcelFileDescriptor pfd = ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY);
 +            PdfRenderer renderer = new PdfRenderer(pfd);
-+            int targetWidthPx = Math.max(384, (int) ((data.optDouble("printerWidthMM", 72.0) / 25.4) * data.optInt("printerDpi", 203)));
++            // Match printer dot width exactly (EscPosPrinterSize rounds to multiple of 8).
++            int targetWidthPx = printer.getPrinterWidthPx();
 +            int dotsFeedPaper = data.has("mmFeedPaper")
 +                    ? printer.mmToPx((float) data.getDouble("mmFeedPaper"))
 +                    : data.optInt("dotsFeedPaper", 20);
++            // DantSu EscPosPrinterSize.bitmapToBytes() hard-limits image height to 256px and scales
++            // the entire bitmap down if taller — which shrinks long POS strips to unreadable size.
++            // Slice the page into horizontal bands <= 255px so each band keeps full width scale.
++            final int maxStripHeightPx = 255;
 +
 +            for (int i = 0; i < renderer.getPageCount(); i++) {
 +                PdfRenderer.Page page = renderer.openPage(i);
@@ -94,8 +99,17 @@ index 4f0c81d..df786ba 100644
 +                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
 +                page.close();
 +
-+                String hex = PrinterTextParserImg.bitmapToHexadecimalString(printer, bitmap);
-+                printer.printFormattedText("[C]<img>" + hex + "</img>", dotsFeedPaper);
++                for (int y = 0; y < bmpH; y += maxStripHeightPx) {
++                    int stripH = Math.min(maxStripHeightPx, bmpH - y);
++                    Bitmap strip = Bitmap.createBitmap(bitmap, 0, y, bmpW, stripH);
++                    // false = monochrome dither; sharper on thermal than gradient
++                    String hex = PrinterTextParserImg.bitmapToHexadecimalString(printer, strip, false);
++                    boolean lastStripOfPage = (y + stripH >= bmpH);
++                    int feedAfter = lastStripOfPage ? dotsFeedPaper : 0;
++                    // Single full-width image line (no [L]/[C]/[R]) so parser uses 1 column = full paper width
++                    printer.printFormattedText("<img>" + hex + "</img>", feedAfter);
++                    strip.recycle();
++                }
 +                bitmap.recycle();
 +            }
 +
