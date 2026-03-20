@@ -46,7 +46,21 @@ export default function PrinterSetupPage() {
     setError(null);
     setInfo(null);
     setScanning(true);
-    const result = await listBluetoothPrinters();
+    const result = await Promise.race([
+      listBluetoothPrinters(),
+      new Promise<{ success: false; printers: SavedPosPrinter[]; error: string }>((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              success: false,
+              printers: [],
+              error:
+                "Scan timed out. Please keep printer ON, close other printer apps, and try again.",
+            }),
+          20000
+        )
+      ),
+    ]);
     setScanning(false);
     if (!result.success) {
       setError(result.error ?? "Unable to scan printers.");

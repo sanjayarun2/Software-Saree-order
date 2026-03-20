@@ -307,16 +307,20 @@ export async function listBluetoothPrinters(): Promise<{ success: boolean; print
     return { success: false, printers: [], error: "Bluetooth printer setup is only available in Android app." };
   }
   try {
+    addPrinterLog("printers.scan", "Scan flow started");
     const plugin = await loadPluginRobust();
+    addPrinterLog("printers.scan", "Plugin loaded");
     const { result: isEnabled } = await withTimeout(
       plugin.bluetoothIsEnabled(),
       5000,
       "Checking Bluetooth status"
     );
+    addPrinterLog("printers.scan", "Bluetooth status checked", { isEnabled });
     if (!isEnabled) {
       addPrinterLog("printers.scan", "Bluetooth is OFF", undefined, "error");
       return { success: false, printers: [], error: "Bluetooth is turned off." };
     }
+    addPrinterLog("printers.scan", "Starting printer discovery");
     const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
     const printers = normalizePrinters(printersObj as Record<string, PrinterInfoLike>).map((p) => ({
       id: p.address || p.name || p.key,
