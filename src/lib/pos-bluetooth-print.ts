@@ -96,10 +96,6 @@ function isPermissionError(msg: string): boolean {
   );
 }
 
-async function getPlugin() {
-  return ESCPOSPlugin;
-}
-
 async function loadPluginRobust() {
   // RawBT-like behavior: don't fail too early on first cold start.
   // Try once, warm up bridge, then retry.
@@ -110,7 +106,10 @@ async function loadPluginRobust() {
       const pluginInBridge = !!cap?.Plugins?.ESCPOSPlugin;
       addPrinterLog("plugin.load", `Bridge plugin present: ${pluginInBridge}`);
       addPrinterLog("plugin.load", `Attempt ${attempt} starting`);
-      const plugin = await withTimeout(getPlugin(), PLUGIN_LOAD_TIMEOUT_MS, "Loading print plugin");
+      // IMPORTANT: Do NOT wrap ESCPOSPlugin in an async-return Promise.
+      // registerPlugin() proxy can behave like a thenable object in Promise resolution,
+      // which causes artificial "Loading print plugin timed out" even when plugin exists.
+      const plugin = ESCPOSPlugin;
       try {
         await withTimeout(plugin.echo({ value: "warmup" }), 5000, "Warming plugin");
         addPrinterLog("plugin.load", `Attempt ${attempt} warmup success`);
@@ -130,7 +129,7 @@ async function loadPluginRobust() {
 }
 
 async function discoverBluetoothPrintersWithPermission(
-  plugin: Awaited<ReturnType<typeof getPlugin>>
+  plugin: typeof ESCPOSPlugin
 ): Promise<Record<string, PrinterInfoLike>> {
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -207,7 +206,7 @@ function pickBestPrinter(printers: PrinterCandidate[]): PrinterCandidate | null 
 }
 
 async function printWithVariants(
-  plugin: Awaited<ReturnType<typeof getPlugin>>,
+  plugin: typeof ESCPOSPlugin,
   printer: PrinterCandidate,
   text: string
 ): Promise<void> {
@@ -264,8 +263,8 @@ async function printWithVariants(
 }
 
 async function dispatchPrint(
-  plugin: Awaited<ReturnType<typeof getPlugin>>,
-  payload: Parameters<Awaited<ReturnType<typeof getPlugin>>["printFormattedText"]>[0]
+  plugin: typeof ESCPOSPlugin,
+  payload: Parameters<typeof ESCPOSPlugin.printFormattedText>[0]
 ): Promise<void> {
   // Plugin quirk: Android implementation rejects on error, but does not resolve on success.
   // We treat "no reject within grace period" as dispatched successfully.
