@@ -7,6 +7,14 @@ interface PrintResult {
   error?: string;
 }
 
+export interface SavedPosPrinter {
+  id: string;
+  name?: string;
+  address?: string;
+  type?: string;
+}
+
+const SAVED_PRINTER_KEY = "saree_pos_saved_printer_v1";
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
 const PRINT_DISPATCH_GRACE_MS = 3_500;
@@ -29,6 +37,34 @@ type PrinterCandidate = {
   bondState: string;
   type: string;
 };
+
+function readSavedPrinter(): SavedPosPrinter | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SAVED_PRINTER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedPosPrinter;
+    if (!parsed || !parsed.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function getSavedPosPrinter(): SavedPosPrinter | null {
+  return readSavedPrinter();
+}
+
+export function savePosPrinter(printer: SavedPosPrinter): void {
+  if (typeof window === "undefined") return;
+  if (!printer?.id) return;
+  window.localStorage.setItem(SAVED_PRINTER_KEY, JSON.stringify(printer));
+}
+
+export function clearSavedPosPrinter(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SAVED_PRINTER_KEY);
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -59,6 +95,17 @@ function normalizePrinters(printers: Record<string, PrinterInfoLike>): PrinterCa
 
 function pickBestPrinter(printers: PrinterCandidate[]): PrinterCandidate | null {
   if (!printers.length) return null;
+
+  const saved = readSavedPrinter();
+  if (saved?.id) {
+    const savedMatch = printers.find(
+      (p) =>
+        p.key.toLowerCase() === saved.id.toLowerCase() ||
+        p.address.toLowerCase() === saved.id.toLowerCase() ||
+        p.name.toLowerCase() === saved.id.toLowerCase()
+    );
+    if (savedMatch) return savedMatch;
+  }
 
   // 1) Prefer exact device reported by user
   const exact = printers.find(
@@ -165,6 +212,45 @@ async function dispatchPrint(
     return;
   }
   // If still pending after grace and no rejection, treat as sent to printer.
+}
+
+export async function listBluetoothPrinters(): Promise<{ success: boolean; printers: SavedPosPrinter[]; error?: string }> {
+  if (!Capacitor.isNativePlatform()) {
+    return { success: false, printers: [], error: "Bluetooth printer setup is only available in Android app." };
+  }
+  try {
+    const plugin = await withTimeout(getPlugin(), 5000, "Loading print plugin");
+    const { result: hasPerms } = await withTimeout(
+      plugin.bluetoothHasPermissions(),
+      5000,
+      "Checking Bluetooth permissions"
+    );
+    if (!hasPerms) {
+      return { success: false, printers: [], error: "Bluetooth permission not granted." };
+    }
+    const { result: isEnabled } = await withTimeout(
+      plugin.bluetoothIsEnabled(),
+      5000,
+      "Checking Bluetooth status"
+    );
+    if (!isEnabled) {
+      return { success: false, printers: [], error: "Bluetooth is turned off." };
+    }
+    const printersObj = await withTimeout(
+      plugin.listPrinters({ type: "bluetooth" }),
+      PRINTER_DISCOVERY_TIMEOUT_MS,
+      "Searching for printers"
+    );
+    const printers = normalizePrinters(printersObj as Record<string, PrinterInfoLike>).map((p) => ({
+      id: p.address || p.name || p.key,
+      name: p.name,
+      address: p.address,
+      type: "bluetooth",
+    }));
+    return { success: true, printers };
+  } catch (e: any) {
+    return { success: false, printers: [], error: e?.message ?? String(e) };
+  }
 }
 
 function formatOrderForEscPos(order: Order, normalize: boolean): string {

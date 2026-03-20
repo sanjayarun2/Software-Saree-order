@@ -14,6 +14,14 @@ function PdfIconOutlined({ className }: { className?: string }) {
   );
 }
 
+function PrinterIconOutlined({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25V5.625A2.625 2.625 0 0110.125 3h3.75A2.625 2.625 0 0116.5 5.625V8.25m-9 0h9m-9 0A3.75 3.75 0 003.75 12v3A3.75 3.75 0 007.5 18.75h9A3.75 3.75 0 0020.25 15v-3a3.75 3.75 0 00-3.75-3.75m-9 9v1.125A2.625 2.625 0 0010.125 21h3.75a2.625 2.625 0 002.625-2.625V17.25m-9 0h9" />
+    </svg>
+  );
+}
+
 export default function SettingsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -37,7 +45,7 @@ export default function SettingsPage() {
           Settings
         </h1>
 
-        {/* One card, matching dashboard card style for dark mode consistency */}
+        {/* Cards matching dashboard style for dark mode consistency */}
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <Link
             href="/settings/pdf"
@@ -45,6 +53,17 @@ export default function SettingsPage() {
           >
             <PdfIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
             <span className="flex-1 text-base font-medium">PDF Settings</span>
+            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+          <div className="border-t border-white/30 dark:border-white/10" />
+          <Link
+            href="/settings/printer"
+            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+          >
+            <PrinterIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+            <span className="flex-1 text-base font-medium">Printer Setup</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
