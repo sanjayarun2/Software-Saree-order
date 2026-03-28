@@ -1,16 +1,10 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { getOrCreateDeviceId } from "@/lib/device-id";
-import {
-  listUserDevices,
-  removeUserDevice,
-  type UserDeviceRow,
-} from "@/lib/user-devices-supabase";
 
 function PdfIconOutlined({ className }: { className?: string }) {
   return (
@@ -29,31 +23,12 @@ function PrinterIconOutlined({ className }: { className?: string }) {
 }
 
 export default function SettingsPage() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
-  const [devices, setDevices] = useState<UserDeviceRow[]>([]);
-  const [devicesLoading, setDevicesLoading] = useState(true);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-
-  const refreshDevices = useCallback(async () => {
-    if (!user?.id) {
-      setDevices([]);
-      setDevicesLoading(false);
-      return;
-    }
-    setDevicesLoading(true);
-    const { data, error } = await listUserDevices(user.id);
-    if (!error) setDevices(data);
-    setDevicesLoading(false);
-  }, [user?.id]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
   }, [user, loading, router]);
-
-  useEffect(() => {
-    if (user?.id) void refreshDevices();
-  }, [user?.id, refreshDevices]);
 
   if (loading) {
     return (
@@ -79,52 +54,22 @@ export default function SettingsPage() {
             Account
           </p>
           <p className="mt-1 truncate text-base text-slate-900 dark:text-slate-100">{user.email}</p>
-          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Signed in on
-          </p>
-          {devicesLoading ? (
-            <p className="mt-2 text-slate-600 dark:text-slate-400">…</p>
-          ) : devices.length === 0 ? (
-            <p className="mt-2 text-slate-600 dark:text-slate-400">—</p>
-          ) : (
-            <ul className="mt-2 space-y-2">
-              {devices.map((row) => {
-                const currentId = getOrCreateDeviceId();
-                const isThis = currentId === row.device_id;
-                return (
-                  <li
-                    key={row.id}
-                    className="flex items-center justify-between gap-2 text-slate-800 dark:text-slate-200"
-                  >
-                    <span>{isThis ? "This device" : "Other device"}</span>
-                    <button
-                      type="button"
-                      disabled={removingId === row.id}
-                      onClick={async () => {
-                        setRemovingId(row.id);
-                        const { error } = await removeUserDevice(row.id);
-                        setRemovingId(null);
-                        if (error) return;
-                        if (isThis) {
-                          await signOut();
-                          router.replace("/login/");
-                          return;
-                        }
-                        void refreshDevices();
-                      }}
-                      className="shrink-0 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
-                    >
-                      {removingId === row.id ? "…" : "Remove"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </div>
 
-        {/* Cards matching dashboard style for dark mode consistency */}
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <Link
+            href="/settings/admin"
+            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-700">
+              👤
+            </span>
+            <span className="flex-1 text-base font-medium">Admin</span>
+            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+          <div className="border-t border-white/30 dark:border-white/10" />
           <Link
             href="/settings/pdf"
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { BottomNav, RailNav } from "./Navigation";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { DeviceSlotEvictionModal } from "./DeviceSlotEvictionModal";
 
 const NO_NAV_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/update-password", "/verify-success"];
 
@@ -44,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="min-h-screen pb-28 lg:pb-6">{children}</main>
       </div>
       <BottomNav />
+      <DeviceSlotEvictionModal />
     </ErrorBoundary>
   );
 }

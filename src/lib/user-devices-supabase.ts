@@ -8,10 +8,11 @@ export type UserDeviceRow = {
   created_at: string;
 };
 
-/** Use `error.message === AUTH_ERROR_DEVICE_LIMIT` after sign-in. */
+/** Use `error.message === AUTH_ERROR_DEVICE_LIMIT` after sign-in (strict single-device only). */
 export const AUTH_ERROR_DEVICE_LIMIT = "AUTH_DEVICE_LIMIT";
 
 const SESSION_STORAGE_DEVICE_LIMIT = "saree_device_limit";
+const SESSION_STORAGE_DEVICE_EVICTED = "saree_device_slot_evicted";
 
 export function markSessionEndedForDeviceLimit(): void {
   if (typeof window === "undefined") return;
@@ -33,20 +34,47 @@ export function consumeDeviceLimitRedirectFlag(): boolean {
   }
 }
 
+/** After LRU eviction (max_devices ≥ 2); consumed once to show a short modal + WhatsApp. */
+export function markDeviceSlotEvicted(maxDevices: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_DEVICE_EVICTED, JSON.stringify({ maxDevices }));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function consumeDeviceSlotEvicted(): { maxDevices: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_DEVICE_EVICTED);
+    if (!raw) return null;
+    sessionStorage.removeItem(SESSION_STORAGE_DEVICE_EVICTED);
+    const j = JSON.parse(raw) as { maxDevices?: number };
+    return typeof j.maxDevices === "number" ? { maxDevices: j.maxDevices } : null;
+  } catch {
+    return null;
+  }
+}
+
 function clampMaxDevices(raw: unknown): number {
   const m = Math.floor(Number(raw));
   if (!Number.isFinite(m)) return 2;
   return Math.min(20, Math.max(1, m));
 }
 
+export type ResolveDeviceResult =
+  | { ok: true; evicted?: boolean; maxDevices?: number }
+  | { ok: false };
+
 /**
- * Registers or refreshes this device. If the user already has `max_devices` rows
- * (from `user_profiles.max_devices`, default 2) and this device_id is new, returns ok: false.
+ * max_devices === 1: strict — new device blocked if a slot is already used.
+ * max_devices >= 2: LRU — oldest last_seen row removed when over limit, then new device registered.
  */
 export async function resolveDeviceForSession(
   userId: string,
   deviceId: string
-): Promise<{ ok: true } | { ok: false }> {
+): Promise<ResolveDeviceResult> {
   if (!deviceId) return { ok: true };
 
   const now = new Date().toISOString();
@@ -76,7 +104,7 @@ export async function resolveDeviceForSession(
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId);
 
-  if (countErr) {
+  const tryInsert = async (): Promise<ResolveDeviceResult> => {
     const { error: insErr } = await supabase.from("user_devices").insert({
       user_id: userId,
       device_id: deviceId,
@@ -88,24 +116,41 @@ export async function resolveDeviceForSession(
       return { ok: true };
     }
     return { ok: false };
+  };
+
+  if (countErr) {
+    return tryInsert();
   }
 
-  if ((count ?? 0) >= maxDevices) {
-    return { ok: false };
+  const n = count ?? 0;
+
+  if (maxDevices === 1) {
+    if (n >= 1) return { ok: false };
+    return tryInsert();
   }
 
-  const { error: insErr } = await supabase.from("user_devices").insert({
-    user_id: userId,
-    device_id: deviceId,
-    last_seen_at: now,
-  });
-
-  if (!insErr) return { ok: true };
-  if (insErr.code === "23505") {
-    await supabase.from("user_devices").update({ last_seen_at: now }).eq("user_id", userId).eq("device_id", deviceId);
-    return { ok: true };
+  if (n < maxDevices) {
+    return tryInsert();
   }
-  return { ok: false };
+
+  const { data: oldest } = await supabase
+    .from("user_devices")
+    .select("id")
+    .eq("user_id", userId)
+    .order("last_seen_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!oldest?.id) {
+    return tryInsert();
+  }
+
+  const { error: delErr } = await supabase.from("user_devices").delete().eq("id", oldest.id);
+  if (delErr) return { ok: false };
+
+  const inserted = await tryInsert();
+  if (!inserted.ok) return inserted;
+  return { ok: true, evicted: true, maxDevices };
 }
 
 export async function listUserDevices(userId: string): Promise<{

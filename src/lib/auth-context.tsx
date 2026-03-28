@@ -8,8 +8,16 @@ import { getOrCreateDeviceId } from "./device-id";
 import {
   resolveDeviceForSession,
   markSessionEndedForDeviceLimit,
+  markDeviceSlotEvicted,
   AUTH_ERROR_DEVICE_LIMIT,
+  type ResolveDeviceResult,
 } from "./user-devices-supabase";
+
+function notifyDeviceSlotEvicted(r: ResolveDeviceResult): void {
+  if (r.ok && r.evicted && r.maxDevices != null) {
+    markDeviceSlotEvicted(r.maxDevices);
+  }
+}
 
 type AuthContextType = {
   user: User | null;
@@ -56,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               stopLoading();
               return;
             }
+            notifyDeviceSlotEvicted(r);
           }
         }
         if (!cancelled && !error) {
@@ -104,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
             return;
           }
+          notifyDeviceSlotEvicted(r);
         }
         if (cancelled) return;
 
@@ -151,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await clearSession();
           return { error: new Error(AUTH_ERROR_DEVICE_LIMIT) };
         }
+        notifyDeviceSlotEvicted(r);
       }
     }
     return { error: null };

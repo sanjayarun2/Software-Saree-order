@@ -23,7 +23,7 @@
     "monitor:pdf": "powershell -ExecutionPolicy Bypass -File monitor-pdf-issue.ps1",
     "test:pdf:auto": "powershell -ExecutionPolicy Bypass -File auto-test-pdf.ps1",
     "compress:icons": "node scripts/compress-icons.js",
-    "postinstall": "patch-package"
+    "postinstall": "node scripts/postinstall.cjs"
   },
   "dependencies": {
     "@albgen/capacitor-escpos-plugin": "^1.0.18",
