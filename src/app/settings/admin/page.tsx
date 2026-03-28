@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -97,15 +96,7 @@ export default function AdminSettingsPage() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
-        <div>
-          <Link
-            href="/settings/"
-            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-          >
-            ← Settings
-          </Link>
-          <h1 className="mt-2 text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">Admin</h1>
-        </div>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">Admin</h1>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 text-sm shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -116,10 +107,6 @@ export default function AdminSettingsPage() {
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Workers</h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Listed emails get <strong className="text-slate-700 dark:text-slate-300">single-device</strong> login (one
-            phone per mail). Removing a worker restores the default of two devices for that account.
-          </p>
 
           <form onSubmit={handleAdd} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">

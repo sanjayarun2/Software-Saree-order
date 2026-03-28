@@ -34,6 +34,7 @@ export default function AddOrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<OrderSuggestions | null>(null);
   const defaultSenderSet = React.useRef(false);
+  const defaultBookedMobileSet = React.useRef(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login/");
@@ -48,6 +49,14 @@ export default function AddOrderPage() {
         defaultSenderSet.current = true;
         setSender(s.senders[0]);
       }
+      if (!defaultBookedMobileSet.current && s.bookedMobile.length > 0) {
+        defaultBookedMobileSet.current = true;
+        if (!bookedMobileField.value.trim()) {
+          const m = s.bookedMobile[0];
+          bookedMobileField.setValue(m);
+          setBookedMobile(m);
+        }
+      }
     }).then((cached) => {
       if (cached.length) {
         const s = buildSuggestionsFromOrders(cached as Order[]);
@@ -55,6 +64,14 @@ export default function AddOrderPage() {
         if (!defaultSenderSet.current && s.senders.length > 0) {
           defaultSenderSet.current = true;
           setSender(s.senders[0]);
+        }
+        if (!defaultBookedMobileSet.current && s.bookedMobile.length > 0) {
+          defaultBookedMobileSet.current = true;
+          if (!bookedMobileField.value.trim()) {
+            const m = s.bookedMobile[0];
+            bookedMobileField.setValue(m);
+            setBookedMobile(m);
+          }
         }
       }
     });
@@ -118,7 +135,6 @@ export default function AddOrderPage() {
       recipientField.clear();
       senderField.clear();
       bookedByField.clear();
-      bookedMobileField.clear();
       router.replace("/orders/");
     } catch (e) {
       setError((e as Error).message || "Save failed");

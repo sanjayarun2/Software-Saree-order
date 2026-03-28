@@ -28,7 +28,7 @@ function AdminIconOutlined({ className }: { className?: string }) {
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
-        d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.997-1.437l.003-.002.008-.004a1.5 1.5 0 00-1.114-2.779l-.034-.003a9.12 9.12 0 01-3.741.476l-.285-.01C14.37 14.5 12.94 14 12 14c-.939 0-2.37.5-3.643 1.25l-.285.01a9.107 9.107 0 01-3.78-.479l-.034.003a1.5 1.5 0 00-1.114 2.78l.003.002a9.337 9.337 0 004.997 1.437 9.38 9.38 0 002.625-.372M12 10.5a3 3 0 100-6 3 3 0 000 6z"
+        d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
       />
     </svg>
   );
@@ -73,7 +73,9 @@ export default function SettingsPage() {
             href="/settings/admin"
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
           >
-            <AdminIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
+              <AdminIconOutlined className="h-6 w-6 text-slate-600 dark:text-slate-400" />
+            </span>
             <span className="flex-1 text-base font-medium">Admin</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
