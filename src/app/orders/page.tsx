@@ -60,6 +60,43 @@ export default function OrdersPage() {
   const [printing, setPrinting] = useState(false);
   const trackingInputRef = useRef<HTMLInputElement>(null);
 
+  /** Pending tab only: long-press an order to enter multi-select; then tap rows to toggle. PDF/Print use selection when active. */
+  const [pendingSelectionActive, setPendingSelectionActive] = useState(false);
+  const [pendingSelectedIds, setPendingSelectedIds] = useState<Set<string>>(() => new Set());
+  const pendingLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingIgnoreNextRowClickRef = useRef(false);
+
+  const clearPendingLongPressTimer = () => {
+    if (pendingLongPressTimerRef.current != null) {
+      clearTimeout(pendingLongPressTimerRef.current);
+      pendingLongPressTimerRef.current = null;
+    }
+  };
+
+  const schedulePendingLongPress = (orderId: string) => {
+    clearPendingLongPressTimer();
+    pendingLongPressTimerRef.current = setTimeout(() => {
+      pendingLongPressTimerRef.current = null;
+      setPendingSelectionActive(true);
+      setPendingSelectedIds((prev) => new Set(prev).add(orderId));
+      pendingIgnoreNextRowClickRef.current = true;
+    }, 550);
+  };
+
+  const handlePendingOrderRowClick = (orderId: string) => {
+    if (!pendingSelectionActive) return;
+    if (pendingIgnoreNextRowClickRef.current) {
+      pendingIgnoreNextRowClickRef.current = false;
+      return;
+    }
+    setPendingSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
   const openWhatsAppForOrder = (order: Order) => {
     if (typeof window === "undefined") return;
     const booking = new Date(order.booking_date).toLocaleDateString("en-GB");
@@ -138,6 +175,25 @@ export default function OrdersPage() {
       return false;
     });
   }, [orders, query, status]);
+
+  const pendingSelectedKey = React.useMemo(
+    () => Array.from(pendingSelectedIds).sort().join(","),
+    [pendingSelectedIds]
+  );
+
+  const ordersForPdfAndPrint = React.useMemo(() => {
+    if (status !== "PENDING" || !pendingSelectionActive) {
+      return filteredOrders;
+    }
+    return filteredOrders.filter((o) => pendingSelectedIds.has(o.id));
+  }, [status, pendingSelectionActive, filteredOrders, pendingSelectedKey]);
+
+  useEffect(() => {
+    if (status !== "PENDING") {
+      setPendingSelectionActive(false);
+      setPendingSelectedIds(new Set());
+    }
+  }, [status]);
 
   useEffect(() => {
     if (user) fetchOrders();
@@ -301,10 +357,52 @@ export default function OrdersPage() {
             ) : (
               filteredOrders.map((order, i) => (
                 <BentoCard key={order.id} className="flex items-center justify-between gap-4 py-4">
-                  <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
-                      {i + 1}
-                    </span>
+                  <div
+                    className={`flex min-w-0 flex-1 items-center gap-4 ${status === "PENDING" ? "touch-manipulation select-none" : ""}`}
+                    style={
+                      status === "PENDING"
+                        ? ({ WebkitTouchCallout: "none" } as React.CSSProperties)
+                        : undefined
+                    }
+                    onClick={
+                      status === "PENDING"
+                        ? () => handlePendingOrderRowClick(order.id)
+                        : undefined
+                    }
+                    onPointerDown={
+                      status === "PENDING"
+                        ? (e) => {
+                            if (e.button === 0) schedulePendingLongPress(order.id);
+                          }
+                        : undefined
+                    }
+                    onPointerUp={status === "PENDING" ? clearPendingLongPressTimer : undefined}
+                    onPointerLeave={status === "PENDING" ? clearPendingLongPressTimer : undefined}
+                    onPointerCancel={status === "PENDING" ? clearPendingLongPressTimer : undefined}
+                    onContextMenu={status === "PENDING" ? (e) => e.preventDefault() : undefined}
+                  >
+                    {status === "PENDING" && pendingSelectionActive ? (
+                      <span
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 text-sm font-semibold ${
+                          pendingSelectedIds.has(order.id)
+                            ? "border-primary-500 bg-primary-500 text-white dark:border-primary-400 dark:bg-primary-500"
+                            : "border-slate-300 bg-white text-transparent dark:border-slate-600 dark:bg-slate-800"
+                        }`}
+                        aria-hidden
+                      >
+                        {pendingSelectedIds.has(order.id) ? (
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <span className="h-5 w-5" />
+                        )}
+                      </span>
+                    ) : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
+                        {i + 1}
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100 lg:text-base">
                         {getAddressSummary(order.recipient_details)}
@@ -407,9 +505,14 @@ export default function OrdersPage() {
               type="button"
               onClick={() => {
                 if (filteredOrders.length === 0 || downloadingPdf) return;
+                if (pendingSelectionActive && ordersForPdfAndPrint.length === 0) return;
                 setShowFormatModal("pdf");
               }}
-              disabled={filteredOrders.length === 0 || downloadingPdf}
+              disabled={
+                filteredOrders.length === 0 ||
+                downloadingPdf ||
+                (pendingSelectionActive && ordersForPdfAndPrint.length === 0)
+              }
               className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
               title="Download all as PDF"
             >
@@ -517,7 +620,7 @@ export default function OrdersPage() {
               setPdfFallbackUrl(null);
               setDownloadingPdf(true);
               try {
-                await downloadOrdersPdf(filteredOrders);
+                await downloadOrdersPdf(ordersForPdfAndPrint);
               } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Unknown error";
                 alert(`Failed to generate PDF: ${errorMsg}`);
@@ -528,7 +631,7 @@ export default function OrdersPage() {
               setPdfFallbackUrl(null);
               setDownloadingPdf(true);
               try {
-                await downloadOrdersPdf(filteredOrders);
+                await downloadOrdersPdf(ordersForPdfAndPrint);
               } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Unknown error";
                 alert(`Failed to generate PDF: ${errorMsg}`);
@@ -542,7 +645,7 @@ export default function OrdersPage() {
               setPdfFallbackUrl(null);
               setDownloadingPdf(true);
               try {
-                await downloadOrdersPosPdf(filteredOrders);
+                await downloadOrdersPosPdf(ordersForPdfAndPrint);
               } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Unknown error";
                 alert(`Failed to generate POS PDF: ${errorMsg}`);
@@ -552,7 +655,7 @@ export default function OrdersPage() {
             } else {
               setPrinting(true);
               try {
-                await printOrdersPosPdf(filteredOrders);
+                await printOrdersPosPdf(ordersForPdfAndPrint);
               } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Unknown error";
                 alert(`Printing failed: ${errorMsg}`);

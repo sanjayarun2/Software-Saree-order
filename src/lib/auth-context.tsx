@@ -4,6 +4,12 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { clearSession } from "./capacitor-storage";
+import { getOrCreateDeviceId } from "./device-id";
+import {
+  resolveDeviceForSession,
+  markSessionEndedForDeviceLimit,
+  AUTH_ERROR_DEVICE_LIMIT,
+} from "./user-devices-supabase";
 
 type AuthContextType = {
   user: User | null;
@@ -32,10 +38,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth
       .getSession()
-      .then(({ data: { session }, error }) => {
+      .then(async ({ data: { session }, error }) => {
         if (cancelled) return;
         clearTimeout(timeout);
-        if (!error) {
+        if (!error && session?.user && typeof window !== "undefined") {
+          const deviceId = getOrCreateDeviceId();
+          if (deviceId) {
+            const r = await resolveDeviceForSession(session.user.id, deviceId);
+            if (!r.ok) {
+              markSessionEndedForDeviceLimit();
+              await supabase.auth.signOut();
+              await clearSession();
+              if (!cancelled) {
+                setSession(null);
+                setUser(null);
+              }
+              stopLoading();
+              return;
+            }
+          }
+        }
+        if (!cancelled && !error) {
           setSession(session);
           setUser(session?.user ?? null);
         }
@@ -53,29 +76,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!cancelled) {
+      if (cancelled) return;
+
+      if (!session?.user) {
         setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user && typeof window !== "undefined") {
-          localStorage.setItem("saree_app_returning", "1");
-          const pendingMobile = localStorage.getItem("saree_pending_mobile");
-          const payload: { user_id: string; mobile?: string; email?: string; updated_at: string } = {
-            user_id: session.user.id,
-            updated_at: new Date().toISOString(),
-          };
-          if (pendingMobile?.trim()) payload.mobile = pendingMobile.trim();
-          if (session.user.email) payload.email = session.user.email;
-          if (payload.mobile || payload.email) {
-            supabase
-              .from("user_profiles")
-              .upsert(payload, { onConflict: "user_id" })
-              .then(() => {
-                localStorage.removeItem("saree_pending_mobile");
-              })
-              .then(undefined, () => {});
+        setUser(null);
+        return;
+      }
+
+      if (typeof window === "undefined") {
+        setSession(session);
+        setUser(session.user);
+        return;
+      }
+
+      void (async () => {
+        const deviceId = getOrCreateDeviceId();
+        if (deviceId) {
+          const r = await resolveDeviceForSession(session.user.id, deviceId);
+          if (!r.ok) {
+            markSessionEndedForDeviceLimit();
+            await supabase.auth.signOut();
+            await clearSession();
+            if (!cancelled) {
+              setSession(null);
+              setUser(null);
+            }
+            return;
           }
         }
-      }
+        if (cancelled) return;
+
+        setSession(session);
+        setUser(session.user);
+
+        localStorage.setItem("saree_app_returning", "1");
+        const pendingMobile = localStorage.getItem("saree_pending_mobile");
+        const payload: { user_id: string; mobile?: string; email?: string; updated_at: string } = {
+          user_id: session.user.id,
+          updated_at: new Date().toISOString(),
+        };
+        if (pendingMobile?.trim()) payload.mobile = pendingMobile.trim();
+        if (session.user.email) payload.email = session.user.email;
+        if (payload.mobile || payload.email) {
+          supabase
+            .from("user_profiles")
+            .upsert(payload, { onConflict: "user_id" })
+            .then(() => {
+              localStorage.removeItem("saree_pending_mobile");
+            })
+            .then(undefined, () => {});
+        }
+      })();
     });
 
     return () => {
@@ -86,8 +138,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error };
+    const u = data.user;
+    if (u && typeof window !== "undefined") {
+      const deviceId = getOrCreateDeviceId();
+      if (deviceId) {
+        const r = await resolveDeviceForSession(u.id, deviceId);
+        if (!r.ok) {
+          markSessionEndedForDeviceLimit();
+          await supabase.auth.signOut();
+          await clearSession();
+          return { error: new Error(AUTH_ERROR_DEVICE_LIMIT) };
+        }
+      }
+    }
+    return { error: null };
   };
 
   const signUp = async (email: string, password: string, metadata?: { mobile?: string }) => {

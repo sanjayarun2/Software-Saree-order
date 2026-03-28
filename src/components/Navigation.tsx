@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/theme-context";
 import { logReferralShare } from "@/lib/referral-service";
+import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: "🏠" },
@@ -69,11 +70,7 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
   const sidebarContent = (isMobile: boolean) => {
     const openWhatsAppGroup = () => {
       if (typeof window !== "undefined") {
-        window.open(
-          "https://chat.whatsapp.com/HXCJhcTODP81v6RIaRGoFw",
-          "_blank",
-          "noopener,noreferrer"
-        );
+        window.open(WHATSAPP_SUPPORT_GROUP_URL, "_blank", "noopener,noreferrer");
       }
       if (isMobile && onMobileClose) {
         onMobileClose();

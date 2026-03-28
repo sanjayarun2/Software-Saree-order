@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
+import { AUTH_ERROR_DEVICE_LIMIT, consumeDeviceLimitRedirectFlag } from "@/lib/user-devices-supabase";
+import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -15,6 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deviceLimit, setDeviceLimit] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -23,13 +26,28 @@ export default function LoginPage() {
     if (!authLoading && user) router.replace("/dashboard/");
   }, [user, authLoading, router]);
 
+  React.useEffect(() => {
+    if (consumeDeviceLimitRedirectFlag()) setDeviceLimit(true);
+  }, []);
+
+  const openWhatsAppSupport = () => {
+    if (typeof window !== "undefined") {
+      window.open(WHATSAPP_SUPPORT_GROUP_URL, "_blank", "noopener,noreferrer");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setDeviceLimit(false);
     setLoading(true);
     const { error: err } = await signIn(email, password);
     if (err) {
       setLoading(false);
+      if (err.message === AUTH_ERROR_DEVICE_LIMIT) {
+        setDeviceLimit(true);
+        return;
+      }
       setError(err.message || "Login failed. Please try again.");
       return;
     }
@@ -64,6 +82,19 @@ export default function LoginPage() {
                 <p className="rounded-bento bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/30 dark:text-green-200">
                   Password reset successfully. Sign in with your new password.
                 </p>
+              )}
+              {deviceLimit && (
+                <div className="rounded-bento bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                  <p className="font-medium">This account is already signed in on the maximum number of devices.</p>
+                  <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">Need another device? Contact us on WhatsApp.</p>
+                  <button
+                    type="button"
+                    onClick={openWhatsAppSupport}
+                    className="mt-3 w-full min-h-touch rounded-bento bg-[#25D366] px-4 py-2.5 font-semibold text-white hover:opacity-95"
+                  >
+                    WhatsApp
+                  </button>
+                </div>
               )}
               {error && (
                 <p className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
