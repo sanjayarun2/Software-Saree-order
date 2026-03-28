@@ -65,6 +65,10 @@ export default function OrdersPage() {
   const [pendingSelectedIds, setPendingSelectedIds] = useState<Set<string>>(() => new Set());
   const pendingLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIgnoreNextRowClickRef = useRef(false);
+  /** True while a `history.pushState` dummy entry exists for pending multi-select (so Back exits selection, not the app). */
+  const pendingSelectionHistoryPushedRef = useRef(false);
+  const pendingSelectionActiveRef = useRef(false);
+  pendingSelectionActiveRef.current = pendingSelectionActive;
 
   const clearPendingLongPressTimer = () => {
     if (pendingLongPressTimerRef.current != null) {
@@ -189,7 +193,33 @@ export default function OrdersPage() {
   }, [status, pendingSelectionActive, filteredOrders, pendingSelectedKey]);
 
   useEffect(() => {
+    if (status === "PENDING" && pendingSelectionActive && !pendingSelectionHistoryPushedRef.current) {
+      pendingSelectionHistoryPushedRef.current = true;
+      window.history.pushState({ sareePendingSelection: true }, "");
+    }
+  }, [status, pendingSelectionActive]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (!pendingSelectionActiveRef.current) {
+        pendingSelectionHistoryPushedRef.current = false;
+        return;
+      }
+      setPendingSelectionActive(false);
+      setPendingSelectedIds(new Set());
+      pendingIgnoreNextRowClickRef.current = false;
+      pendingSelectionHistoryPushedRef.current = false;
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
     if (status !== "PENDING") {
+      if (pendingSelectionHistoryPushedRef.current) {
+        pendingSelectionHistoryPushedRef.current = false;
+        window.history.back();
+      }
       setPendingSelectionActive(false);
       setPendingSelectedIds(new Set());
     }

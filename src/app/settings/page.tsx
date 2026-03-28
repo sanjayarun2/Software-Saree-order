@@ -22,6 +22,18 @@ function PrinterIconOutlined({ className }: { className?: string }) {
   );
 }
 
+function AdminIconOutlined({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.997-1.437l.003-.002.008-.004a1.5 1.5 0 00-1.114-2.779l-.034-.003a9.12 9.12 0 01-3.741.476l-.285-.01C14.37 14.5 12.94 14 12 14c-.939 0-2.37.5-3.643 1.25l-.285.01a9.107 9.107 0 01-3.78-.479l-.034.003a1.5 1.5 0 00-1.114 2.78l.003.002a9.337 9.337 0 004.997 1.437 9.38 9.38 0 002.625-.372M12 10.5a3 3 0 100-6 3 3 0 000 6z"
+      />
+    </svg>
+  );
+}
+
 export default function SettingsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -61,9 +73,7 @@ export default function SettingsPage() {
             href="/settings/admin"
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg dark:bg-slate-700">
-              👤
-            </span>
+            <AdminIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
             <span className="flex-1 text-base font-medium">Admin</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
