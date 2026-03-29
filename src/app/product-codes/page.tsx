@@ -30,7 +30,7 @@ const PERIOD_OPTIONS: { value: DashboardDatePeriod; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-const MAX_FILES_PER_BATCH = 40;
+const MAX_FILES_PER_BATCH = 100;
 
 function batchQtyTotal(b: ProductCodeBatchRecord): number {
   const fromLines = b.lines?.reduce((s, l) => s + l.qty, 0);
@@ -240,45 +240,49 @@ export default function ProductCodesPage() {
 
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 pb-32 pt-6 lg:px-10 lg:pb-10 lg:pt-8">
         {filteredBatches.length > 0 ? (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {filteredBatches.map((b, i) => {
               const qty = batchQtyTotal(b);
               return (
-                <BentoCard key={b.id} className="flex flex-col overflow-hidden p-0 sm:flex-row sm:items-center">
+                <BentoCard key={b.id} className="flex items-center justify-between gap-3 py-3">
                   <Link
                     href={`/product-codes/batch/?id=${encodeURIComponent(b.id)}`}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 touch-manipulation"
+                    className="flex min-w-0 flex-1 items-center gap-3 touch-manipulation"
                   >
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
                       {i + 1}
                     </span>
-                    <div className="min-w-0 flex-1 leading-tight">
-                      <p className="text-sm font-semibold tabular-nums text-gray-900 dark:text-slate-100">{qty}</p>
-                      <p className="truncate font-mono text-[11px] text-gray-500 dark:text-slate-400">
-                        {b.firstCode}
-                        {b.count > 1 ? ` → ${b.lastCode}` : ""}
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+                        <p className="truncate font-mono text-[12px] text-gray-700 dark:text-slate-300">
+                          {b.firstCode}
+                          {b.count > 1 ? ` → ${b.lastCode}` : ""}
+                        </p>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                          Qty: {qty}
+                        </span>
+                      </div>
                     </div>
                   </Link>
-                  <div className="flex shrink-0 items-center justify-end gap-1 border-t border-white/20 px-2 py-1.5 sm:border-l sm:border-t-0 dark:border-white/10">
+                  <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
                       onClick={(e) => void handleSaveBatchToGallery(e, b.id)}
                       disabled={galleryBusyId === b.id}
-                      className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-sky-100 text-sky-700 transition hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-900/40 dark:text-sky-200 dark:hover:bg-sky-900/60"
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-sky-100 text-sky-700 transition hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-900/40 dark:text-sky-200 dark:hover:bg-sky-900/60"
                       title="Save to device / gallery"
                       aria-label="Save to device"
                     >
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="M21 15l-5-5L5 21" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M12 3v11" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M8 10l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => void handleDeleteBatch(e, b.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
                       title="Delete batch"
                     >
                       <IconTrash className="h-4 w-4" />

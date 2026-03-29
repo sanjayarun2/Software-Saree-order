@@ -24,6 +24,27 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function isAuthForbiddenError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const maybe = err as { status?: number; code?: string; message?: string };
+  if (maybe.status === 401 || maybe.status === 403) return true;
+  const code = (maybe.code ?? "").toUpperCase();
+  if (code === "PGRST301" || code === "42501") return true;
+  const msg = (maybe.message ?? "").toLowerCase();
+  return msg.includes("permission denied") || msg.includes("forbidden") || msg.includes("jwt");
+}
+
+async function withAuthRefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isAuthForbiddenError(err)) throw err;
+    const { error: refreshErr } = await supabase.auth.refreshSession();
+    if (refreshErr) throw err;
+    return await fn();
+  }
+}
+
 // ─── READ: Stale-While-Revalidate ──────────────────────────────
 
 export interface OrderFilters {
@@ -81,22 +102,25 @@ async function revalidateOrders(
   onFresh?: (orders: Order[]) => void,
 ): Promise<void> {
   try {
-    const dateColumn = filters.status === "PENDING" ? "booking_date" : "despatch_date";
-    let query = supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", userId);
+    const data = await withAuthRefreshRetry(async () => {
+      const dateColumn = filters.status === "PENDING" ? "booking_date" : "despatch_date";
+      let query = supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", userId);
 
-    if (filters.status) query = query.eq("status", filters.status);
+      if (filters.status) query = query.eq("status", filters.status);
 
-    if (!filters.allOrders && filters.fromDate && filters.toDate) {
-      query = query.gte(dateColumn, filters.fromDate).lte(dateColumn, filters.toDate);
-    }
+      if (!filters.allOrders && filters.fromDate && filters.toDate) {
+        query = query.gte(dateColumn, filters.fromDate).lte(dateColumn, filters.toDate);
+      }
 
-    query = query.order("created_at", { ascending: false }).limit(50_000);
+      query = query.order("created_at", { ascending: false }).limit(50_000);
 
-    const { data, error } = await query;
-    if (error) throw error;
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    });
     const orders = (data as Order[]) ?? [];
 
     await mergeOrders(userId, orders);
@@ -322,19 +346,22 @@ export async function syncOrders(userId: string): Promise<boolean> {
     let changed = false;
 
     // Fetch changed orders since last sync
-    let query = supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: true })
-      .limit(50_000);
+    const deltaData = await withAuthRefreshRetry(async () => {
+      let query = supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: true })
+        .limit(50_000);
 
-    if (lastSync) {
-      query = query.gt("updated_at", lastSync);
-    }
+      if (lastSync) {
+        query = query.gt("updated_at", lastSync);
+      }
 
-    const { data: deltaData, error: deltaErr } = await query;
-    if (deltaErr) throw deltaErr;
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    });
 
     const deltaOrders = (deltaData as Order[]) ?? [];
     if (deltaOrders.length > 0) {
@@ -344,12 +371,15 @@ export async function syncOrders(userId: string): Promise<boolean> {
     }
 
     // Check for server-side deletions by fetching all IDs (high limit; avoid partial → bad prune)
-    const { data: idData, error: idErr } = await supabase
-      .from("orders")
-      .select("id")
-      .eq("user_id", userId)
-      .limit(50_000);
-    if (idErr) throw idErr;
+    const idData = await withAuthRefreshRetry(async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(50_000);
+      if (error) throw error;
+      return data;
+    });
 
     const serverIds = new Set((idData ?? []).map((r: { id: string }) => r.id));
     if (await pruneOrdersNotInForOwner(userId, userId, serverIds)) {
@@ -396,19 +426,22 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
     const lastSync = await getLastSyncTimestamp(userId);
     let changed = false;
 
-    let query = supabase
-      .from("orders")
-      .select("*")
-      .in("user_id", idList)
-      .order("updated_at", { ascending: true })
-      .limit(50_000);
+    const deltaData = await withAuthRefreshRetry(async () => {
+      let query = supabase
+        .from("orders")
+        .select("*")
+        .in("user_id", idList)
+        .order("updated_at", { ascending: true })
+        .limit(50_000);
 
-    if (lastSync) {
-      query = query.gt("updated_at", lastSync);
-    }
+      if (lastSync) {
+        query = query.gt("updated_at", lastSync);
+      }
 
-    const { data: deltaData, error: deltaErr } = await query;
-    if (deltaErr) throw deltaErr;
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    });
 
     const deltaOrders = (deltaData as Order[]) ?? [];
     if (deltaOrders.length > 0) {
@@ -417,12 +450,15 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
       changed = true;
     }
 
-    const { data: idData, error: idErr } = await supabase
-      .from("orders")
-      .select("id")
-      .in("user_id", idList)
-      .limit(50_000);
-    if (idErr) throw idErr;
+    const idData = await withAuthRefreshRetry(async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id")
+        .in("user_id", idList)
+        .limit(50_000);
+      if (error) throw error;
+      return data;
+    });
 
     const idRows = idData ?? [];
     const serverIds = new Set(idRows.map((r: { id: string }) => r.id));
@@ -517,13 +553,16 @@ export async function getSuggestions(
 
 export async function fullSync(userId: string): Promise<Order[]> {
   try {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+    const data = await withAuthRefreshRetry(async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
-    if (error) throw error;
+      if (error) throw error;
+      return data;
+    });
     const orders = (data as Order[]) ?? [];
 
     const map: Record<string, Order> = {};

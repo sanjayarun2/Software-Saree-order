@@ -6,6 +6,7 @@
 function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    img.decoding = "async";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Could not load image"));
     img.src = url;
@@ -54,11 +55,6 @@ function stampOnCanvas(
   });
 }
 
-function outputMimeForFile(file: File): "image/png" | "image/jpeg" {
-  if (file.type === "image/png") return "image/png";
-  return "image/jpeg";
-}
-
 /** Decode `blob` and draw `code` on top at full size; same pixels as source except text. */
 export async function stampProductCodeOnBlob(imageBlob: Blob, code: string): Promise<Blob> {
   const mime = imageBlob.type.includes("png") ? "image/png" : "image/jpeg";
@@ -82,11 +78,31 @@ export async function stampProductCodeOnBlob(imageBlob: Blob, code: string): Pro
   }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function stampWithRetry(imageBlob: Blob, code: string, attempts = 5): Promise<Blob> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const stamped = await stampProductCodeOnBlob(imageBlob, code);
+      if (stamped.size < 1) throw new Error("Stamped image was empty.");
+      return stamped;
+    } catch (err) {
+      lastErr = err;
+      // Release main thread a bit between large-image decodes to avoid WebView/browser hiccups.
+      await delay(70 * (i + 1));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Could not load image");
+}
+
 /** Overlay code on the original file; File is read as-is (no preprocessing). */
 export async function stampProductCodeOnFile(file: File, code: string): Promise<Blob> {
-  const mime = outputMimeForFile(file);
-  const stamped = await stampProductCodeOnBlob(file, code);
-  if (stamped.size < 1) throw new Error("Stamped image was empty.");
+  const stamped = await stampWithRetry(file, code, 5);
+  // Small yield to reduce peak memory when processing large batches sequentially.
+  await delay(0);
   return stamped;
 }
 

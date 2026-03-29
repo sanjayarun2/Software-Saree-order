@@ -116,11 +116,31 @@ export default function ProductCodesProcessPage() {
           if (cancelled || myEpoch !== genEpochRef.current) return;
 
           const blobs: Blob[] = [];
+          const stampWithBackoff = async (file: File, code: string): Promise<Blob> => {
+            let lastErr: unknown;
+            for (let attempt = 0; attempt < 4; attempt++) {
+              try {
+                return await stampProductCodeOnFile(file, code);
+              } catch (err) {
+                lastErr = err;
+                await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+              }
+            }
+            if (lastErr instanceof Error && lastErr.message) {
+              throw new Error(`${file.name}: ${lastErr.message}`);
+            }
+            throw new Error(`${file.name}: Could not load image`);
+          };
+
           for (let i = 0; i < files.length; i++) {
             if (cancelled || myEpoch !== genEpochRef.current) return;
-            const stamped = await stampProductCodeOnFile(files[i]!, reserved[i]!);
+            const stamped = await stampWithBackoff(files[i]!, reserved[i]!);
             blobs.push(stamped);
             setProgress(Math.round(((i + 1) / files.length) * 100));
+            // Cool down periodically to keep memory stable on very large batches.
+            if ((i + 1) % 8 === 0) {
+              await new Promise((r) => setTimeout(r, 50));
+            }
           }
 
           if (cancelled || myEpoch !== genEpochRef.current) return;
