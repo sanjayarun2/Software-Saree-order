@@ -23,6 +23,7 @@ export default function AddOrderPage() {
   const senderField = usePersistentField("add-order:sender", "");
   const bookedByField = usePersistentField("add-order:bookedBy", "");
   const bookedMobileField = usePersistentField("add-order:bookedMobile", "");
+  const courierField = usePersistentField("add-order:courier", "Professional");
   const [recipient, setRecipient] = useState("");
   const [sender, setSender] = useState("");
   const [bookedBy, setBookedBy] = useState("");
@@ -34,6 +35,7 @@ export default function AddOrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<OrderSuggestions | null>(null);
   const defaultSenderSet = React.useRef(false);
+  const defaultBookedBySet = React.useRef(false);
   const defaultBookedMobileSet = React.useRef(false);
 
   useEffect(() => {
@@ -48,6 +50,14 @@ export default function AddOrderPage() {
       if (!defaultSenderSet.current && s.senders.length > 0) {
         defaultSenderSet.current = true;
         setSender(s.senders[0]);
+      }
+      if (!defaultBookedBySet.current && s.bookedBy.length > 0) {
+        defaultBookedBySet.current = true;
+        if (!bookedByField.value.trim()) {
+          const b = s.bookedBy[0];
+          bookedByField.setValue(b);
+          setBookedBy(b);
+        }
       }
       if (!defaultBookedMobileSet.current && s.bookedMobile.length > 0) {
         defaultBookedMobileSet.current = true;
@@ -64,6 +74,14 @@ export default function AddOrderPage() {
         if (!defaultSenderSet.current && s.senders.length > 0) {
           defaultSenderSet.current = true;
           setSender(s.senders[0]);
+        }
+        if (!defaultBookedBySet.current && s.bookedBy.length > 0) {
+          defaultBookedBySet.current = true;
+          if (!bookedByField.value.trim()) {
+            const b = s.bookedBy[0];
+            bookedByField.setValue(b);
+            setBookedBy(b);
+          }
         }
         if (!defaultBookedMobileSet.current && s.bookedMobile.length > 0) {
           defaultBookedMobileSet.current = true;
@@ -93,6 +111,16 @@ export default function AddOrderPage() {
   useEffect(() => {
     setBookedMobile(bookedMobileField.value);
   }, [bookedMobileField.value]);
+
+  useEffect(() => {
+    const v = courierField.value;
+    if (COURIERS.includes(v)) {
+      setCourier(v);
+    } else {
+      setCourier("Professional");
+      courierField.setValue("Professional");
+    }
+  }, [courierField.value]);
 
   // Recently used couriers first, then the rest of COURIERS in fixed order.
   const courierOptions = useMemo(() => {
@@ -289,7 +317,11 @@ export default function AddOrderPage() {
               <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Courier Name</label>
               <select
                 value={courier}
-                onChange={(e) => setCourier(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCourier(v);
+                  courierField.setValue(v);
+                }}
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               >
                 {courierOptions.map((c) => (

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
 
 function PdfIconOutlined({ className }: { className?: string }) {
   return (
@@ -37,10 +38,22 @@ function AdminIconOutlined({ className }: { className?: string }) {
 export default function SettingsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [isListedWorker, setIsListedWorker] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
   }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void fetchIsListedWorker().then(({ isWorker }) => {
+      if (!cancelled) setIsListedWorker(isWorker);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (loading) {
     return (
@@ -69,19 +82,21 @@ export default function SettingsPage() {
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-          <Link
-            href="/settings/admin"
-            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
-              <AdminIconOutlined className="h-6 w-6 text-slate-600 dark:text-slate-400" />
-            </span>
-            <span className="flex-1 text-base font-medium">Admin</span>
-            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-          <div className="border-t border-white/30 dark:border-white/10" />
+          {!isListedWorker ? (
+            <>
+              <Link
+                href="/settings/admin"
+                className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+              >
+                <AdminIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+                <span className="flex-1 text-base font-medium">Admin</span>
+                <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <div className="border-t border-white/30 dark:border-white/10" />
+            </>
+          ) : null}
           <Link
             href="/settings/pdf"
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"

@@ -8,6 +8,7 @@ import {
   listAdminWorkers,
   addAdminWorker,
   removeAdminWorker,
+  fetchIsListedWorker,
   type AdminWorkerRow,
 } from "@/lib/admin-workers-supabase";
 
@@ -20,6 +21,7 @@ export default function AdminSettingsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [allowAdminPage, setAllowAdminPage] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!user?.id) {
@@ -35,6 +37,17 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!user || loading) return;
+    let cancelled = false;
+    void fetchIsListedWorker().then(({ isWorker }) => {
+      if (!cancelled && isWorker) router.replace("/settings/");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading, router]);
 
   useEffect(() => {
@@ -92,6 +105,14 @@ export default function AdminSettingsPage() {
   }
 
   if (!user) return null;
+
+  if (!allowAdminPage) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>

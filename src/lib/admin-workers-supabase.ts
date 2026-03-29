@@ -40,3 +40,16 @@ export async function removeAdminWorker(rowId: string): Promise<{ error: Error |
   const { error } = await supabase.from("admin_workers").delete().eq("id", rowId);
   return { error: error ? new Error(error.message) : null };
 }
+
+/** True when the signed-in user's email is listed as a worker (not an admin managing workers). */
+export async function fetchIsListedWorker(): Promise<{ isWorker: boolean; error: Error | null }> {
+  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+  if (sessionErr) return { isWorker: false, error: new Error(sessionErr.message) };
+  const email = sessionData.session?.user?.email?.trim().toLowerCase();
+  if (!email) return { isWorker: false, error: null };
+
+  const { data, error } = await supabase.from("admin_workers").select("id").eq("worker_email", email).maybeSingle();
+
+  if (error) return { isWorker: false, error: new Error(error.message) };
+  return { isWorker: data != null, error: null };
+}
