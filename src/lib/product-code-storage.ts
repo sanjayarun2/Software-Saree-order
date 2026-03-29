@@ -5,12 +5,19 @@ const store = createStore("saree-product-codes", "v1");
 
 const BATCH_CAP = 50;
 
+export type ProductCodeBatchLine = {
+  code: string;
+  qty: number;
+};
+
 export type ProductCodeBatchRecord = {
   id: string;
   firstCode: string;
   lastCode: string;
   count: number;
   createdAt: string;
+  /** Per-row quantity when saved from the review screen */
+  lines?: ProductCodeBatchLine[];
 };
 
 function batchesKey(userId: string): string {

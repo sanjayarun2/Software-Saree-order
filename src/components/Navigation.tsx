@@ -7,16 +7,19 @@ import { useTheme } from "@/lib/theme-context";
 import { logReferralShare } from "@/lib/referral-service";
 import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 
-const NAV_ITEMS = [
+const BOTTOM_NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: "🏠" },
   { href: "/orders", label: "Orders", icon: "📋" },
-  { href: "/product-codes", label: "Product codes", icon: "🏷️" },
   { href: "/add-order", label: "Add Order", icon: "➕" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
 const NAV_ITEMS_DESKTOP = [
-  ...NAV_ITEMS,
+  { href: "/dashboard", label: "Home", icon: "🏠" },
+  { href: "/orders", label: "Orders", icon: "📋" },
+  { href: "/product-codes", label: "Product codes", icon: "🏷️" },
+  { href: "/add-order", label: "Add Order", icon: "➕" },
+  { href: "/settings", label: "Settings", icon: "⚙️" },
   { href: "/reports", label: "Reports", icon: "📄" },
 ];
 
@@ -30,7 +33,7 @@ export function BottomNav() {
       role="navigation"
       aria-label="Main navigation"
     >
-      {NAV_ITEMS.map((item) => {
+      {BOTTOM_NAV_ITEMS.map((item) => {
         const active = pathname === item.href || pathname?.startsWith(item.href + "/");
         return (
           <Link
