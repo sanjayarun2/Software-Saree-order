@@ -2,11 +2,19 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
+import { BentoCard } from "@/components/ui/BentoCard";
+import { IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import type { DashboardDatePeriod } from "@/lib/dashboard-date-utils";
-import { getProductCodeBatches, type ProductCodeBatchRecord } from "@/lib/product-code-storage";
+import { getDashboardDateRange } from "@/lib/dashboard-date-utils";
+import { parseYyyyMmDdToLocalDate } from "@/lib/product-code-utils";
+import { getProductCodeBatchImages, storedImageToBlob } from "@/lib/product-code-batch-images";
+import { shareProductCodeImagesAsFiles } from "@/lib/product-code-share";
+import { safeFilename } from "@/lib/image-product-code";
+import { deleteProductCodeBatch, getProductCodeBatches, type ProductCodeBatchRecord } from "@/lib/product-code-storage";
 import { useProductCodesDraft } from "./product-codes-context";
 
 const PERIOD_OPTIONS: { value: DashboardDatePeriod; label: string }[] = [
@@ -23,6 +31,11 @@ const PERIOD_OPTIONS: { value: DashboardDatePeriod; label: string }[] = [
 
 const MAX_FILES_PER_BATCH = 40;
 
+function batchQtyTotal(b: ProductCodeBatchRecord): number {
+  const fromLines = b.lines?.reduce((s, l) => s + l.qty, 0);
+  return fromLines != null && fromLines > 0 ? fromLines : b.count;
+}
+
 export default function ProductCodesPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -38,9 +51,26 @@ export default function ProductCodesPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [batches, setBatches] = useState<ProductCodeBatchRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [shareBusyId, setShareBusyId] = useState<string | null>(null);
 
   const customReady = period !== "custom" || (Boolean(customFrom) && Boolean(customTo));
   const selectedLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today";
+
+  const range = useMemo(
+    () => getDashboardDateRange(period, customFrom, customTo),
+    [period, customFrom, customTo]
+  );
+
+  const filteredBatches = useMemo(() => {
+    const fromT = parseYyyyMmDdToLocalDate(range.from).getTime();
+    const toEnd = parseYyyyMmDdToLocalDate(range.to);
+    toEnd.setHours(23, 59, 59, 999);
+    const toT = toEnd.getTime();
+    return batches.filter((b) => {
+      const t = new Date(b.createdAt).getTime();
+      return t >= fromT && t <= toT;
+    });
+  }, [batches, range.from, range.to]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -90,6 +120,40 @@ export default function ProductCodesPage() {
       });
     });
     router.push("/product-codes/process/");
+  };
+
+  const handleDeleteBatch = async (e: React.MouseEvent, batchId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user?.id) return;
+    if (!window.confirm("Delete this batch?")) return;
+    await deleteProductCodeBatch(user.id, batchId);
+    await loadBatches();
+  };
+
+  const handleShareBatch = async (e: React.MouseEvent, batchId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user?.id) return;
+    setShareBusyId(batchId);
+    setError(null);
+    try {
+      const imgs = await getProductCodeBatchImages(user.id, batchId);
+      if (!imgs.length) {
+        setError("No saved images for this batch.");
+        return;
+      }
+      const items = imgs.map((entry) => {
+        const blob = storedImageToBlob(entry);
+        const ext = entry.mime.includes("png") ? "png" : "jpg";
+        return { blob, filename: safeFilename(entry.code, ext) };
+      });
+      await shareProductCodeImagesAsFiles(items);
+    } catch (err) {
+      setError((err as Error).message || "Could not open share.");
+    } finally {
+      setShareBusyId(null);
+    }
   };
 
   if (authLoading) {
@@ -168,39 +232,60 @@ export default function ProductCodesPage() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 pb-32 pt-6 lg:px-10 lg:pb-10 lg:pt-8">
-        {batches.length > 0 && (
-          <section>
-            <ul className="flex flex-col gap-2">
-              {batches.map((b) => {
-                const qtyTotal = b.lines?.reduce((s, l) => s + l.qty, 0);
-                return (
-                  <li
-                    key={b.id}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800/80"
+      <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 pb-32 pt-6 lg:px-10 lg:pb-10 lg:pt-8">
+        {filteredBatches.length > 0 ? (
+          <div className="space-y-4">
+            {filteredBatches.map((b, i) => {
+              const qty = batchQtyTotal(b);
+              return (
+                <BentoCard key={b.id} className="flex flex-col overflow-hidden p-0 sm:flex-row sm:items-stretch">
+                  <Link
+                    href={`/product-codes/batch/?id=${encodeURIComponent(b.id)}`}
+                    className="flex min-w-0 flex-1 items-center gap-4 px-4 py-4 touch-manipulation"
                   >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-mono text-xs text-slate-900 dark:text-slate-100">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold tabular-nums text-gray-900 dark:text-slate-100">{qty}</p>
+                      <p className="truncate font-mono text-xs text-gray-500 dark:text-slate-400">
                         {b.firstCode}
                         {b.count > 1 ? ` → ${b.lastCode}` : ""}
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {qtyTotal != null ? `${qtyTotal} qty · ` : ""}
-                        {b.count} photo{b.count === 1 ? "" : "s"} ·{" "}
-                        {new Date(b.createdAt).toLocaleString("en-GB", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </span>
+                      </p>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
+                  </Link>
+                  <div className="flex shrink-0 items-center justify-end gap-1 border-t border-white/20 px-2 py-2 sm:border-l sm:border-t-0 dark:border-white/10">
+                    <button
+                      type="button"
+                      onClick={(e) => void handleShareBatch(e, b.id)}
+                      disabled={shareBusyId === b.id}
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 disabled:opacity-50 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                      title="Share via WhatsApp"
+                    >
+                      <IconWhatsApp className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => void handleDeleteBatch(e, b.id)}
+                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+                      title="Delete batch"
+                    >
+                      <IconTrash className="h-5 w-5" />
+                    </button>
+                  </div>
+                </BentoCard>
+              );
+            })}
+          </div>
+        ) : batches.length > 0 ? (
+          <BentoCard>
+            <p className="text-center text-sm text-gray-500 dark:text-slate-400">
+              No batches in this period. Try another date range.
+            </p>
+          </BentoCard>
+        ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800/60">
+        <BentoCard className="py-5">
           <input
             ref={fileInputRef}
             type="file"
@@ -210,14 +295,14 @@ export default function ProductCodesPage() {
             onChange={(e) => onPickFiles(e.target.files)}
           />
 
-          <p className="mb-4 text-center text-base font-medium text-slate-800 dark:text-slate-200">
+          <p className="mb-4 text-center text-base font-medium text-gray-900 dark:text-slate-100">
             {files.length === 0
               ? "No photos selected"
               : `${files.length} photo${files.length === 1 ? "" : "s"} selected`}
           </p>
 
           {error && (
-            <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            <p className="mb-3 rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
               {error}
             </p>
           )}
@@ -226,11 +311,11 @@ export default function ProductCodesPage() {
             type="button"
             disabled={!customReady || files.length === 0}
             onClick={goGenerate}
-            className="min-h-[48px] w-full rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
+            className="min-h-touch w-full rounded-bento bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
           >
             Generate
           </button>
-        </section>
+        </BentoCard>
       </div>
 
       <button

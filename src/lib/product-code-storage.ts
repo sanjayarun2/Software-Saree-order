@@ -1,5 +1,6 @@
 import { createStore, get, set } from "idb-keyval";
 import { buildProductCode } from "./product-code-utils";
+import { deleteProductCodeBatchImages } from "./product-code-batch-images";
 
 const store = createStore("saree-product-codes", "v1");
 
@@ -38,6 +39,13 @@ export async function prependProductCodeBatch(userId: string, batch: ProductCode
   const prev = await getProductCodeBatches(userId);
   const next = [batch, ...prev].slice(0, BATCH_CAP);
   await set(batchesKey(userId), next, store);
+}
+
+export async function deleteProductCodeBatch(userId: string, batchId: string): Promise<void> {
+  const prev = await getProductCodeBatches(userId);
+  const next = prev.filter((b) => b.id !== batchId);
+  await set(batchesKey(userId), next, store);
+  await deleteProductCodeBatchImages(userId, batchId);
 }
 
 /**

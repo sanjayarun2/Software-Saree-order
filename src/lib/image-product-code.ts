@@ -27,8 +27,8 @@ function stampOnCanvas(
   if (!ctx) throw new Error("Canvas not supported");
 
   ctx.drawImage(source, 0, 0);
-  const fontSize = Math.round(Math.max(16, Math.min(56, w * 0.042)));
-  ctx.font = `bold ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const fontSize = Math.round(Math.max(20, Math.min(72, w * 0.056)));
+  ctx.font = `700 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif`;
   ctx.textAlign = "right";
   ctx.textBaseline = "top";
   const pad = Math.round(fontSize * 0.55);
@@ -64,9 +64,13 @@ export async function compressImageFile(file: File): Promise<Blob> {
     fileType: isPng ? ("image/png" as const) : ("image/jpeg" as const),
   };
   try {
-    return (await imageCompression(file, { ...baseOpts, useWebWorker: true })) as Blob;
-  } catch {
     return (await imageCompression(file, { ...baseOpts, useWebWorker: false })) as Blob;
+  } catch {
+    try {
+      return (await imageCompression(file, { ...baseOpts, useWebWorker: true })) as Blob;
+    } catch {
+      return file;
+    }
   }
 }
 

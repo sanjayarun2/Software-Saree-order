@@ -8,6 +8,11 @@ import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import { getDashboardDateRange } from "@/lib/dashboard-date-utils";
 import { parseYyyyMmDdToLocalDate } from "@/lib/product-code-utils";
 import { ensureProductCodePrefix } from "@/lib/product-code-prefix-supabase";
+import {
+  blobToBase64Payload,
+  deleteProductCodeBatchImages,
+  putProductCodeBatchImages,
+} from "@/lib/product-code-batch-images";
 import { prependProductCodeBatch, reserveCodesForDay } from "@/lib/product-code-storage";
 import {
   compressImageFile,
@@ -164,16 +169,37 @@ export default function ProductCodesProcessPage() {
   const handleSave = useCallback(async () => {
     if (!user?.id || saved || status !== "ready" || codes.length === 0) return;
     setSaving(true);
+    const batchId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${codes[0]}`;
     try {
       const lines = codes.map((code, i) => ({ code, qty: quantities[i] ?? 1 }));
-      await prependProductCodeBatch(user.id, {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${codes[0]}`,
-        firstCode: codes[0]!,
-        lastCode: codes[codes.length - 1]!,
-        count: codes.length,
-        createdAt: new Date().toISOString(),
-        lines,
-      });
+
+      const imageRows = [];
+      for (let i = 0; i < stampedBlobs.length; i++) {
+        const payload = await blobToBase64Payload(stampedBlobs[i]!);
+        imageRows.push({
+          code: codes[i]!,
+          mime: payload.mime,
+          dataBase64: payload.dataBase64,
+        });
+      }
+      await putProductCodeBatchImages(user.id, batchId, imageRows);
+
+      try {
+        await prependProductCodeBatch(user.id, {
+          id: batchId,
+          firstCode: codes[0]!,
+          lastCode: codes[codes.length - 1]!,
+          count: codes.length,
+          createdAt: new Date().toISOString(),
+          lines,
+        });
+      } catch (batchErr) {
+        await deleteProductCodeBatchImages(user.id, batchId);
+        throw batchErr;
+      }
 
       for (let i = 0; i < stampedBlobs.length; i++) {
         const file = originals[i]!;
