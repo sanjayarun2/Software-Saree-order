@@ -267,7 +267,12 @@ export default function DashboardPage() {
   }, []);
 
   const range = getDashboardDateRange(period, customFrom, customTo);
-  const prevRange = period !== "custom" ? getPreviousRange(range.from, range.to) : null;
+  const rangeFrom = range.from;
+  const rangeTo = range.to;
+  const prevRange = period !== "custom" ? getPreviousRange(rangeFrom, rangeTo) : null;
+  const prevFrom = prevRange?.from ?? null;
+  const prevTo = prevRange?.to ?? null;
+  const syncingRef = useRef(false);
 
   const fetchStats = useCallback(async () => {
     if (!user) return;
@@ -280,21 +285,23 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const cachedStats = await getStatsFromCache(user.id, range.from, range.to);
+      const cachedStats = await getStatsFromCache(user.id, rangeFrom, rangeTo);
       setStats(cachedStats);
-      if (prevRange) {
-        const cachedPrev = await getStatsFromCache(user.id, prevRange.from, prevRange.to);
+      if (prevFrom && prevTo) {
+        const cachedPrev = await getStatsFromCache(user.id, prevFrom, prevTo);
         setPrevStats(cachedPrev);
       }
       setLoadingStats(false);
 
+      if (syncingRef.current) return;
+      syncingRef.current = true;
       setSyncing(true);
       syncDashboardOrders(user.id)
         .then(async () => {
-          const fresh = await getStatsFromCache(user.id, range.from, range.to);
+          const fresh = await getStatsFromCache(user.id, rangeFrom, rangeTo);
           setStats(fresh);
-          if (prevRange) {
-            const freshPrev = await getStatsFromCache(user.id, prevRange.from, prevRange.to);
+          if (prevFrom && prevTo) {
+            const freshPrev = await getStatsFromCache(user.id, prevFrom, prevTo);
             setPrevStats(freshPrev);
           } else {
             setPrevStats(null);
@@ -302,6 +309,7 @@ export default function DashboardPage() {
           setLastSyncedAt(new Date().toISOString());
         })
         .finally(() => {
+          syncingRef.current = false;
           setSyncing(false);
         });
     } catch (e) {
@@ -310,7 +318,7 @@ export default function DashboardPage() {
       setPrevStats(null);
       setLoadingStats(false);
     }
-  }, [user, range.from, range.to, period, customFrom, customTo]);
+  }, [user, rangeFrom, rangeTo, prevFrom, prevTo, period, customFrom, customTo]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");

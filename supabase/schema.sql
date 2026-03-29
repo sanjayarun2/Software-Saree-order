@@ -181,41 +181,42 @@ BEGIN
 END;
 $rls$;
 
--- Admin dashboard: read workers' orders + RPC for team user ids (requires admin_workers above)
+-- Admin dashboard: RPC for team user ids (security definer so it can access auth.users)
 CREATE OR REPLACE FUNCTION public.admin_team_order_user_ids()
-RETURNS uuid[]
+RETURNS text[]
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT COALESCE(array_agg(DISTINCT uid), ARRAY[auth.uid()]::uuid[])
+  SELECT coalesce(
+    array_remove(array_agg(distinct uid_txt), null),
+    array[]::text[]
+  )
   FROM (
-    SELECT auth.uid() AS uid
+    SELECT auth.uid()::text AS uid_txt
+    WHERE auth.uid() IS NOT NULL
     UNION ALL
-    SELECT worker_u.id
+    SELECT worker_u.id::text AS uid_txt
     FROM public.admin_workers aw
-    INNER JOIN auth.users worker_u ON lower(trim(worker_u.email::text)) = aw.worker_email
+    JOIN auth.users worker_u
+      ON lower(trim(worker_u.email::text)) = aw.worker_email
     WHERE aw.admin_user_id = auth.uid()
-  ) t;
+      AND worker_u.id IS NOT NULL
+  ) s;
 $$;
 
 REVOKE ALL ON FUNCTION public.admin_team_order_user_ids() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_team_order_user_ids() TO authenticated;
 
+-- RLS policy for admin team reads uses the RPC (avoids direct auth.users subquery)
 DO $rls$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'orders' AND policyname = 'Admins can view team worker orders') THEN
     EXECUTE $p$CREATE POLICY "Admins can view team worker orders" ON public.orders
       FOR SELECT TO authenticated
       USING (
-        EXISTS (
-          SELECT 1
-          FROM public.admin_workers aw
-          INNER JOIN auth.users worker_u ON lower(trim(worker_u.email::text)) = aw.worker_email
-          WHERE aw.admin_user_id = auth.uid()
-            AND orders.user_id = worker_u.id
-        )
+        user_id::text = ANY (public.admin_team_order_user_ids())
       )$p$;
   END IF;
 END;

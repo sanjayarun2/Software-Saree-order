@@ -24,15 +24,9 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const ORDER_DEBUG_PREFIX = "[OrderDebug]";
 const REFRESH_COOLDOWN_MS = 60_000;
 let lastRefreshAttemptAt = 0;
 let refreshInFlight: Promise<boolean> | null = null;
-
-function logOrderDebug(message: string, meta?: Record<string, unknown>): void {
-  if (meta) console.warn(`${ORDER_DEBUG_PREFIX} ${message}`, meta);
-  else console.warn(`${ORDER_DEBUG_PREFIX} ${message}`);
-}
 
 function isAuthForbiddenError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -51,28 +45,16 @@ async function withAuthRefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
     if (!isAuthForbiddenError(err)) throw err;
     const now = Date.now();
     if (now - lastRefreshAttemptAt < REFRESH_COOLDOWN_MS) {
-      logOrderDebug("Skipping refresh (cooldown active)", { cooldownMs: REFRESH_COOLDOWN_MS });
       throw err;
     }
     lastRefreshAttemptAt = now;
     if (!refreshInFlight) {
       refreshInFlight = (async () => {
-        const { data: before } = await supabase.auth.getSession();
-        const beforeExp = before.session?.expires_at ?? null;
-        const { error: refreshErr, data: after } = await supabase.auth.refreshSession();
+        const { error: refreshErr } = await supabase.auth.refreshSession();
         if (refreshErr) {
-          logOrderDebug("refreshSession failed", {
-            code: refreshErr.code,
-            message: refreshErr.message,
-            status: (refreshErr as { status?: number }).status,
-          });
+          console.warn("[OrderService] refreshSession failed:", refreshErr.message);
           return false;
         }
-        logOrderDebug("refreshSession success", {
-          previousExp: beforeExp,
-          nextExp: after.session?.expires_at ?? null,
-          userId: after.user?.id ?? null,
-        });
         return true;
       })().finally(() => {
         refreshInFlight = null;
@@ -170,16 +152,7 @@ async function revalidateOrders(
       onFresh(merged);
     }
   } catch (err) {
-    const e = err as { code?: string; message?: string; status?: number };
-    const { data: s } = await supabase.auth.getSession();
-    logOrderDebug("revalidate failed", {
-      userId,
-      sessionUserId: s.session?.user?.id ?? null,
-      sessionExpiresAt: s.session?.expires_at ?? null,
-      errCode: e?.code,
-      errStatus: e?.status,
-      errMessage: e?.message ?? String(err),
-    });
+    console.warn("[OrderService] revalidate failed:", err);
   }
 }
 
@@ -442,16 +415,7 @@ export async function syncOrders(userId: string): Promise<boolean> {
 
     return changed;
   } catch (err) {
-    const e = err as { code?: string; message?: string; status?: number };
-    const { data: s } = await supabase.auth.getSession();
-    logOrderDebug("syncOrders failed", {
-      userId,
-      sessionUserId: s.session?.user?.id ?? null,
-      sessionExpiresAt: s.session?.expires_at ?? null,
-      errCode: e?.code,
-      errStatus: e?.status,
-      errMessage: e?.message ?? String(err),
-    });
+    console.warn("[OrderService] syncOrders failed:", err);
     return false;
   }
 }
@@ -473,8 +437,8 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
     let idList = Array.from(
       new Set(
         ((teamIdsRaw as string[] | null) ?? [])
-          .map((id) => String(id))
-          .filter(Boolean),
+          .map((id) => (id != null ? String(id) : ""))
+          .filter((id) => id.length > 0 && id !== "null"),
       ),
     );
     if (idList.length === 0) idList = [userId];
@@ -537,16 +501,7 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
 
     return changed;
   } catch (err) {
-    const e = err as { code?: string; message?: string; status?: number };
-    const { data: s } = await supabase.auth.getSession();
-    logOrderDebug("syncDashboardOrders failed", {
-      userId,
-      sessionUserId: s.session?.user?.id ?? null,
-      sessionExpiresAt: s.session?.expires_at ?? null,
-      errCode: e?.code,
-      errStatus: e?.status,
-      errMessage: e?.message ?? String(err),
-    });
+    console.warn("[OrderService] syncDashboardOrders failed:", err);
     return false;
   }
 }
