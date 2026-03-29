@@ -15,11 +15,10 @@ import {
 } from "@/lib/product-code-batch-images";
 import { prependProductCodeBatch, reserveCodesForDay } from "@/lib/product-code-storage";
 import {
-  compressImageFile,
   downloadBlob,
   extensionForBlob,
+  generateValidatedStampedImage,
   safeFilename,
-  stampProductCodeOnBlob,
 } from "@/lib/image-product-code";
 import { useProductCodesDraft } from "../product-codes-context";
 
@@ -119,8 +118,7 @@ export default function ProductCodesProcessPage() {
           const blobs: Blob[] = [];
           for (let i = 0; i < files.length; i++) {
             if (cancelled || myEpoch !== genEpochRef.current) return;
-            const compressed = await compressImageFile(files[i]!);
-            const stamped = await stampProductCodeOnBlob(compressed, reserved[i]!);
+            const stamped = await generateValidatedStampedImage(files[i]!, reserved[i]!);
             blobs.push(stamped);
             setProgress(Math.round(((i + 1) / files.length) * 100));
           }

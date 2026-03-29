@@ -55,6 +55,9 @@ export async function getOrdersLocal(userId: string, filters: OrderFilters): Pro
   const map = await getAllOrders(userId);
   let list = Object.values(map);
 
+  // Only this user's orders in list/reports. (Admins may have workers' rows merged for dashboard stats.)
+  list = list.filter((o) => String(o.user_id) === String(userId));
+
   if (filters.status) {
     list = list.filter((o) => o.status === filters.status);
   }

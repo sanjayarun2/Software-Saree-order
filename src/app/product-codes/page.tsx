@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import { BentoCard } from "@/components/ui/BentoCard";
-import { IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
+import { IconTrash } from "@/components/ui/OrderIcons";
+import { Capacitor } from "@capacitor/core";
 import type { DashboardDatePeriod } from "@/lib/dashboard-date-utils";
 import { getDashboardDateRange } from "@/lib/dashboard-date-utils";
 import { parseYyyyMmDdToLocalDate } from "@/lib/product-code-utils";
 import { getProductCodeBatchImages, storedImageToBlob } from "@/lib/product-code-batch-images";
-import { shareProductCodeImagesAsFiles } from "@/lib/product-code-share";
+import { saveProductCodeImagesToGalleryOrDownloads } from "@/lib/product-code-gallery";
 import { safeFilename } from "@/lib/image-product-code";
 import { deleteProductCodeBatch, getProductCodeBatches, type ProductCodeBatchRecord } from "@/lib/product-code-storage";
 import { useProductCodesDraft } from "./product-codes-context";
@@ -51,7 +52,7 @@ export default function ProductCodesPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [batches, setBatches] = useState<ProductCodeBatchRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [shareBusyId, setShareBusyId] = useState<string | null>(null);
+  const [galleryBusyId, setGalleryBusyId] = useState<string | null>(null);
 
   const customReady = period !== "custom" || (Boolean(customFrom) && Boolean(customTo));
   const selectedLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today";
@@ -131,11 +132,11 @@ export default function ProductCodesPage() {
     await loadBatches();
   };
 
-  const handleShareBatch = async (e: React.MouseEvent, batchId: string) => {
+  const handleSaveBatchToGallery = async (e: React.MouseEvent, batchId: string) => {
     e.preventDefault();
     e.stopPropagation();
     if (!user?.id) return;
-    setShareBusyId(batchId);
+    setGalleryBusyId(batchId);
     setError(null);
     try {
       const imgs = await getProductCodeBatchImages(user.id, batchId);
@@ -148,11 +149,16 @@ export default function ProductCodesPage() {
         const ext = entry.mime.includes("png") ? "png" : "jpg";
         return { blob, filename: safeFilename(entry.code, ext) };
       });
-      await shareProductCodeImagesAsFiles(items);
+      const nativeSaved = await saveProductCodeImagesToGalleryOrDownloads(items);
+      if (nativeSaved && Capacitor.isNativePlatform()) {
+        window.alert(
+          `Saved ${items.length} image(s) to Documents → VeloProductCodes. Open your Files app to view or add to Photos.`
+        );
+      }
     } catch (err) {
-      setError((err as Error).message || "Could not open share.");
+      setError((err as Error).message || "Could not save images.");
     } finally {
-      setShareBusyId(null);
+      setGalleryBusyId(null);
     }
   };
 
@@ -234,43 +240,48 @@ export default function ProductCodesPage() {
 
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 pb-32 pt-6 lg:px-10 lg:pb-10 lg:pt-8">
         {filteredBatches.length > 0 ? (
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {filteredBatches.map((b, i) => {
               const qty = batchQtyTotal(b);
               return (
-                <BentoCard key={b.id} className="flex flex-col overflow-hidden p-0 sm:flex-row sm:items-stretch">
+                <BentoCard key={b.id} className="flex flex-col overflow-hidden p-0 sm:flex-row sm:items-center">
                   <Link
                     href={`/product-codes/batch/?id=${encodeURIComponent(b.id)}`}
-                    className="flex min-w-0 flex-1 items-center gap-4 px-4 py-4 touch-manipulation"
+                    className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 touch-manipulation"
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
                       {i + 1}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold tabular-nums text-gray-900 dark:text-slate-100">{qty}</p>
-                      <p className="truncate font-mono text-xs text-gray-500 dark:text-slate-400">
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <p className="text-sm font-semibold tabular-nums text-gray-900 dark:text-slate-100">{qty}</p>
+                      <p className="truncate font-mono text-[11px] text-gray-500 dark:text-slate-400">
                         {b.firstCode}
                         {b.count > 1 ? ` → ${b.lastCode}` : ""}
                       </p>
                     </div>
                   </Link>
-                  <div className="flex shrink-0 items-center justify-end gap-1 border-t border-white/20 px-2 py-2 sm:border-l sm:border-t-0 dark:border-white/10">
+                  <div className="flex shrink-0 items-center justify-end gap-1 border-t border-white/20 px-2 py-1.5 sm:border-l sm:border-t-0 dark:border-white/10">
                     <button
                       type="button"
-                      onClick={(e) => void handleShareBatch(e, b.id)}
-                      disabled={shareBusyId === b.id}
-                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 disabled:opacity-50 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                      title="Share via WhatsApp"
+                      onClick={(e) => void handleSaveBatchToGallery(e, b.id)}
+                      disabled={galleryBusyId === b.id}
+                      className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-sky-100 text-sky-700 transition hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-900/40 dark:text-sky-200 dark:hover:bg-sky-900/60"
+                      title="Save to device / gallery"
+                      aria-label="Save to device"
                     >
-                      <IconWhatsApp className="h-5 w-5" />
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="M21 15l-5-5L5 21" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => void handleDeleteBatch(e, b.id)}
-                      className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+                      className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-red-50 text-red-600 transition hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
                       title="Delete batch"
                     >
-                      <IconTrash className="h-5 w-5" />
+                      <IconTrash className="h-4 w-4" />
                     </button>
                   </div>
                 </BentoCard>

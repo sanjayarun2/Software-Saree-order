@@ -81,6 +81,44 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_product_code_prefix_unique
   ON public.user_profiles (product_code_prefix)
   WHERE product_code_prefix IS NOT NULL;
 
+-- Sequential assignment of product_code_prefix (see claim_next_product_prefix_index)
+CREATE TABLE IF NOT EXISTS public.product_code_prefix_counter (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  next_index bigint NOT NULL DEFAULT -1
+);
+
+INSERT INTO public.product_code_prefix_counter (id, next_index)
+VALUES (1, -1)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.claim_next_product_prefix_index()
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v bigint;
+BEGIN
+  INSERT INTO public.product_code_prefix_counter (id, next_index)
+  VALUES (1, -1)
+  ON CONFLICT (id) DO NOTHING;
+
+  UPDATE public.product_code_prefix_counter
+  SET next_index = next_index + 1
+  WHERE id = 1
+  RETURNING next_index INTO STRICT v;
+
+  RETURN v;
+END;
+$$;
+
+REVOKE ALL ON TABLE public.product_code_prefix_counter FROM PUBLIC;
+REVOKE ALL ON TABLE public.product_code_prefix_counter FROM authenticated;
+
+REVOKE ALL ON FUNCTION public.claim_next_product_prefix_index() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.claim_next_product_prefix_index() TO authenticated;
+
 -- Registered devices (Settings + device login limit)
 CREATE TABLE IF NOT EXISTS public.user_devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

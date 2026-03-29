@@ -1,21 +1,14 @@
 import { supabase } from "./supabase";
+import { indexToGlobalProductPrefix } from "./product-code-prefix-encoding";
 
-function twoFromUuid(id: string): string {
-  const s = id.replace(/-/g, "");
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  const a = 65 + (Math.abs(h) % 26);
-  const b = 65 + (Math.abs(h >> 7) % 26);
-  return String.fromCharCode(a) + String.fromCharCode(b);
-}
-
-function randomTwo(): string {
-  const r = () => 65 + Math.floor(Math.random() * 26);
-  return String.fromCharCode(r(), r());
+function normalizeStoredPrefix(raw: string | null | undefined): string | null {
+  if (raw == null || String(raw).trim() === "") return null;
+  return String(raw).toUpperCase().replace(/[^A-Z0-9]/g, "") || null;
 }
 
 /**
- * Ensures user_profiles.product_code_prefix is set (2 letters, globally unique). Lazy on first use.
+ * Ensures user_profiles.product_code_prefix is set. Values come from the central
+ * DB counter (claim_next_product_prefix_index) in order: A0…A9, AA…AZ, B0…, …, ZZ, A00, …
  */
 export async function ensureProductCodePrefix(): Promise<string> {
   const {
@@ -32,15 +25,26 @@ export async function ensureProductCodePrefix(): Promise<string> {
       .select("product_code_prefix")
       .eq("user_id", user.id)
       .maybeSingle();
-    const p = data?.product_code_prefix;
-    return p && String(p).length >= 1 ? String(p).toUpperCase().slice(0, 2).padEnd(2, "X") : null;
+    return normalizeStoredPrefix(data?.product_code_prefix as string | undefined);
   };
 
   const existing = await readPrefix();
-  if (existing && existing.length === 2) return existing;
+  if (existing != null && existing.length >= 1) {
+    return existing;
+  }
 
-  for (let attempt = 0; attempt < 48; attempt++) {
-    const candidate = (attempt === 0 ? twoFromUuid(user.id) : randomTwo()).toUpperCase();
+  for (let attempt = 0; attempt < 128; attempt++) {
+    const { data: idxRaw, error: rpcErr } = await supabase.rpc("claim_next_product_prefix_index");
+    if (rpcErr) {
+      console.error("[product-code-prefix] claim_next_product_prefix_index:", rpcErr.message);
+      throw new Error(
+        "Could not claim product prefix. Run the Supabase migration add_product_code_prefix_counter.sql."
+      );
+    }
+    if (idxRaw == null && idxRaw !== 0) {
+      throw new Error("Prefix counter returned no value.");
+    }
+    const candidate = indexToGlobalProductPrefix(Number(idxRaw));
 
     const { data: updated, error: updErr } = await supabase
       .from("user_profiles")
@@ -51,11 +55,11 @@ export async function ensureProductCodePrefix(): Promise<string> {
       .maybeSingle();
 
     if (!updErr && updated?.product_code_prefix) {
-      return String(updated.product_code_prefix).toUpperCase().slice(0, 2);
+      return normalizeStoredPrefix(updated.product_code_prefix as string) ?? candidate;
     }
 
     const again = await readPrefix();
-    if (again && again.length === 2) return again;
+    if (again != null && again.length >= 1) return again;
 
     const { error: insErr } = await supabase.from("user_profiles").insert({
       user_id: user.id,
@@ -66,21 +70,22 @@ export async function ensureProductCodePrefix(): Promise<string> {
 
     if (!insErr) {
       const afterIns = await readPrefix();
-      if (afterIns) return afterIns;
+      if (afterIns != null && afterIns.length >= 1) return afterIns;
     }
 
     const dup =
       insErr?.code === "23505" ||
-      insErr?.message?.includes("duplicate") ||
+      (insErr?.message ?? "").includes("duplicate") ||
       updErr?.code === "23505" ||
-      updErr?.message?.includes("duplicate");
-    if (!dup && insErr && !insErr.message?.includes("duplicate")) {
+      (updErr?.message ?? "").includes("duplicate");
+
+    if (!dup && insErr) {
       console.warn("[product-code-prefix] insert:", insErr.message);
     }
   }
 
   const finalRead = await readPrefix();
-  if (finalRead) return finalRead;
+  if (finalRead != null && finalRead.length >= 1) return finalRead;
 
-  throw new Error("Could not assign product code. Try again or run DB migration for product_code_prefix.");
+  throw new Error("Could not assign product code prefix. Try again.");
 }

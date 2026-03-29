@@ -96,6 +96,72 @@ export async function stampProductCodeOnBlob(imageBlob: Blob, code: string): Pro
   }
 }
 
+const MIN_BYTES = 200;
+const MIN_SIDE = 16;
+
+export function isPlausibleImageBlob(blob: Blob, minBytes = MIN_BYTES): boolean {
+  if (!blob || blob.size < minBytes) return false;
+  const t = blob.type || "";
+  return t.startsWith("image/") || t === "";
+}
+
+async function blobHasMinDimensions(blob: Blob, minW: number, minH: number): Promise<boolean> {
+  try {
+    const bmp = await createImageBitmap(blob);
+    try {
+      return bmp.width >= minW && bmp.height >= minH;
+    } finally {
+      bmp.close();
+    }
+  } catch {
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await loadImageFromUrl(url);
+      return img.naturalWidth >= minW && img.naturalHeight >= minH;
+    } catch {
+      return false;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+}
+
+/**
+ * Compress (if possible), stamp, validate size/dimensions; retry stamping a few times.
+ */
+export async function generateValidatedStampedImage(file: File, code: string): Promise<Blob> {
+  let base: Blob;
+  try {
+    base = await compressImageFile(file);
+  } catch {
+    base = file;
+  }
+  if (!isPlausibleImageBlob(base, 32)) {
+    throw new Error("Image could not be read or is too small.");
+  }
+  if (!(await blobHasMinDimensions(base, MIN_SIDE, MIN_SIDE))) {
+    throw new Error("Image dimensions are too small.");
+  }
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const stamped = await stampProductCodeOnBlob(base, code);
+      if (!isPlausibleImageBlob(stamped, MIN_BYTES)) {
+        throw new Error("Stamped output was empty or too small.");
+      }
+      if (!(await blobHasMinDimensions(stamped, MIN_SIDE, MIN_SIDE))) {
+        throw new Error("Stamped image has invalid dimensions.");
+      }
+      return stamped;
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Could not stamp image after retries.");
+}
+
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
