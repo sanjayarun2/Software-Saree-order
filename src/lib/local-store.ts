@@ -94,6 +94,27 @@ export async function removeOrdersNotIn(userId: string, serverIds: Set<string>):
   if (changed) await set(ordersKey(userId), map, store);
 }
 
+/** Remove cached rows for one owner only (keeps other users' rows, e.g. workers in an admin's merged cache). */
+export async function pruneOrdersNotInForOwner(
+  cacheUserId: string,
+  ownerUserId: string,
+  serverIds: Set<string>,
+): Promise<boolean> {
+  const map = await getAllOrders(cacheUserId);
+  let changed = false;
+  for (const id of Object.keys(map)) {
+    if (id.startsWith("temp_")) continue;
+    const o = map[id];
+    if (o?.user_id !== ownerUserId) continue;
+    if (!serverIds.has(id)) {
+      delete map[id];
+      changed = true;
+    }
+  }
+  if (changed) await set(ordersKey(cacheUserId), map, store);
+  return changed;
+}
+
 // ─── Meta (sync timestamp + access log) ────────────────────────
 
 async function getMeta(userId: string): Promise<StoreMeta> {

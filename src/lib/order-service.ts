@@ -8,6 +8,7 @@ import {
   removeOrder,
   mergeOrders,
   removeOrdersNotIn,
+  pruneOrdersNotInForOwner,
   getLastSyncTimestamp,
   setLastSyncTimestamp,
   touchAccess,
@@ -52,7 +53,7 @@ export async function getOrders(
 /** Filter locally-cached orders by status / date range. */
 export async function getOrdersLocal(userId: string, filters: OrderFilters): Promise<Order[]> {
   const map = await getAllOrders(userId);
-  let list = Object.values(map).filter((o) => o.user_id === userId);
+  let list = Object.values(map);
 
   if (filters.status) {
     list = list.filter((o) => o.status === filters.status);
@@ -346,16 +347,7 @@ export async function syncOrders(userId: string): Promise<boolean> {
     if (idErr) throw idErr;
 
     const serverIds = new Set((idData ?? []).map((r: { id: string }) => r.id));
-    const localMap = await getAllOrders(userId);
-    const localIds = Object.keys(localMap).filter((id) => {
-      if (id.startsWith("temp_")) return false;
-      const o = localMap[id];
-      return o?.user_id === userId;
-    });
-
-    const deletedLocally = localIds.filter((id) => !serverIds.has(id));
-    if (deletedLocally.length > 0) {
-      await removeOrdersNotIn(userId, serverIds);
+    if (await pruneOrdersNotInForOwner(userId, userId, serverIds)) {
       changed = true;
     }
 
@@ -422,14 +414,18 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
     const { data: idData, error: idErr } = await supabase.from("orders").select("id").in("user_id", idList);
     if (idErr) throw idErr;
 
-    const serverIds = new Set((idData ?? []).map((r: { id: string }) => r.id));
+    const idRows = idData ?? [];
+    const serverIds = new Set(idRows.map((r: { id: string }) => r.id));
     const localMap = await getAllOrders(userId);
-    const localIds = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
-
-    const deletedLocally = localIds.filter((id) => !serverIds.has(id));
-    if (deletedLocally.length > 0) {
-      await removeOrdersNotIn(userId, serverIds);
-      changed = true;
+    const multiTeam = idList.length > 1;
+    // Avoid wiping a merged admin cache when the id query returns nothing (RLS/network); solo accounts still prune.
+    if (serverIds.size > 0 || !multiTeam) {
+      const localKeys = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
+      const deletedLocally = localKeys.filter((id) => !serverIds.has(id));
+      if (deletedLocally.length > 0) {
+        await removeOrdersNotIn(userId, serverIds);
+        changed = true;
+      }
     }
 
     const newest = deltaOrders.length > 0

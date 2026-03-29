@@ -40,19 +40,32 @@ export default function AdminSettingsPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
+    setAllowAdminPage(false);
+  }, [user?.id]);
+
+  useEffect(() => {
     if (!user || loading) return;
     let cancelled = false;
-    void fetchIsListedWorker().then(({ isWorker }) => {
-      if (!cancelled && isWorker) router.replace("/settings/");
-    });
+    void fetchIsListedWorker()
+      .then(({ isWorker }) => {
+        if (cancelled) return;
+        if (isWorker) {
+          router.replace("/settings/");
+          return;
+        }
+        setAllowAdminPage(true);
+      })
+      .catch(() => {
+        if (!cancelled) setAllowAdminPage(true);
+      });
     return () => {
       cancelled = true;
     };
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user?.id) void refresh();
-  }, [user?.id, refresh]);
+    if (user?.id && allowAdminPage) void refresh();
+  }, [user?.id, allowAdminPage, refresh]);
 
   const adminEmail = user?.email?.trim().toLowerCase() ?? "";
 
