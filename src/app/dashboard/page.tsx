@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { getStatsFromCache, syncOrders } from "@/lib/order-service";
+import { getStatsFromCache, syncDashboardOrders } from "@/lib/order-service";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import {
   getDashboardDateRange,
@@ -286,7 +286,7 @@ export default function DashboardPage() {
       }
       setLoadingStats(false);
 
-      syncOrders(user.id).then(async () => {
+      syncDashboardOrders(user.id).then(async () => {
         const fresh = await getStatsFromCache(user.id, range.from, range.to);
         setStats(fresh);
         if (prevRange) {

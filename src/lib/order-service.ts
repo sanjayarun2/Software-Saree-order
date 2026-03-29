@@ -52,7 +52,7 @@ export async function getOrders(
 /** Filter locally-cached orders by status / date range. */
 export async function getOrdersLocal(userId: string, filters: OrderFilters): Promise<Order[]> {
   const map = await getAllOrders(userId);
-  let list = Object.values(map);
+  let list = Object.values(map).filter((o) => o.user_id === userId);
 
   if (filters.status) {
     list = list.filter((o) => o.status === filters.status);
@@ -347,7 +347,11 @@ export async function syncOrders(userId: string): Promise<boolean> {
 
     const serverIds = new Set((idData ?? []).map((r: { id: string }) => r.id));
     const localMap = await getAllOrders(userId);
-    const localIds = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
+    const localIds = Object.keys(localMap).filter((id) => {
+      if (id.startsWith("temp_")) return false;
+      const o = localMap[id];
+      return o?.user_id === userId;
+    });
 
     const deletedLocally = localIds.filter((id) => !serverIds.has(id));
     if (deletedLocally.length > 0) {
@@ -364,6 +368,78 @@ export async function syncOrders(userId: string): Promise<boolean> {
     return changed;
   } catch (err) {
     console.warn("[OrderService] syncOrders failed:", err);
+    return false;
+  }
+}
+
+/**
+ * Like syncOrders but merges team orders (admin + listed workers) into this user's cache
+ * for dashboard stats. Orders list still uses syncOrders / own user_id only.
+ */
+export async function syncDashboardOrders(userId: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+
+  try {
+    const { data: teamIdsRaw, error: rpcErr } = await supabase.rpc("admin_team_order_user_ids");
+    if (rpcErr) {
+      console.warn("[OrderService] admin_team_order_user_ids failed, using own orders only:", rpcErr);
+      return syncOrders(userId);
+    }
+
+    let idList = Array.from(
+      new Set(
+        ((teamIdsRaw as string[] | null) ?? [])
+          .map((id) => String(id))
+          .filter(Boolean),
+      ),
+    );
+    if (idList.length === 0) idList = [userId];
+    else if (!idList.includes(userId)) idList = [...idList, userId];
+
+    const lastSync = await getLastSyncTimestamp(userId);
+    let changed = false;
+
+    let query = supabase
+      .from("orders")
+      .select("*")
+      .in("user_id", idList)
+      .order("updated_at", { ascending: true });
+
+    if (lastSync) {
+      query = query.gt("updated_at", lastSync);
+    }
+
+    const { data: deltaData, error: deltaErr } = await query;
+    if (deltaErr) throw deltaErr;
+
+    const deltaOrders = (deltaData as Order[]) ?? [];
+    if (deltaOrders.length > 0) {
+      await mergeOrders(userId, deltaOrders);
+      await touchAccess(userId, deltaOrders.map((o) => o.id));
+      changed = true;
+    }
+
+    const { data: idData, error: idErr } = await supabase.from("orders").select("id").in("user_id", idList);
+    if (idErr) throw idErr;
+
+    const serverIds = new Set((idData ?? []).map((r: { id: string }) => r.id));
+    const localMap = await getAllOrders(userId);
+    const localIds = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
+
+    const deletedLocally = localIds.filter((id) => !serverIds.has(id));
+    if (deletedLocally.length > 0) {
+      await removeOrdersNotIn(userId, serverIds);
+      changed = true;
+    }
+
+    const newest = deltaOrders.length > 0
+      ? deltaOrders[deltaOrders.length - 1].updated_at
+      : lastSync;
+    if (newest) await setLastSyncTimestamp(userId, newest);
+
+    return changed;
+  } catch (err) {
+    console.warn("[OrderService] syncDashboardOrders failed:", err);
     return false;
   }
 }

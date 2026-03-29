@@ -1,4 +1,4 @@
-import { flushOutbox, syncOrders } from "./order-service";
+import { flushOutbox, syncDashboardOrders } from "./order-service";
 import { evictStaleEntries } from "./local-store";
 
 let initialized = false;
@@ -8,7 +8,7 @@ function handleOnline() {
   if (!userId) return;
   console.log("[SyncManager] Online – flushing outbox & syncing");
   flushOutbox(userId);
-  syncOrders(userId);
+  syncDashboardOrders(userId);
 }
 
 function handleVisibilityChange() {
@@ -16,7 +16,7 @@ function handleVisibilityChange() {
   if (document.visibilityState === "visible") {
     console.log("[SyncManager] App resumed – syncing");
     flushOutbox(userId);
-    syncOrders(userId);
+    syncDashboardOrders(userId);
   }
 }
 
@@ -28,7 +28,7 @@ async function handleAppStateChange() {
       if (isActive && userId) {
         console.log("[SyncManager] Capacitor appStateChange – syncing");
         flushOutbox(userId!);
-        syncOrders(userId!);
+        syncDashboardOrders(userId!);
       }
     });
   } catch {
@@ -56,7 +56,7 @@ export function initSyncManager(uid: string): void {
 
   if (navigator.onLine) {
     flushOutbox(uid);
-    syncOrders(uid);
+    syncDashboardOrders(uid);
   }
 }
 
