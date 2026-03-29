@@ -74,6 +74,13 @@ ALTER TABLE public.user_profiles
   ADD COLUMN IF NOT EXISTS max_devices INTEGER NOT NULL DEFAULT 2
   CHECK (max_devices >= 1 AND max_devices <= 20);
 
+ALTER TABLE public.user_profiles
+  ADD COLUMN IF NOT EXISTS product_code_prefix TEXT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_product_code_prefix_unique
+  ON public.user_profiles (product_code_prefix)
+  WHERE product_code_prefix IS NOT NULL;
+
 -- Registered devices (Settings + device login limit)
 CREATE TABLE IF NOT EXISTS public.user_devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

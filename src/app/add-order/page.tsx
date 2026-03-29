@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { BentoCard } from "@/components/ui/BentoCard";
@@ -347,6 +348,12 @@ export default function AddOrderPage() {
             >
               {loading ? "Saving…" : "Save"}
             </button>
+
+            <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+              <Link href="/product-codes/" className="font-medium text-primary-600 underline-offset-2 hover:underline dark:text-primary-400">
+                Stamp product codes on photos
+              </Link>
+            </p>
           </form>
         </BentoCard>
       </div>

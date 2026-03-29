@@ -10,6 +10,7 @@ import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: "🏠" },
   { href: "/orders", label: "Orders", icon: "📋" },
+  { href: "/product-codes", label: "Product codes", icon: "🏷️" },
   { href: "/add-order", label: "Add Order", icon: "➕" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];

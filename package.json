@@ -41,6 +41,7 @@
     "@capacitor/splash-screen": "^6.0.2",
     "@supabase/supabase-js": "^2.45.0",
     "barcode-detector": "^3.0.8",
+    "browser-image-compression": "^2.0.2",
     "idb-keyval": "^6.2.2",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^5.0.7",
