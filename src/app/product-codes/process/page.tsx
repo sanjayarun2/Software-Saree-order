@@ -17,8 +17,8 @@ import { prependProductCodeBatch, reserveCodesForDay } from "@/lib/product-code-
 import {
   downloadBlob,
   extensionForBlob,
-  generateValidatedStampedImage,
   safeFilename,
+  stampProductCodeOnFile,
 } from "@/lib/image-product-code";
 import { useProductCodesDraft } from "../product-codes-context";
 
@@ -118,7 +118,7 @@ export default function ProductCodesProcessPage() {
           const blobs: Blob[] = [];
           for (let i = 0; i < files.length; i++) {
             if (cancelled || myEpoch !== genEpochRef.current) return;
-            const stamped = await generateValidatedStampedImage(files[i]!, reserved[i]!);
+            const stamped = await stampProductCodeOnFile(files[i]!, reserved[i]!);
             blobs.push(stamped);
             setProgress(Math.round(((i + 1) / files.length) * 100));
           }

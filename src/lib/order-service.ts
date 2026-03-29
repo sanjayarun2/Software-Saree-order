@@ -93,7 +93,7 @@ async function revalidateOrders(
       query = query.gte(dateColumn, filters.fromDate).lte(dateColumn, filters.toDate);
     }
 
-    query = query.order("created_at", { ascending: false });
+    query = query.order("created_at", { ascending: false }).limit(50_000);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -326,7 +326,8 @@ export async function syncOrders(userId: string): Promise<boolean> {
       .from("orders")
       .select("*")
       .eq("user_id", userId)
-      .order("updated_at", { ascending: true });
+      .order("updated_at", { ascending: true })
+      .limit(50_000);
 
     if (lastSync) {
       query = query.gt("updated_at", lastSync);
@@ -342,11 +343,12 @@ export async function syncOrders(userId: string): Promise<boolean> {
       changed = true;
     }
 
-    // Check for server-side deletions by fetching all IDs
+    // Check for server-side deletions by fetching all IDs (high limit; avoid partial → bad prune)
     const { data: idData, error: idErr } = await supabase
       .from("orders")
       .select("id")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .limit(50_000);
     if (idErr) throw idErr;
 
     const serverIds = new Set((idData ?? []).map((r: { id: string }) => r.id));
@@ -398,7 +400,8 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
       .from("orders")
       .select("*")
       .in("user_id", idList)
-      .order("updated_at", { ascending: true });
+      .order("updated_at", { ascending: true })
+      .limit(50_000);
 
     if (lastSync) {
       query = query.gt("updated_at", lastSync);
@@ -414,15 +417,18 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
       changed = true;
     }
 
-    const { data: idData, error: idErr } = await supabase.from("orders").select("id").in("user_id", idList);
+    const { data: idData, error: idErr } = await supabase
+      .from("orders")
+      .select("id")
+      .in("user_id", idList)
+      .limit(50_000);
     if (idErr) throw idErr;
 
     const idRows = idData ?? [];
     const serverIds = new Set(idRows.map((r: { id: string }) => r.id));
     const localMap = await getAllOrders(userId);
-    const multiTeam = idList.length > 1;
-    // Avoid wiping a merged admin cache when the id query returns nothing (RLS/network); solo accounts still prune.
-    if (serverIds.size > 0 || !multiTeam) {
+    // Never prune from an empty id set (would wipe cache); never drop optimistic temp_ rows (handled in removeOrdersNotIn).
+    if (serverIds.size > 0) {
       const localKeys = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
       const deletedLocally = localKeys.filter((id) => !serverIds.has(id));
       if (deletedLocally.length > 0) {

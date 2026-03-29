@@ -1,6 +1,6 @@
 /**
- * Resize/compress with browser-image-compression, then stamp code on canvas.
- * Falls back without Web Worker / createImageBitmap for older WebViews (e.g. Capacitor).
+ * Draw product code text on top of the image in-browser (canvas only).
+ * No resize, compression, or pixel changes except the overlay.
  */
 
 function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
@@ -54,29 +54,15 @@ function stampOnCanvas(
   });
 }
 
-export async function compressImageFile(file: File): Promise<Blob> {
-  const imageCompression = (await import("browser-image-compression")).default;
-  const isPng = file.type === "image/png";
-  const baseOpts = {
-    maxSizeMB: 3.5,
-    maxWidthOrHeight: 2560,
-    initialQuality: 0.88,
-    fileType: isPng ? ("image/png" as const) : ("image/jpeg" as const),
-  };
-  try {
-    return (await imageCompression(file, { ...baseOpts, useWebWorker: false })) as Blob;
-  } catch {
-    try {
-      return (await imageCompression(file, { ...baseOpts, useWebWorker: true })) as Blob;
-    } catch {
-      return file;
-    }
-  }
+function outputMimeForFile(file: File): "image/png" | "image/jpeg" {
+  if (file.type === "image/png") return "image/png";
+  return "image/jpeg";
 }
 
+/** Decode `blob` and draw `code` on top at full size; same pixels as source except text. */
 export async function stampProductCodeOnBlob(imageBlob: Blob, code: string): Promise<Blob> {
   const mime = imageBlob.type.includes("png") ? "image/png" : "image/jpeg";
-  const quality = mime === "image/jpeg" ? 0.9 : undefined;
+  const quality = mime === "image/jpeg" ? 0.92 : undefined;
 
   try {
     const bmp = await createImageBitmap(imageBlob);
@@ -96,70 +82,12 @@ export async function stampProductCodeOnBlob(imageBlob: Blob, code: string): Pro
   }
 }
 
-const MIN_BYTES = 200;
-const MIN_SIDE = 16;
-
-export function isPlausibleImageBlob(blob: Blob, minBytes = MIN_BYTES): boolean {
-  if (!blob || blob.size < minBytes) return false;
-  const t = blob.type || "";
-  return t.startsWith("image/") || t === "";
-}
-
-async function blobHasMinDimensions(blob: Blob, minW: number, minH: number): Promise<boolean> {
-  try {
-    const bmp = await createImageBitmap(blob);
-    try {
-      return bmp.width >= minW && bmp.height >= minH;
-    } finally {
-      bmp.close();
-    }
-  } catch {
-    const url = URL.createObjectURL(blob);
-    try {
-      const img = await loadImageFromUrl(url);
-      return img.naturalWidth >= minW && img.naturalHeight >= minH;
-    } catch {
-      return false;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
-}
-
-/**
- * Compress (if possible), stamp, validate size/dimensions; retry stamping a few times.
- */
-export async function generateValidatedStampedImage(file: File, code: string): Promise<Blob> {
-  let base: Blob;
-  try {
-    base = await compressImageFile(file);
-  } catch {
-    base = file;
-  }
-  if (!isPlausibleImageBlob(base, 32)) {
-    throw new Error("Image could not be read or is too small.");
-  }
-  if (!(await blobHasMinDimensions(base, MIN_SIDE, MIN_SIDE))) {
-    throw new Error("Image dimensions are too small.");
-  }
-
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const stamped = await stampProductCodeOnBlob(base, code);
-      if (!isPlausibleImageBlob(stamped, MIN_BYTES)) {
-        throw new Error("Stamped output was empty or too small.");
-      }
-      if (!(await blobHasMinDimensions(stamped, MIN_SIDE, MIN_SIDE))) {
-        throw new Error("Stamped image has invalid dimensions.");
-      }
-      return stamped;
-    } catch (e) {
-      lastErr = e;
-      await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("Could not stamp image after retries.");
+/** Overlay code on the original file; File is read as-is (no preprocessing). */
+export async function stampProductCodeOnFile(file: File, code: string): Promise<Blob> {
+  const mime = outputMimeForFile(file);
+  const stamped = await stampProductCodeOnBlob(file, code);
+  if (stamped.size < 1) throw new Error("Stamped image was empty.");
+  return stamped;
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

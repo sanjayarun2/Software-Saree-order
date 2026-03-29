@@ -86,6 +86,7 @@ export async function removeOrdersNotIn(userId: string, serverIds: Set<string>):
   const map = await getAllOrders(userId);
   let changed = false;
   for (const id of Object.keys(map)) {
+    if (id.startsWith("temp_")) continue;
     if (!serverIds.has(id)) {
       delete map[id];
       changed = true;
@@ -100,6 +101,7 @@ export async function pruneOrdersNotInForOwner(
   ownerUserId: string,
   serverIds: Set<string>,
 ): Promise<boolean> {
+  if (serverIds.size === 0) return false;
   const map = await getAllOrders(cacheUserId);
   let changed = false;
   for (const id of Object.keys(map)) {
