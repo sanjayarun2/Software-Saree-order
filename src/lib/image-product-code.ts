@@ -65,13 +65,8 @@ function drawTextOverlay(imageData: ImageData, code: string): ImageData {
 
   const result = ctx.getImageData(0, 0, w, h);
 
-  if ("width" in canvas && canvas instanceof HTMLCanvasElement) {
-    canvas.width = 0;
-    canvas.height = 0;
-  } else if (useOffscreen) {
-    (canvas as OffscreenCanvas).width = 0;
-    (canvas as OffscreenCanvas).height = 0;
-  }
+  canvas.width = 0;
+  canvas.height = 0;
 
   return result;
 }
@@ -79,20 +74,15 @@ function drawTextOverlay(imageData: ImageData, code: string): ImageData {
 // ─── Core stamp function ────────────────────────────────────────
 
 async function stampSingle(fileBuffer: ArrayBuffer, code: string, asPng: boolean): Promise<ArrayBuffer> {
-  const decoded: ImageData = asPng
+  const decoded = asPng
     ? await pngDecode(fileBuffer)
     : await jpegDecode(fileBuffer);
 
   const stamped = drawTextOverlay(decoded, code);
 
-  // Help GC reclaim the large pixel buffer
-  (decoded as unknown as { data: null }).data = null;
-
   const encoded: ArrayBuffer = asPng
     ? await pngEncode(stamped)
     : await jpegEncode(stamped, { quality: 92 });
-
-  (stamped as unknown as { data: null }).data = null;
 
   return encoded;
 }
