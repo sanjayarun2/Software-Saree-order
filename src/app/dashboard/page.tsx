@@ -252,8 +252,6 @@ export default function DashboardPage() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const dateDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -295,7 +293,6 @@ export default function DashboardPage() {
 
       if (syncingRef.current) return;
       syncingRef.current = true;
-      setSyncing(true);
       syncDashboardOrders(user.id)
         .then(async () => {
           const fresh = await getStatsFromCache(user.id, rangeFrom, rangeTo);
@@ -306,11 +303,9 @@ export default function DashboardPage() {
           } else {
             setPrevStats(null);
           }
-          setLastSyncedAt(new Date().toISOString());
         })
         .finally(() => {
           syncingRef.current = false;
-          setSyncing(false);
         });
     } catch (e) {
       setError((e as Error).message || "Failed to load stats");
@@ -339,12 +334,6 @@ export default function DashboardPage() {
   }
 
   const selectedLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today";
-  const lastSyncedText = lastSyncedAt
-    ? `Last synced ${new Date(lastSyncedAt).toLocaleDateString("en-GB")} ${new Date(lastSyncedAt).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`
-    : "Not synced yet";
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -353,16 +342,7 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
           {/* Left: title + date widget */}
           <div className="flex flex-1 flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <h1 className="text-xl font-bold text-white">Dashboard</h1>
-              <div className="flex items-center gap-2 text-xs text-slate-300">
-                <span
-                  className={`inline-block h-2.5 w-2.5 rounded-full ${lastSyncedAt && !syncing ? "bg-emerald-400" : "bg-slate-500"}`}
-                  aria-hidden
-                />
-                <span>{syncing ? "Syncing..." : lastSyncedText}</span>
-              </div>
-            </div>
+            <h1 className="text-xl font-bold text-white">Dashboard</h1>
             <div className="flex items-center gap-3">
               <DateWidgetDisplay period={period} from={range.from} to={range.to} />
               {/* Period selector dropdown */}

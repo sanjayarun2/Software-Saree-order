@@ -13,7 +13,20 @@ import { usePersistentField } from "@/lib/usePersistentField";
 import { createOrder as svcCreateOrder, getSuggestions as svcGetSuggestions } from "@/lib/order-service";
 import type { OrderInsert, Order } from "@/lib/db-types";
 
-const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
+const COURIERS = [
+  "Professional",
+  "ST Courier",
+  "Blue Dart",
+  "Delhivery",
+  "DTDC",
+  "India Post",
+  "Trackon",
+  "Xpressbees",
+  "Shadowfox",
+  "Ekart Logistics",
+  "DHL",
+  "Other",
+];
 
 export default function AddOrderPage() {
   const { user, loading: authLoading } = useAuth();

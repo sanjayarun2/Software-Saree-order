@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
+import { syncDashboardOrders } from "@/lib/order-service";
 
 function PdfIconOutlined({ className }: { className?: string }) {
   return (
@@ -39,6 +40,8 @@ export default function SettingsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [isListedWorker, setIsListedWorker] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -54,6 +57,28 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setSyncing(true);
+    syncDashboardOrders(user.id)
+      .then(() => {
+        if (!cancelled) setLastSyncedAt(new Date().toISOString());
+      })
+      .finally(() => {
+        if (!cancelled) setSyncing(false);
+      });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const handleManualSync = useCallback(() => {
+    if (!user || syncing) return;
+    setSyncing(true);
+    syncDashboardOrders(user.id)
+      .then(() => setLastSyncedAt(new Date().toISOString()))
+      .finally(() => setSyncing(false));
+  }, [user, syncing]);
 
   if (loading) {
     return (
@@ -79,6 +104,33 @@ export default function SettingsPage() {
             Account
           </p>
           <p className="mt-1 truncate text-base text-slate-900 dark:text-slate-100">{user.email}</p>
+        </div>
+
+        <div className="flex items-center justify-between overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${lastSyncedAt && !syncing ? "bg-emerald-400" : "bg-slate-400"}`}
+              aria-hidden
+            />
+            <span className="text-sm text-slate-700 dark:text-slate-300">
+              {syncing
+                ? "Syncing..."
+                : lastSyncedAt
+                  ? `Last synced ${new Date(lastSyncedAt).toLocaleDateString("en-GB")} ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : "Not synced yet"}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={handleManualSync}
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+          >
+            <svg className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
+            </svg>
+            Sync Now
+          </button>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">

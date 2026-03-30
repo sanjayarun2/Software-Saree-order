@@ -118,7 +118,24 @@ export default function OrdersPage() {
 
     const mobile = (order.booked_mobile_no || "").trim() || "-";
 
-    const consignment = (order.tracking_number || "").trim() || "—";
+    const consignment = (order.tracking_number || "").trim();
+    const courierName = (order.courier_name || "").trim();
+
+    const COURIER_TRACKING_URLS: Record<string, string> = {
+      "Professional": "https://www.tpcindia.com/",
+      "ST Courier": "https://stcourier.com/track/shipment",
+      "Blue Dart": "https://bluedart.com/tracking",
+      "Delhivery": "https://www.delhivery.com/tracking",
+      "India Post": "https://www.indiapost.gov.in/",
+      "Trackon": "https://www.trackon.in/",
+      "Shadowfox": "https://www.shadowfax.in/",
+      "Xpressbees": "https://www.xpressbees.com/shipment/tracking",
+      "Ekart Logistics": "https://www.ekartlogistics.com/ekartlogistics-web",
+      "DHL": "https://www.dhl.com/in-en/home/tracking.html",
+    };
+
+    const trackingUrl = COURIER_TRACKING_URLS[courierName] || "";
+
     const lines = [
       "Thanks for ordering with us",
       "Keep purchase with us",
@@ -129,10 +146,16 @@ export default function OrdersPage() {
       `Quantity: ${qty}`,
       `Booked date: ${booking}`,
       `Booked mobile number: ${mobile}`,
-      `Courier name: ${order.courier_name || "N/A"}`,
+      `Courier name: ${courierName || "N/A"}`,
       `Dispatched date: ${despatch}`,
-      `Consignment / Tracking: ${consignment}`,
     ];
+
+    if (consignment) {
+      lines.push(`Consignment / Tracking: ${consignment}`);
+    }
+    if (trackingUrl) {
+      lines.push(`Track here: ${trackingUrl}`);
+    }
 
     const message = encodeURIComponent(lines.join("\n"));
     const url = `https://wa.me/?text=${message}`;

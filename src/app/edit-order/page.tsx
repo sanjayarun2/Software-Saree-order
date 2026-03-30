@@ -16,7 +16,20 @@ import {
 } from "@/lib/order-service";
 import type { Order } from "@/lib/db-types";
 
-const COURIERS = ["Professional", "DTDC", "Blue Dart", "Delhivery", "Other"];
+const COURIERS = [
+  "Professional",
+  "ST Courier",
+  "Blue Dart",
+  "Delhivery",
+  "DTDC",
+  "India Post",
+  "Trackon",
+  "Xpressbees",
+  "Shadowfox",
+  "Ekart Logistics",
+  "DHL",
+  "Other",
+];
 
 function EditOrderContent() {
   const { user, loading: authLoading } = useAuth();
