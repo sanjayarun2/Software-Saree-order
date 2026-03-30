@@ -14,6 +14,10 @@ import { getDashboardDateRange } from "@/lib/dashboard-date-utils";
 import { parseYyyyMmDdToLocalDate } from "@/lib/product-code-utils";
 import { getProductCodeBatchImages, storedImageToBlob } from "@/lib/product-code-batch-images";
 import { saveProductCodeImagesToGalleryOrDownloads } from "@/lib/product-code-gallery";
+import {
+  deleteProductCodeSourceDraft,
+  putProductCodeSourceDraft,
+} from "@/lib/product-code-source-draft";
 import { safeFilename } from "@/lib/image-product-code";
 import { deleteProductCodeBatch, getProductCodeBatches, type ProductCodeBatchRecord } from "@/lib/product-code-storage";
 import { useProductCodesDraft } from "./product-codes-context";
@@ -40,7 +44,7 @@ function batchQtyTotal(b: ProductCodeBatchRecord): number {
 export default function ProductCodesPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { setPickDraft } = useProductCodesDraft();
+  const { pickDraft, setPickDraft } = useProductCodesDraft();
 
   const [period, setPeriod] = useState<DashboardDatePeriod>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -53,6 +57,7 @@ export default function ProductCodesPage() {
   const [batches, setBatches] = useState<ProductCodeBatchRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [galleryBusyId, setGalleryBusyId] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
 
   const customReady = period !== "custom" || (Boolean(customFrom) && Boolean(customTo));
   const selectedLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today";
@@ -110,17 +115,35 @@ export default function ProductCodesPage() {
     fileInputRef.current?.click();
   };
 
-  const goGenerate = () => {
-    if (!customReady || files.length === 0) return;
-    flushSync(() => {
-      setPickDraft({
-        files,
-        period,
-        customFrom,
-        customTo,
+  const goGenerate = async () => {
+    if (!customReady || files.length === 0 || preparing) return;
+    setPreparing(true);
+    setError(null);
+    const draftId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `pc-draft-${Date.now()}`;
+    try {
+      if (pickDraft?.sourceDraftId) {
+        await deleteProductCodeSourceDraft(pickDraft.sourceDraftId);
+      }
+      await putProductCodeSourceDraft(draftId, files);
+      flushSync(() => {
+        setPickDraft({
+          sourceDraftId: draftId,
+          fileNames: files.map((file) => file.name),
+          period,
+          customFrom,
+          customTo,
+        });
       });
-    });
-    router.push("/product-codes/process/");
+      router.push("/product-codes/process/");
+    } catch (err) {
+      await deleteProductCodeSourceDraft(draftId);
+      setError((err as Error).message || "Could not prepare selected photos.");
+    } finally {
+      setPreparing(false);
+    }
   };
 
   const handleDeleteBatch = async (e: React.MouseEvent, batchId: string) => {
@@ -324,11 +347,11 @@ export default function ProductCodesPage() {
 
           <button
             type="button"
-            disabled={!customReady || files.length === 0}
-            onClick={goGenerate}
+            disabled={!customReady || files.length === 0 || preparing}
+            onClick={() => void goGenerate()}
             className="min-h-touch w-full rounded-bento bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
           >
-            Generate
+            {preparing ? "Preparing..." : "Generate"}
           </button>
         </BentoCard>
       </div>

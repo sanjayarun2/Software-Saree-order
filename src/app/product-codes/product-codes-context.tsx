@@ -4,7 +4,8 @@ import React, { createContext, useContext, useMemo, useState } from "react";
 import type { DashboardDatePeriod } from "@/lib/dashboard-date-utils";
 
 export type ProductCodesPickDraft = {
-  files: File[];
+  sourceDraftId: string;
+  fileNames: string[];
   period: DashboardDatePeriod;
   customFrom: string;
   customTo: string;
