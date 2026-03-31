@@ -295,7 +295,7 @@ export function RailNav({
       {isWeb ? (
         <aside
           className="fixed left-0 top-0 z-40 hidden h-full flex-col overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white py-6 shadow-none transition-[width,padding] duration-200 ease-in-out dark:border-slate-700 dark:bg-slate-900 lg:flex"
-          style={{ width: webCollapsed ? 64 : 256, paddingLeft: webCollapsed ? 8 : 16, paddingRight: webCollapsed ? 8 : 16 }}
+          style={{ width: webCollapsed ? 72 : 280, paddingLeft: webCollapsed ? 10 : 18, paddingRight: webCollapsed ? 10 : 18 }}
           role="navigation"
           aria-label="Side navigation"
           onMouseEnter={onWebMouseEnter}

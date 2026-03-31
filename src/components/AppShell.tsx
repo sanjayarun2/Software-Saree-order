@@ -87,14 +87,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isWeb) return;
-    document.body.style.setProperty("--web-sidebar-w", `${webCollapsed ? 64 : 256}px`);
+    document.body.style.setProperty("--web-sidebar-w", `${webCollapsed ? 72 : 280}px`);
   }, [isWeb, webCollapsed]);
 
   if (hideNav) {
     return <main className="min-h-screen">{children}</main>;
   }
 
-  const sidebarWidth = isWeb ? (webCollapsed ? 64 : 256) : 256;
+  const sidebarWidth = isWeb ? (webCollapsed ? 72 : 280) : 256;
   const pageTitle = getPageTitle(pathname);
 
   return (
