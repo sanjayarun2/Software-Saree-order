@@ -150,11 +150,11 @@ export default function OrdersPage() {
       `Dispatched date: ${despatch}`,
     ];
 
-    if (trackingLink) {
-      lines.push("", `Track here: ${trackingLink}`);
-    }
     if (consignment) {
       lines.push("", `Tracking number: ${consignment}`);
+      if (trackingLink) {
+        lines.push(`Track here: ${trackingLink}`);
+      }
     }
 
     const message = encodeURIComponent(lines.join("\n"));
