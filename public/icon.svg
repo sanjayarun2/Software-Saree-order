@@ -1,10 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#4F46E5"/>
-  <!-- Saree Order: order card + flowing pallu drape -->
-  <rect x="140" y="120" width="232" height="260" rx="16" fill="white"/>
-  <rect x="188" y="176" width="136" height="8" rx="2" fill="#4F46E5"/>
-  <rect x="188" y="232" width="108" height="8" rx="2" fill="#4F46E5"/>
-  <rect x="188" y="288" width="92" height="8" rx="2" fill="#4F46E5"/>
-  <!-- Flowing saree pallu -->
-  <path fill="white" d="M120 400 Q256 340 392 400 L376 432 Q256 380 136 432 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <rect width="108" height="108" rx="22" fill="#4F46E5"/>
+  <path fill="#FFFFFF" d="M30,22 L78,22 Q82,22 82,26 L82,50 Q82,54 78,54 L30,54 Q26,54 26,50 L26,26 Q26,22 30,22 Z"/>
+  <path fill="#4F46E5" d="M34,30 L74,30 L74,34 L34,34 Z"/>
+  <path fill="#4F46E5" d="M34,38 L68,38 L68,42 L34,42 Z"/>
+  <path fill="#4F46E5" d="M34,46 L60,46 L60,50 L34,50 Z"/>
+  <path fill="#FFFFFF" d="M26,56 L82,56 C82,70 54,86 26,70 Z"/>
 </svg>
