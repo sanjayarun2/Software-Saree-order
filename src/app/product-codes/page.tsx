@@ -13,7 +13,12 @@ import type { DashboardDatePeriod } from "@/lib/dashboard-date-utils";
 import { getDashboardDateRange } from "@/lib/dashboard-date-utils";
 import { parseYyyyMmDdToLocalDate } from "@/lib/product-code-utils";
 import { getProductCodeBatchImages, storedImageToBlob } from "@/lib/product-code-batch-images";
-import { saveProductCodeImagesToGalleryOrDownloads } from "@/lib/product-code-gallery";
+import {
+  saveProductCodeImagesToGalleryOrDownloads,
+  isBatchDownloaded,
+  markBatchDownloaded,
+  unmarkBatchDownloaded,
+} from "@/lib/product-code-gallery";
 import { safeFilename } from "@/lib/image-product-code";
 import { deleteProductCodeBatch, getProductCodeBatches, type ProductCodeBatchRecord } from "@/lib/product-code-storage";
 import { revokeProductCodesDraftFiles, useProductCodesDraft } from "./product-codes-context";
@@ -139,6 +144,7 @@ export default function ProductCodesPage() {
     if (!user?.id) return;
     if (!window.confirm("Delete this batch?")) return;
     await deleteProductCodeBatch(user.id, batchId);
+    unmarkBatchDownloaded(batchId);
     await loadBatches();
   };
 
@@ -146,6 +152,14 @@ export default function ProductCodesPage() {
     e.preventDefault();
     e.stopPropagation();
     if (!user?.id) return;
+
+    if (isBatchDownloaded(batchId)) {
+      const again = window.confirm(
+        "This batch was already downloaded. Download again?\n\n(Existing files will be replaced if they have the same name.)"
+      );
+      if (!again) return;
+    }
+
     setGalleryBusyId(batchId);
     setError(null);
     try {
@@ -160,6 +174,7 @@ export default function ProductCodesPage() {
         return { blob, filename: safeFilename(entry.code, ext) };
       });
       const nativeSaved = await saveProductCodeImagesToGalleryOrDownloads(items);
+      markBatchDownloaded(batchId);
       if (nativeSaved && Capacitor.isNativePlatform()) {
         window.alert(
           `Saved ${items.length} image(s) to Documents → VeloProductCodes. Open your Files app to view or add to Photos.`

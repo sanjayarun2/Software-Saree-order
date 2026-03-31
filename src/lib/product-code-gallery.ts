@@ -11,9 +11,52 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+const DOWNLOADED_KEY = "product_code_downloaded_batches";
+
+export function isBatchDownloaded(batchId: string): boolean {
+  try {
+    const raw = localStorage.getItem(DOWNLOADED_KEY);
+    if (!raw) return false;
+    const set: string[] = JSON.parse(raw);
+    return set.includes(batchId);
+  } catch {
+    return false;
+  }
+}
+
+export function markBatchDownloaded(batchId: string): void {
+  try {
+    const raw = localStorage.getItem(DOWNLOADED_KEY);
+    const set: string[] = raw ? JSON.parse(raw) : [];
+    if (!set.includes(batchId)) {
+      set.push(batchId);
+      if (set.length > 200) set.splice(0, set.length - 200);
+      localStorage.setItem(DOWNLOADED_KEY, JSON.stringify(set));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function unmarkBatchDownloaded(batchId: string): void {
+  try {
+    const raw = localStorage.getItem(DOWNLOADED_KEY);
+    if (!raw) return;
+    const set: string[] = JSON.parse(raw);
+    const filtered = set.filter((id) => id !== batchId);
+    localStorage.setItem(DOWNLOADED_KEY, JSON.stringify(filtered));
+  } catch {
+    // ignore
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Save batch images to device: Capacitor → app Documents/VeloProductCodes; web → download each file.
- * @returns true if files were written via native Filesystem (open Files app / same app storage).
+ * Save batch images to device: Capacitor native -> app Documents/VeloProductCodes; web -> download each file.
+ * Uses longer delays between web downloads to prevent browser throttling for large batches.
  */
 export async function saveProductCodeImagesToGalleryOrDownloads(
   items: { blob: Blob; filename: string }[]
@@ -41,9 +84,15 @@ export async function saveProductCodeImagesToGalleryOrDownloads(
     }
   }
 
-  for (const { blob, filename } of items) {
-    downloadBlob(blob, filename);
-    await new Promise((r) => setTimeout(r, 200));
+  const batchSize = 5;
+  for (let i = 0; i < items.length; i++) {
+    downloadBlob(items[i]!.blob, items[i]!.filename);
+
+    if ((i + 1) % batchSize === 0 && i + 1 < items.length) {
+      await delay(1500);
+    } else if (i + 1 < items.length) {
+      await delay(400);
+    }
   }
   return false;
 }

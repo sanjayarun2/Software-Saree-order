@@ -21,6 +21,7 @@ import {
   safeFilename,
   stampProductCodeOnFile,
 } from "@/lib/image-product-code";
+import { markBatchDownloaded } from "@/lib/product-code-gallery";
 import { revokeProductCodesDraftFiles, useProductCodesDraft } from "../product-codes-context";
 
 function localYyyyMmDd(d: Date): string {
@@ -231,9 +232,14 @@ export default function ProductCodesProcessPage() {
         const code = codes[i]!;
         const ext = extensionForBlob(file, blob);
         downloadBlob(blob, safeFilename(code, ext));
-        await new Promise((r) => setTimeout(r, 120));
+        if ((i + 1) % 5 === 0 && i + 1 < stampedBlobs.length) {
+          await new Promise((r) => setTimeout(r, 1500));
+        } else if (i + 1 < stampedBlobs.length) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
 
+      markBatchDownloaded(batchId);
       setSaved(true);
       revokeProductCodesDraftFiles(pickDraft?.files);
       flushSync(() => setPickDraft(null));
