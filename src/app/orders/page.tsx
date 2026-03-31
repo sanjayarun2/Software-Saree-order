@@ -121,20 +121,21 @@ export default function OrdersPage() {
     const consignment = (order.tracking_number || "").trim();
     const courierName = (order.courier_name || "").trim();
 
-    const COURIER_TRACKING_URLS: Record<string, string> = {
-      "Professional": "https://www.tpcindia.com/",
-      "ST Courier": "https://stcourier.com/track/shipment",
-      "Blue Dart": "https://bluedart.com/tracking",
-      "Delhivery": "https://www.delhivery.com/tracking",
-      "India Post": "https://www.indiapost.gov.in/",
-      "Trackon": "https://www.trackon.in/",
-      "Shadowfox": "https://www.shadowfax.in/",
-      "Xpressbees": "https://www.xpressbees.com/shipment/tracking",
-      "Ekart Logistics": "https://www.ekartlogistics.com/ekartlogistics-web",
-      "DHL": "https://www.dhl.com/in-en/home/tracking.html",
+    const COURIER_TRACKING_URLS: Record<string, (awb: string) => string> = {
+      "Professional": (awb) => `https://www.tpcindia.com/track.aspx?id=${encodeURIComponent(awb)}`,
+      "ST Courier": (awb) => `https://stcourier.com/track/shipment?awb=${encodeURIComponent(awb)}`,
+      "Blue Dart": (awb) => `https://www.bluedart.com/tracking/${encodeURIComponent(awb)}`,
+      "Delhivery": (awb) => `https://www.delhivery.com/track/package/${encodeURIComponent(awb)}`,
+      "India Post": (awb) => `https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx?cno=${encodeURIComponent(awb)}`,
+      "Trackon": (awb) => `https://www.trackon.in/tracking?waybill_no=${encodeURIComponent(awb)}`,
+      "Shadowfox": (awb) => `https://tracker.shadowfax.in/#/search?tracking_id=${encodeURIComponent(awb)}`,
+      "Xpressbees": (awb) => `https://www.xpressbees.com/shipment/tracking?awb=${encodeURIComponent(awb)}`,
+      "Ekart Logistics": (awb) => `https://www.ekartlogistics.com/shipmenttrack/${encodeURIComponent(awb)}`,
+      "DHL": (awb) => `https://www.dhl.com/in-en/home/tracking/tracking-express.html?submit=1&tracking-id=${encodeURIComponent(awb)}`,
     };
 
-    const trackingUrl = COURIER_TRACKING_URLS[courierName] || "";
+    const trackingUrlFn = COURIER_TRACKING_URLS[courierName];
+    const trackingLink = consignment && trackingUrlFn ? trackingUrlFn(consignment) : "";
 
     const lines = [
       "Thanks for ordering with us",
@@ -149,11 +150,11 @@ export default function OrdersPage() {
       `Dispatched date: ${despatch}`,
     ];
 
-    if (trackingUrl) {
-      lines.push("", "Track here:", trackingUrl);
+    if (trackingLink) {
+      lines.push("", `Track here: ${trackingLink}`);
     }
     if (consignment) {
-      lines.push("", "Tracking number:", consignment);
+      lines.push("", `Tracking number: ${consignment}`);
     }
 
     const message = encodeURIComponent(lines.join("\n"));
