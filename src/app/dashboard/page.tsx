@@ -147,6 +147,9 @@ interface DashboardStats {
   total: number;
   dispatched: number;
   pending: number;
+  ownTotal: number;
+  ownDispatched: number;
+  ownPending: number;
 }
 
 function getPreviousRange(from: string, to: string): { from: string; to: string } {
@@ -202,6 +205,7 @@ function ChangeBadge({ current, prev }: { current: number; prev: number | undefi
 const CARD_CONFIGS = [
   {
     key: "total" as const,
+    ownKey: "ownTotal" as const,
     label: "Total Orders",
     iconBg: "bg-primary-50 dark:bg-primary-500/20",
     iconColor: "text-primary-600 dark:text-primary-400",
@@ -215,6 +219,7 @@ const CARD_CONFIGS = [
   },
   {
     key: "dispatched" as const,
+    ownKey: "ownDispatched" as const,
     label: "Dispatched",
     iconBg: "bg-emerald-50 dark:bg-emerald-500/20",
     iconColor: "text-emerald-600 dark:text-emerald-400",
@@ -229,6 +234,7 @@ const CARD_CONFIGS = [
   },
   {
     key: "pending" as const,
+    ownKey: "ownPending" as const,
     label: "Pending",
     iconBg: "bg-amber-50 dark:bg-amber-500/20",
     iconColor: "text-amber-600 dark:text-amber-400",
@@ -247,7 +253,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<DashboardDatePeriod>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [stats, setStats] = useState<DashboardStats>({ total: 0, dispatched: 0, pending: 0 });
+  const [stats, setStats] = useState<DashboardStats>({ total: 0, dispatched: 0, pending: 0, ownTotal: 0, ownDispatched: 0, ownPending: 0 });
   const [prevStats, setPrevStats] = useState<DashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +315,7 @@ export default function DashboardPage() {
         });
     } catch (e) {
       setError((e as Error).message || "Failed to load stats");
-      setStats({ total: 0, dispatched: 0, pending: 0 });
+      setStats({ total: 0, dispatched: 0, pending: 0, ownTotal: 0, ownDispatched: 0, ownPending: 0 });
       setPrevStats(null);
       setLoadingStats(false);
     }
@@ -324,7 +330,7 @@ export default function DashboardPage() {
       fetchStats();
     } else if (period === "custom" && (!customFrom || !customTo)) {
       setLoadingStats(false);
-      setStats({ total: 0, dispatched: 0, pending: 0 });
+      setStats({ total: 0, dispatched: 0, pending: 0, ownTotal: 0, ownDispatched: 0, ownPending: 0 });
       setPrevStats(null);
     }
   }, [user, period, customFrom, customTo, fetchStats]);
@@ -421,7 +427,9 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-4">
           {CARD_CONFIGS.map((card) => {
             const value = stats[card.key];
+            const ownValue = stats[card.ownKey];
             const prev = prevStats?.[card.key];
+            const isTeamAdmin = !loadingStats && value !== ownValue;
             return (
               <div
                 key={card.key}
@@ -435,13 +443,20 @@ export default function DashboardPage() {
                 {/* Label + value */}
                 <div className="flex-1">
                   <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{card.label}</p>
-                  <p className="text-3xl font-bold tabular-nums text-slate-900 dark:text-white">
-                    {loadingStats ? (
-                      <span className="inline-block h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
-                    ) : (
-                      value.toLocaleString()
-                    )}
-                  </p>
+                  {loadingStats ? (
+                    <span className="inline-block h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
+                  ) : (
+                    <>
+                      <p className="text-4xl font-extrabold tabular-nums text-slate-900 dark:text-white">
+                        {value.toLocaleString()}
+                      </p>
+                      {isTeamAdmin && (
+                        <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
+                          Own: {ownValue.toLocaleString()}
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 {/* Change badge */}

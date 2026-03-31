@@ -512,6 +512,9 @@ export interface DashboardStatsResult {
   total: number;
   dispatched: number;
   pending: number;
+  ownTotal: number;
+  ownDispatched: number;
+  ownPending: number;
 }
 
 export async function getStatsFromCache(
@@ -525,21 +528,31 @@ export async function getStatsFromCache(
   let total = 0;
   let dispatched = 0;
   let pending = 0;
+  let ownTotal = 0;
+  let ownDispatched = 0;
+  let ownPending = 0;
 
   for (const o of orders) {
     const bookDate = o.booking_date;
-    if (bookDate >= from && bookDate <= to) total++;
+    const isOwn = o.user_id === userId;
+
+    if (bookDate >= from && bookDate <= to) {
+      total++;
+      if (isOwn) ownTotal++;
+    }
 
     if (o.status === "DESPATCHED" && o.despatch_date && o.despatch_date >= from && o.despatch_date <= to) {
       dispatched++;
+      if (isOwn) ownDispatched++;
     }
 
     if (o.status === "PENDING" && bookDate >= from && bookDate <= to) {
       pending++;
+      if (isOwn) ownPending++;
     }
   }
 
-  return { total, dispatched, pending };
+  return { total, dispatched, pending, ownTotal, ownDispatched, ownPending };
 }
 
 // ─── Suggestions (cached, with SWR) ───────────────────────────

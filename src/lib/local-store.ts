@@ -137,6 +137,12 @@ export async function setLastSyncTimestamp(userId: string, ts: string): Promise<
   await setMeta(userId, meta);
 }
 
+export async function clearLastSyncTimestamp(userId: string): Promise<void> {
+  const meta = await getMeta(userId);
+  meta.lastSyncTimestamp = null;
+  await setMeta(userId, meta);
+}
+
 export async function touchAccess(userId: string, orderIds: string[]): Promise<void> {
   if (!orderIds.length) return;
   const meta = await getMeta(userId);

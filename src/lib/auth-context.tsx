@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { clearSession } from "./capacitor-storage";
+import { clearLastSyncTimestamp } from "./local-store";
 import { getOrCreateDeviceId } from "./device-id";
 import {
   resolveDeviceForSession,
@@ -163,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         notifyDeviceSlotEvicted(r);
       }
+      void clearLastSyncTimestamp(u.id).catch(() => {});
     }
     return { error: null };
   };
