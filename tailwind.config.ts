@@ -47,9 +47,14 @@ const config: Config = {
           "0%, 100%": { top: "0%" },
           "50%": { top: "100%" },
         },
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
       },
       animation: {
         "scan-line": "scan-line 2s ease-in-out infinite",
+        shimmer: "shimmer 1.5s ease-in-out infinite",
       },
     },
   },

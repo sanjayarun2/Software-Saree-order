@@ -306,14 +306,26 @@ export default function ProductCodesProcessPage() {
       <div className="mx-auto w-full max-w-lg flex-1 px-4 py-6 pb-32">
         {status === "generating" && (
           <div className="space-y-4">
-            <p className="text-center text-sm font-medium text-slate-600 dark:text-slate-300">
-              Generating product codes… {progress}%
-            </p>
-            <div className="h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div className="flex items-center justify-center gap-2">
+              <svg className="h-5 w-5 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-center text-sm font-medium text-slate-600 dark:text-slate-300">
+                Generating product codes… {progress}%
+              </p>
+            </div>
+            <div className="relative h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
               <div
-                className="h-full rounded-full bg-primary-500 transition-[width] duration-200"
+                className="h-full rounded-full bg-primary-500 transition-[width] duration-300"
                 style={{ width: `${progress}%` }}
               />
+              <div className="absolute inset-0 overflow-hidden rounded-full">
+                <div
+                  className="h-full animate-shimmer bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                  style={{ width: "200%", marginLeft: "-50%" }}
+                />
+              </div>
             </div>
           </div>
         )}
@@ -382,7 +394,7 @@ export default function ProductCodesProcessPage() {
             type="button"
             disabled={saving}
             onClick={() => void handleSave()}
-            className="min-h-[48px] w-full max-w-lg mx-auto flex rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
+            className="min-h-[48px] w-full max-w-lg mx-auto flex items-center justify-center rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save"}
           </button>

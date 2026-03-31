@@ -15,6 +15,7 @@ import jpegDecode from "@jsquash/jpeg/decode";
 import jpegEncode from "@jsquash/jpeg/encode";
 import pngDecode from "@jsquash/png/decode";
 import pngEncode from "@jsquash/png/encode";
+import { getProductCodeSettings } from "./product-code-settings";
 
 // ─── Detect format ──────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ function isPng(buf: ArrayBuffer): boolean {
 
 function drawTextOverlay(imageData: ImageData, code: string): ImageData {
   const { width: w, height: h } = imageData;
+  const settings = getProductCodeSettings();
 
   const useOffscreen = typeof OffscreenCanvas !== "undefined";
   let canvas: HTMLCanvasElement | OffscreenCanvas;
@@ -48,18 +50,46 @@ function drawTextOverlay(imageData: ImageData, code: string): ImageData {
 
   ctx.putImageData(imageData, 0, 0);
 
-  const fontSize = Math.round(Math.max(20, Math.min(72, w * 0.056)));
+  const baseFontSize = Math.round(Math.max(20, Math.min(72, w * 0.056)));
+  const fontSize = Math.max(12, baseFontSize + settings.sizeOffset);
   ctx.font = `700 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif`;
-  ctx.textAlign = "right";
-  ctx.textBaseline = "top";
+
   const pad = Math.round(fontSize * 0.55);
-  const x = w - pad;
-  const y = pad;
+  let x: number;
+  let y: number;
+
+  switch (settings.placement) {
+    case "top-left":
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      x = pad;
+      y = pad;
+      break;
+    case "bottom-left":
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      x = pad;
+      y = h - pad;
+      break;
+    case "bottom-right":
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      x = w - pad;
+      y = h - pad;
+      break;
+    default: // top-right
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      x = w - pad;
+      y = pad;
+      break;
+  }
+
   const lineWidth = Math.max(2.5, fontSize / 9);
   ctx.strokeStyle = "rgba(0,0,0,0.92)";
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = "round";
-  ctx.fillStyle = "#dc2626";
+  ctx.fillStyle = settings.color;
   ctx.strokeText(code, x, y);
   ctx.fillText(code, x, y);
 
