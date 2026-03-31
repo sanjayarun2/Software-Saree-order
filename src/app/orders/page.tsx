@@ -153,7 +153,7 @@ export default function OrdersPage() {
       lines.push("", "Track here:", trackingUrl);
     }
     if (consignment) {
-      lines.push("", "Tracking number:", `\`${consignment}\``);
+      lines.push("", "Tracking number:", consignment);
     }
 
     const message = encodeURIComponent(lines.join("\n"));
