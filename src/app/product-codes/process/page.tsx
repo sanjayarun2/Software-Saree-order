@@ -21,11 +21,7 @@ import {
   safeFilename,
   stampProductCodeOnFile,
 } from "@/lib/image-product-code";
-import {
-  deleteProductCodeSourceDraft,
-  getProductCodeSourceDraftFiles,
-} from "@/lib/product-code-source-draft";
-import { useProductCodesDraft } from "../product-codes-context";
+import { revokeProductCodesDraftFiles, useProductCodesDraft } from "../product-codes-context";
 
 function localYyyyMmDd(d: Date): string {
   const y = d.getFullYear();
@@ -65,15 +61,15 @@ export default function ProductCodesProcessPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!pickDraft?.sourceDraftId) {
+    if (!pickDraft?.files.length) {
       router.replace("/product-codes/");
     }
   }, [authLoading, pickDraft, router]);
 
   const filesKey = useMemo(
     () =>
-      pickDraft?.sourceDraftId
-        ? `${pickDraft.sourceDraftId}:${pickDraft.fileNames.join("|")}`
+      pickDraft?.files.length
+        ? pickDraft.files.map((file) => `${file.name}-${file.lastModified}-${file.objectUrl}`).join("|")
         : "",
     [pickDraft]
   );
@@ -86,9 +82,9 @@ export default function ProductCodesProcessPage() {
 
   useEffect(() => {
     const draft = pickDraftRef.current;
-    if (!filesKey || authLoading || !userId || !draft?.sourceDraftId) return;
+    if (!filesKey || authLoading || !userId || !draft?.files.length) return;
 
-    const sourceDraftId = draft.sourceDraftId;
+    const draftFiles = draft.files;
     const period = draft.period;
     const customFrom = draft.customFrom;
     const customTo = draft.customTo;
@@ -106,7 +102,20 @@ export default function ProductCodesProcessPage() {
         setError(null);
 
         try {
-          const files = await getProductCodeSourceDraftFiles(sourceDraftId);
+          const files: File[] = [];
+          for (const draftFile of draftFiles) {
+            const response = await fetch(draftFile.objectUrl);
+            if (!response.ok) {
+              throw new Error(`${draftFile.name}: Could not access selected image`);
+            }
+            const blob = await response.blob();
+            files.push(
+              new File([blob], draftFile.name, {
+                type: draftFile.type || blob.type || "image/jpeg",
+                lastModified: draftFile.lastModified || Date.now(),
+              }),
+            );
+          }
           if (cancelled || myEpoch !== genEpochRef.current) return;
           if (!files.length) {
             throw new Error("Selected photos are no longer available. Please pick them again.");
@@ -226,8 +235,8 @@ export default function ProductCodesProcessPage() {
       }
 
       setSaved(true);
+      revokeProductCodesDraftFiles(pickDraft?.files);
       flushSync(() => setPickDraft(null));
-      await deleteProductCodeSourceDraft(pickDraft?.sourceDraftId ?? "");
       router.push("/product-codes/");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -237,7 +246,7 @@ export default function ProductCodesProcessPage() {
       setSaving(false);
       setLeaveOpen(false);
     }
-  }, [user?.id, saved, status, codes, quantities, stampedBlobs, originals, pickDraft?.sourceDraftId, setPickDraft, router]);
+  }, [user?.id, saved, status, codes, quantities, stampedBlobs, originals, pickDraft?.files, setPickDraft, router]);
 
   const goBack = useCallback(() => {
     if (saved) {
@@ -246,7 +255,7 @@ export default function ProductCodesProcessPage() {
     }
     if (status === "generating") {
       if (window.confirm("Leave? Generation is not finished.")) {
-        void deleteProductCodeSourceDraft(pickDraft?.sourceDraftId ?? "");
+        revokeProductCodesDraftFiles(pickDraft?.files);
         setPickDraft(null);
         router.push("/product-codes/");
       }
@@ -256,23 +265,23 @@ export default function ProductCodesProcessPage() {
       setLeaveOpen(true);
       return;
     }
-    void deleteProductCodeSourceDraft(pickDraft?.sourceDraftId ?? "");
+    revokeProductCodesDraftFiles(pickDraft?.files);
     setPickDraft(null);
     router.push("/product-codes/");
-  }, [saved, status, pickDraft?.sourceDraftId, setPickDraft, router]);
+  }, [saved, status, pickDraft?.files, setPickDraft, router]);
 
   const discardAndLeave = useCallback(() => {
     setLeaveOpen(false);
-    void deleteProductCodeSourceDraft(pickDraft?.sourceDraftId ?? "");
+    revokeProductCodesDraftFiles(pickDraft?.files);
     setPickDraft(null);
     router.push("/product-codes/");
-  }, [pickDraft?.sourceDraftId, setPickDraft, router]);
+  }, [pickDraft?.files, setPickDraft, router]);
 
   if (authLoading || !user) {
     return <DashboardSkeleton />;
   }
 
-  if (!pickDraft?.sourceDraftId && status === "generating") {
+  if (!pickDraft?.files.length && status === "generating") {
     return <DashboardSkeleton />;
   }
 

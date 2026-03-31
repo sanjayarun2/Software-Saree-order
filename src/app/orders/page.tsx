@@ -141,7 +141,6 @@ export default function OrdersPage() {
       "Keep purchase with us",
       "",
       nameLine,
-      "",
       `Booked by: ${staffName}`,
       `Quantity: ${qty}`,
       `Booked date: ${booking}`,
@@ -150,11 +149,11 @@ export default function OrdersPage() {
       `Dispatched date: ${despatch}`,
     ];
 
-    if (consignment) {
-      lines.push(`Consignment / Tracking: ${consignment}`);
-    }
     if (trackingUrl) {
-      lines.push(`Track here: ${trackingUrl}`);
+      lines.push("", "Track here:", trackingUrl);
+    }
+    if (consignment) {
+      lines.push("Tracking number:", consignment);
     }
 
     const message = encodeURIComponent(lines.join("\n"));
