@@ -11,6 +11,17 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue>({ ready: false });
 
+async function fullSyncWithRetry(uid: string): Promise<void> {
+  try {
+    await fullSync(uid);
+  } catch (err) {
+    if (err instanceof TypeError && /failed to fetch|network/i.test(err.message)) {
+      await new Promise((r) => setTimeout(r, 2000));
+      await fullSync(uid).catch(() => {});
+    }
+  }
+}
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const syncedRef = useRef<string | null>(null);
@@ -29,7 +40,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     initSyncManager(user.id);
 
-    fullSync(user.id).finally(() => setReady(true));
+    fullSyncWithRetry(user.id).finally(() => setReady(true));
   }, [user]);
 
   return (

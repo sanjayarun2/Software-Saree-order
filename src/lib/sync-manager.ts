@@ -13,6 +13,11 @@ let syncInFlight = false;
 
 const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError && /failed to fetch|network/i.test(err.message)) return true;
+  return false;
+}
+
 async function safeSync() {
   if (!userId || syncInFlight) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -20,6 +25,16 @@ async function safeSync() {
   try {
     await flushOutbox(userId);
     await syncDashboardOrders(userId);
+  } catch (err) {
+    if (isNetworkError(err) && userId) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        await flushOutbox(userId!);
+        await syncDashboardOrders(userId!);
+      } catch {
+        // silent — will retry on next poll
+      }
+    }
   } finally {
     syncInFlight = false;
   }
@@ -125,7 +140,7 @@ export function initSyncManager(uid: string): void {
   startRealtime(uid);
 
   if (navigator.onLine) {
-    safeSync();
+    setTimeout(() => safeSync(), 1500);
   }
 }
 

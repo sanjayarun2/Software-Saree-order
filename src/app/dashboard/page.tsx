@@ -310,6 +310,7 @@ export default function DashboardPage() {
             setPrevStats(null);
           }
         })
+        .catch(() => {})
         .finally(() => {
           syncingRef.current = false;
         });
