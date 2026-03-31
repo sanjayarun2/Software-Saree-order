@@ -159,7 +159,7 @@ function EditOrderContent() {
 
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-6">
+      <div className="web-container mx-auto max-w-2xl space-y-6 p-4 md:p-6">
         <header className="relative flex min-h-[44px] items-center justify-center pb-4">
           <Link
             href={orderStatus === "DESPATCHED" ? "/orders/?tab=dispatched" : "/orders/?tab=pending"}

@@ -70,6 +70,48 @@ body {
   }
 }
 
+/* ─── Web-only desktop refinements (body.web-view set by AppShell) ─── */
+
+body.web-view .bento-card {
+  border-radius: 12px;
+}
+
+@media (min-width: 1024px) {
+  body.web-view input:not([type="checkbox"]):not([type="radio"]):not([type="date"]),
+  body.web-view select,
+  body.web-view textarea {
+    min-height: 40px;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  body.web-view input[type="date"] {
+    min-height: 40px;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  body.web-view button[type="submit"] {
+    min-height: 44px;
+    border-radius: 10px;
+  }
+
+  body.web-view .bento-card {
+    padding: 1.5rem;
+  }
+
+  body.web-view .web-container {
+    max-width: 768px;
+  }
+
+  body.web-view .lg\:left-64 {
+    left: var(--web-sidebar-w, 64px);
+    transition: left 200ms ease-in-out;
+  }
+}
+
 /* High-quality SVG rendering for logos - prevents pixelation */
 img[src$=".svg"],
 img[src*="icon.svg"] {

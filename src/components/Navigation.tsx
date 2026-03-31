@@ -23,12 +23,12 @@ const NAV_ITEMS_DESKTOP = [
   { href: "/reports", label: "Reports", icon: "📄" },
 ];
 
-export function BottomNav() {
+export function BottomNav({ isWeb = false }: { isWeb?: boolean }) {
   const pathname = usePathname();
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around rounded-t-2xl border-t border-gray-200/80 bg-white/90 py-2 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-lg dark:border-slate-700/80 dark:bg-slate-900/95 dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] lg:hidden"
+      className={`fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around rounded-t-2xl border-t border-gray-200/80 bg-white/90 py-2 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-lg dark:border-slate-700/80 dark:bg-slate-900/95 dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] ${isWeb ? "md:hidden" : "lg:hidden"}`}
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       role="navigation"
       aria-label="Main navigation"
@@ -60,9 +60,25 @@ interface RailNavProps {
   userId?: string | null;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  isWeb?: boolean;
+  webCollapsed?: boolean;
+  onWebToggle?: () => void;
+  onWebMouseEnter?: () => void;
+  onWebMouseLeave?: () => void;
 }
 
-export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, onMobileClose }: RailNavProps) {
+export function RailNav({
+  userInitials,
+  userEmail,
+  userId,
+  mobileOpen = false,
+  onMobileClose,
+  isWeb = false,
+  webCollapsed = false,
+  onWebToggle,
+  onWebMouseEnter,
+  onWebMouseLeave,
+}: RailNavProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
 
@@ -70,6 +86,8 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
     "bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-300";
   const navItemInactive =
     "text-gray-700 dark:text-gray-300 font-normal";
+
+  const showLabels = !isWeb || !webCollapsed;
 
   const sidebarContent = (isMobile: boolean) => {
     const openWhatsAppGroup = () => {
@@ -105,21 +123,27 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
 
     return (
       <>
-      <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
-        <div className="flex items-center gap-3">
+      {/* User greeting */}
+      <div className={`mb-6 pb-4 border-b border-gray-200 dark:border-gray-600 ${!showLabels ? "flex justify-center" : ""}`}>
+        <div className={`flex items-center gap-3 ${!showLabels ? "justify-center" : ""}`}>
           {userInitials && (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xl font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300">
+            <div className={`flex shrink-0 items-center justify-center rounded-full bg-primary-100 text-xl font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300 ${showLabels ? "h-14 w-14" : "h-10 w-10 text-base"}`}>
               {userInitials}
             </div>
           )}
-          <div className="min-w-0">
-            <p className="text-lg font-bold text-gray-900 dark:text-white">Hello,</p>
-            <p className="truncate text-sm font-normal text-gray-600 dark:text-gray-400">
-              {userEmail || "User"}
-            </p>
-          </div>
+          {showLabels && (
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-gray-900 dark:text-white">Hello,</p>
+              <p className="truncate text-sm font-normal text-gray-600 dark:text-gray-400">
+                {userEmail || "User"}
+              </p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Theme toggle */}
+      {showLabels && (
       <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
         <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">Theme</p>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-800">
@@ -153,6 +177,9 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
           </button>
         </div>
       </div>
+      )}
+
+      {/* Nav links */}
       <div className="flex flex-1 flex-col gap-0.5">
         {NAV_ITEMS_DESKTOP.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -163,47 +190,57 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
               onClick={onMobileClose}
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${
                 isMobile ? "min-h-[52px]" : "min-h-[50px]"
-              } ${active ? navItemActive : navItemInactive}`}
+              } ${!showLabels ? "justify-center" : ""} ${active ? navItemActive : navItemInactive}`}
               title={item.label}
             >
-              <span className={`${isMobile ? "text-xl" : "text-xl"}`} aria-hidden>
+              <span className="text-xl shrink-0" aria-hidden>
                 {item.icon}
               </span>
-              <span className={isMobile ? "text-base font-normal" : "text-base font-normal"}>
-                {item.label}
-              </span>
+              {showLabels && (
+                <span className="text-base font-normal whitespace-nowrap overflow-hidden">
+                  {item.label}
+                </span>
+              )}
             </Link>
           );
         })}
       </div>
+
+      {/* Bottom actions */}
       <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
         <button
           type="button"
           onClick={openReferFriend}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
-          }`}
+          } ${!showLabels ? "justify-center" : ""}`}
+          title="Refer a Friend"
         >
-          <span className="text-xl" aria-hidden>🎁</span>
-          <span className={isMobile ? "text-base font-normal" : "text-base font-normal"}>
-            Refer a Friend
-          </span>
+          <span className="text-xl shrink-0" aria-hidden>🎁</span>
+          {showLabels && (
+            <span className="text-base font-normal whitespace-nowrap overflow-hidden">
+              Refer a Friend
+            </span>
+          )}
         </button>
         <button
           type="button"
           onClick={openWhatsAppGroup}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
-          }`}
+          } ${!showLabels ? "justify-center" : ""}`}
+          title="Join WhatsApp"
         >
-          <span className="text-xl" aria-hidden>
+          <span className="text-xl shrink-0" aria-hidden>
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
             </svg>
           </span>
-          <span className={isMobile ? "text-base font-normal" : "text-base font-normal"}>
-            Join WhatsApp
-          </span>
+          {showLabels && (
+            <span className="text-base font-normal whitespace-nowrap overflow-hidden">
+              Join WhatsApp
+            </span>
+          )}
         </button>
       </div>
       <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
@@ -212,7 +249,7 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
           onClick={onMobileClose}
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
-          }`}
+          } ${!showLabels ? "justify-center" : ""}`}
           title="Log out"
         >
           <span className={`${isMobile ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"}`} aria-hidden>
@@ -222,9 +259,11 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
           </span>
-          <span className={isMobile ? "text-base font-normal" : "text-base font-normal"}>
-            Log out
-          </span>
+          {showLabels && (
+            <span className="text-base font-normal whitespace-nowrap overflow-hidden">
+              Log out
+            </span>
+          )}
         </Link>
       </div>
     </>
@@ -251,14 +290,38 @@ export function RailNav({ userInitials, userEmail, userId, mobileOpen = false, o
       >
         {sidebarContent(true)}
       </aside>
-      {/* Desktop sidebar: fixed left, sufficient width, no overlap with content */}
-      <aside
-        className={`fixed left-0 top-0 z-40 hidden h-full w-64 flex-col overflow-y-auto rounded-none border-r border-gray-200 bg-white py-6 pl-4 pr-4 shadow-none dark:border-slate-700 dark:bg-slate-900 lg:flex`}
-        role="navigation"
-        aria-label="Side navigation"
-      >
-        {sidebarContent(false)}
-      </aside>
+
+      {/* Desktop sidebar */}
+      {isWeb ? (
+        <aside
+          className="fixed left-0 top-0 z-40 hidden h-full flex-col overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white py-6 shadow-none transition-[width,padding] duration-200 ease-in-out dark:border-slate-700 dark:bg-slate-900 lg:flex"
+          style={{ width: webCollapsed ? 64 : 256, paddingLeft: webCollapsed ? 8 : 16, paddingRight: webCollapsed ? 8 : 16 }}
+          role="navigation"
+          aria-label="Side navigation"
+          onMouseEnter={onWebMouseEnter}
+          onMouseLeave={onWebMouseLeave}
+        >
+          <button
+            type="button"
+            onClick={onWebToggle}
+            className="mb-4 flex h-9 w-9 shrink-0 items-center justify-center self-end rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-800"
+            aria-label={webCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <svg className={`h-5 w-5 transition-transform duration-200 ${webCollapsed ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          {sidebarContent(false)}
+        </aside>
+      ) : (
+        <aside
+          className="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col overflow-y-auto rounded-none border-r border-gray-200 bg-white py-6 pl-4 pr-4 shadow-none dark:border-slate-700 dark:bg-slate-900 lg:flex"
+          role="navigation"
+          aria-label="Side navigation"
+        >
+          {sidebarContent(false)}
+        </aside>
+      )}
     </>
   );
 }
