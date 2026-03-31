@@ -1,8 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-  <rect width="108" height="108" rx="22" fill="#4F46E5"/>
-  <path fill="#FFFFFF" d="M30,22 L78,22 Q82,22 82,26 L82,50 Q82,54 78,54 L30,54 Q26,54 26,50 L26,26 Q26,22 30,22 Z"/>
-  <path fill="#4F46E5" d="M34,30 L74,30 L74,34 L34,34 Z"/>
-  <path fill="#4F46E5" d="M34,38 L68,38 L68,42 L34,42 Z"/>
-  <path fill="#4F46E5" d="M34,46 L60,46 L60,50 L34,50 Z"/>
-  <path fill="#FFFFFF" d="M26,56 L82,56 C82,70 54,86 26,70 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#4F46E5"/>
+  <!-- Document / order form -->
+  <rect x="136" y="100" width="240" height="230" rx="18" fill="#FFFFFF"/>
+  <!-- Three order field lines -->
+  <rect x="172" y="148" width="176" height="18" rx="4" fill="#4F46E5"/>
+  <rect x="172" y="200" width="148" height="18" rx="4" fill="#4F46E5"/>
+  <rect x="172" y="252" width="114" height="18" rx="4" fill="#4F46E5"/>
+  <!-- Saree drape -->
+  <path fill="#FFFFFF" d="M120,350 L392,350 C392,420 256,480 120,410 Z"/>
 </svg>
