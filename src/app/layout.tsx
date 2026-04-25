@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/lib/theme-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { SearchProvider } from "@/lib/search-context";
 import { DataProvider } from "@/lib/data-provider";
+import { LanguageProvider } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppShell } from "@/components/AppShell";
 import { SplashController } from "@/lib/SplashController";
@@ -44,15 +45,17 @@ export default function RootLayout({
         <ErrorBoundary>
           <ThemeProvider>
             <AuthProvider>
-              <SplashController>
-                <ToastProvider>
-                  <DataProvider>
-                    <SearchProvider>
-                      <AppShell>{children}</AppShell>
-                    </SearchProvider>
-                  </DataProvider>
-                </ToastProvider>
-              </SplashController>
+              <LanguageProvider>
+                <SplashController>
+                  <ToastProvider>
+                    <DataProvider>
+                      <SearchProvider>
+                        <AppShell>{children}</AppShell>
+                      </SearchProvider>
+                    </DataProvider>
+                  </ToastProvider>
+                </SplashController>
+              </LanguageProvider>
             </AuthProvider>
           </ThemeProvider>
         </ErrorBoundary>

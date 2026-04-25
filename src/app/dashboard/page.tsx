@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { getStatsFromCache, syncDashboardOrders } from "@/lib/order-service";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import {
@@ -249,6 +250,7 @@ const CARD_CONFIGS = [
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [period, setPeriod] = useState<DashboardDatePeriod>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -340,7 +342,7 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  const selectedLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today";
+  const selectedLabel = t(PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today");
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -349,7 +351,7 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
           {/* Left: title + date widget */}
           <div className="flex flex-1 flex-col gap-3">
-            <h1 className="text-xl font-bold text-white">Dashboard</h1>
+            <h1 className="text-xl font-bold text-white">{t("Dashboard")}</h1>
             <div className="flex items-center gap-3">
               <DateWidgetDisplay period={period} from={range.from} to={range.to} />
               {/* Period selector dropdown */}
@@ -381,7 +383,7 @@ export default function DashboardPage() {
                             : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
                         }`}
                       >
-                        {opt.label}
+                        {t(opt.label)}
                         {period === opt.value && (
                           <svg className="ml-auto h-4 w-4 text-primary-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                             <polyline points="20 6 9 17 4 12" />
@@ -392,14 +394,14 @@ export default function DashboardPage() {
 
                     {period === "custom" && (
                       <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-700">
-                        <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">From</label>
+                        <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t("From")}</label>
                         <input
                           type="date"
                           value={customFrom}
                           onChange={(e) => setCustomFrom(e.target.value)}
                           className="mb-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                         />
-                        <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">To</label>
+                        <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{t("To")}</label>
                         <input
                           type="date"
                           value={customTo}
@@ -443,7 +445,7 @@ export default function DashboardPage() {
 
                 {/* Label + value */}
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{card.label}</p>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{t(card.label)}</p>
                   {loadingStats ? (
                     <span className="inline-block h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
                   ) : (
@@ -453,7 +455,7 @@ export default function DashboardPage() {
                       </p>
                       {isTeamAdmin && (
                         <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
-                          Own: {ownValue.toLocaleString()}
+                          {t("Own")}: {ownValue.toLocaleString()}
                         </p>
                       )}
                     </>

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { useIsWeb } from "@/lib/useIsWeb";
 import { BottomNav, RailNav } from "./Navigation";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -32,6 +33,7 @@ function getPageTitle(pathname: string | null): string {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const pathname = usePathname();
   const isWeb = useIsWeb();
   const hideNav = NO_NAV_ROUTES.some((r) => pathname?.startsWith(r));
@@ -139,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {isWeb && (
             <header className="sticky top-0 z-30 hidden h-14 items-center justify-between border-b border-gray-200/60 bg-white/80 px-8 backdrop-blur-md dark:border-slate-700/60 dark:bg-slate-900/80 lg:flex">
               <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
-                {pageTitle}
+                {t(pageTitle)}
               </h1>
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300">

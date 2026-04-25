@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/theme-context";
+import { useLanguage } from "@/lib/language-context";
 import { logReferralShare } from "@/lib/referral-service";
 import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 
@@ -25,6 +26,7 @@ const NAV_ITEMS_DESKTOP = [
 
 export function BottomNav({ isWeb = false }: { isWeb?: boolean }) {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   return (
     <nav
@@ -46,7 +48,7 @@ export function BottomNav({ isWeb = false }: { isWeb?: boolean }) {
             <span className="text-[22px] leading-none" aria-hidden>
               {item.icon}
             </span>
-            <span className="text-[10px] font-medium">{item.label}</span>
+            <span className="text-[10px] font-medium">{t(item.label === "Home" ? "Dashboard" : item.label)}</span>
           </Link>
         );
       })}
@@ -81,6 +83,7 @@ export function RailNav({
 }: RailNavProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
 
   const navItemActive =
     "bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-300";
@@ -133,7 +136,7 @@ export function RailNav({
           )}
           {showLabels && (
             <div className="min-w-0">
-              <p className="text-lg font-bold text-gray-900 dark:text-white">Hello,</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{t("Hello,")}</p>
               <p className="truncate text-sm font-normal text-gray-600 dark:text-gray-400">
                 {userEmail || "User"}
               </p>
@@ -145,7 +148,7 @@ export function RailNav({
       {/* Theme toggle */}
       {showLabels && (
       <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
-        <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">Theme</p>
+        <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">{t("Theme")}</p>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-800">
           <button
             type="button"
@@ -159,7 +162,7 @@ export function RailNav({
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
-            Light
+            {t("Light")}
           </button>
           <button
             type="button"
@@ -173,7 +176,38 @@ export function RailNav({
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
-            Dark
+            {t("Dark")}
+          </button>
+        </div>
+      </div>
+      )}
+
+      {/* Language toggle */}
+      {showLabels && (
+      <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
+        <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">Language</p>
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-800">
+          <button
+            type="button"
+            onClick={() => setLanguage("en")}
+            className={`flex flex-1 items-center justify-center rounded-md px-3 py-2 text-sm font-normal transition-colors ${
+              language === "en"
+                ? "bg-primary-500 text-white shadow-sm dark:bg-primary-600"
+                : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
+            }`}
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            onClick={() => setLanguage("ta")}
+            className={`flex flex-1 items-center justify-center rounded-md px-3 py-2 text-sm font-normal transition-colors ${
+              language === "ta"
+                ? "bg-primary-500 text-white shadow-sm dark:bg-primary-600"
+                : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
+            }`}
+          >
+            தமிழ்
           </button>
         </div>
       </div>
@@ -191,14 +225,14 @@ export function RailNav({
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${
                 isMobile ? "min-h-[52px]" : "min-h-[50px]"
               } ${!showLabels ? "justify-center" : ""} ${active ? navItemActive : navItemInactive}`}
-              title={item.label}
+              title={t(item.label === "Home" ? "Dashboard" : item.label)}
             >
               <span className="text-xl shrink-0" aria-hidden>
                 {item.icon}
               </span>
               {showLabels && (
                 <span className="text-base font-normal whitespace-nowrap overflow-hidden">
-                  {item.label}
+                  {t(item.label === "Home" ? "Dashboard" : item.label)}
                 </span>
               )}
             </Link>
@@ -250,7 +284,7 @@ export function RailNav({
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           } ${!showLabels ? "justify-center" : ""}`}
-          title="Log out"
+          title={t("Log out")}
         >
           <span className={`${isMobile ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"}`} aria-hidden>
             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -261,7 +295,7 @@ export function RailNav({
           </span>
           {showLabels && (
             <span className="text-base font-normal whitespace-nowrap overflow-hidden">
-              Log out
+              {t("Log out")}
             </span>
           )}
         </Link>
