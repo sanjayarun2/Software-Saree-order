@@ -282,6 +282,33 @@ async function registerFileWithSystem(path: string): Promise<string | null> {
 /** Default logo filenames in public folder (try in order for robustness). */
 const DEFAULT_LOGO_PATHS = ["/logo2.png", "/logo.png"];
 let defaultLogoCache: string | null | undefined;
+const USER_LOGO_CACHE_PREFIX = "saree_pdf_logo_cache:";
+type UserLogoCache = { updatedAt: string; data: string };
+
+function getUserLogoCache(userId: string): UserLogoCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${USER_LOGO_CACHE_PREFIX}${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as UserLogoCache;
+    if (!parsed?.updatedAt || !parsed?.data) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function setUserLogoCache(userId: string, updatedAt: string, data: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      `${USER_LOGO_CACHE_PREFIX}${userId}`,
+      JSON.stringify({ updatedAt, data } as UserLogoCache),
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
 
 /** Load default logo from public folder; returns base64 data URL or null. Tries multiple paths and full URL for all devices/OS. */
 async function loadDefaultLogoBase64(): Promise<string | null> {
@@ -343,9 +370,20 @@ async function fetchPdfSettingsForRendering(userId: string): Promise<PdfRenderOp
     let logoBase64: string | null = await loadDefaultLogoBase64();
     if (settings?.content_type === "logo") {
       if (settings.logo_path) {
-        // Keep bundled default as guaranteed fallback; only override when server logo loads.
-        const serverLogo = await getPdfLogoBase64(userId, settings.logo_path);
-        if (serverLogo) logoBase64 = serverLogo;
+        const cached = getUserLogoCache(userId);
+        if (cached && cached.updatedAt === settings.updated_at) {
+          logoBase64 = cached.data;
+        } else {
+          // Keep bundled default as guaranteed fallback; only override when server logo loads.
+          const serverLogo = await getPdfLogoBase64(userId, settings.logo_path);
+          if (serverLogo) {
+            logoBase64 = serverLogo;
+            setUserLogoCache(userId, settings.updated_at, serverLogo);
+          } else if (cached?.data) {
+            // Network failure fallback: use last known uploaded logo.
+            logoBase64 = cached.data;
+          }
+        }
       }
     }
     const logoAspectRatio = logoBase64 ? await getImageAspectRatio(logoBase64) : null;

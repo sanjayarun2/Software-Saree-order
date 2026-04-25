@@ -69,9 +69,20 @@ async function fetchPosRenderOptions(userId: string): Promise<PdfRenderOptions> 
     let logoBase64: string | null = await loadDefaultLogo();
     if (settings?.content_type === "logo") {
       if (settings.logo_path) {
-        // Keep bundled default as guaranteed fallback; only override when server logo loads.
-        const serverLogo = await getPdfLogoBase64(userId, settings.logo_path);
-        if (serverLogo) logoBase64 = serverLogo;
+        const cached = getUserLogoCache(userId);
+        if (cached && cached.updatedAt === settings.updated_at) {
+          logoBase64 = cached.data;
+        } else {
+          // Keep bundled default as guaranteed fallback; only override when server logo loads.
+          const serverLogo = await getPdfLogoBase64(userId, settings.logo_path);
+          if (serverLogo) {
+            logoBase64 = serverLogo;
+            setUserLogoCache(userId, settings.updated_at, serverLogo);
+          } else if (cached?.data) {
+            // Network failure fallback: use last known uploaded logo.
+            logoBase64 = cached.data;
+          }
+        }
       }
     }
     const logoAspectRatio = logoBase64 ? await getImageAspectRatio(logoBase64) : null;
@@ -85,6 +96,33 @@ async function fetchPosRenderOptions(userId: string): Promise<PdfRenderOptions> 
 
 const DEFAULT_LOGO_PATHS = ["/logo2.png", "/logo.png"];
 let defaultLogoCache: string | null | undefined;
+const USER_LOGO_CACHE_PREFIX = "saree_pdf_logo_cache:";
+type UserLogoCache = { updatedAt: string; data: string };
+
+function getUserLogoCache(userId: string): UserLogoCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${USER_LOGO_CACHE_PREFIX}${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as UserLogoCache;
+    if (!parsed?.updatedAt || !parsed?.data) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function setUserLogoCache(userId: string, updatedAt: string, data: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      `${USER_LOGO_CACHE_PREFIX}${userId}`,
+      JSON.stringify({ updatedAt, data } as UserLogoCache),
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
 
 async function loadDefaultLogo(): Promise<string | null> {
   if (defaultLogoCache !== undefined) return defaultLogoCache;
