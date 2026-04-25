@@ -281,15 +281,18 @@ async function registerFileWithSystem(path: string): Promise<string | null> {
 
 /** Default logo filenames in public folder (try in order for robustness). */
 const DEFAULT_LOGO_PATHS = ["/logo2.png", "/logo.png"];
+let defaultLogoCache: string | null | undefined;
 
 /** Load default logo from public folder; returns base64 data URL or null. Tries multiple paths and full URL for all devices/OS. */
 async function loadDefaultLogoBase64(): Promise<string | null> {
+  if (defaultLogoCache !== undefined) return defaultLogoCache;
   if (typeof window === "undefined") return null;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   const tryFetch = async (url: string): Promise<string | null> => {
     try {
-      const res = await fetch(url);
+      const cacheBustUrl = `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`;
+      const res = await fetch(cacheBustUrl, { cache: "no-store" });
       if (!res.ok) return null;
       const blob = await res.blob();
       return await new Promise<string | null>((resolve) => {
@@ -305,12 +308,19 @@ async function loadDefaultLogoBase64(): Promise<string | null> {
 
   for (const path of DEFAULT_LOGO_PATHS) {
     const fromRoot = await tryFetch(path);
-    if (fromRoot) return fromRoot;
+    if (fromRoot) {
+      defaultLogoCache = fromRoot;
+      return fromRoot;
+    }
     if (origin) {
       const fromOrigin = await tryFetch(origin + path);
-      if (fromOrigin) return fromOrigin;
+      if (fromOrigin) {
+        defaultLogoCache = fromOrigin;
+        return fromOrigin;
+      }
     }
   }
+  defaultLogoCache = null;
   return null;
 }
 
@@ -330,12 +340,13 @@ async function fetchPdfSettingsForRendering(userId: string): Promise<PdfRenderOp
   try {
     const { getPdfSettings, getPdfLogoBase64 } = await import("./pdf-settings-supabase");
     const settings = await getPdfSettings(userId);
-    let logoBase64: string | null = null;
+    let logoBase64: string | null = await loadDefaultLogoBase64();
     if (settings?.content_type === "logo") {
       if (settings.logo_path) {
-        logoBase64 = await getPdfLogoBase64(userId, settings.logo_path);
+        // Keep bundled default as guaranteed fallback; only override when server logo loads.
+        const serverLogo = await getPdfLogoBase64(userId, settings.logo_path);
+        if (serverLogo) logoBase64 = serverLogo;
       }
-      if (!logoBase64) logoBase64 = await loadDefaultLogoBase64();
     }
     const logoAspectRatio = logoBase64 ? await getImageAspectRatio(logoBase64) : null;
     return { settings, logoBase64, logoAspectRatio };

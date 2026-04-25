@@ -66,12 +66,13 @@ async function fetchPosRenderOptions(userId: string): Promise<PdfRenderOptions> 
   try {
     const { getPdfSettings, getPdfLogoBase64 } = await import("./pdf-settings-supabase");
     const settings = await getPdfSettings(userId);
-    let logoBase64: string | null = null;
+    let logoBase64: string | null = await loadDefaultLogo();
     if (settings?.content_type === "logo") {
       if (settings.logo_path) {
-        logoBase64 = await getPdfLogoBase64(userId, settings.logo_path);
+        // Keep bundled default as guaranteed fallback; only override when server logo loads.
+        const serverLogo = await getPdfLogoBase64(userId, settings.logo_path);
+        if (serverLogo) logoBase64 = serverLogo;
       }
-      if (!logoBase64) logoBase64 = await loadDefaultLogo();
     }
     const logoAspectRatio = logoBase64 ? await getImageAspectRatio(logoBase64) : null;
     return { settings, logoBase64, logoAspectRatio };
@@ -83,8 +84,10 @@ async function fetchPosRenderOptions(userId: string): Promise<PdfRenderOptions> 
 }
 
 const DEFAULT_LOGO_PATHS = ["/logo2.png", "/logo.png"];
+let defaultLogoCache: string | null | undefined;
 
 async function loadDefaultLogo(): Promise<string | null> {
+  if (defaultLogoCache !== undefined) return defaultLogoCache;
   if (typeof window === "undefined") return null;
   const origin = window.location.origin ?? "";
   for (const p of DEFAULT_LOGO_PATHS) {
@@ -101,10 +104,14 @@ async function loadDefaultLogo(): Promise<string | null> {
           r.onerror = () => resolve(null);
           r.readAsDataURL(blob);
         });
-        if (result) return result;
+        if (result) {
+          defaultLogoCache = result;
+          return result;
+        }
       } catch { /* skip */ }
     }
   }
+  defaultLogoCache = null;
   return null;
 }
 
