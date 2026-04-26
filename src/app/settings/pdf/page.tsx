@@ -21,6 +21,7 @@ import {
   useNativeLogoPicker,
   isLowResolutionForPrint,
 } from "@/lib/pdf-logo-picker";
+import { useLanguage } from "@/lib/language-context";
 
 function getImageDimensionsFromFile(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
@@ -75,6 +76,7 @@ export interface PdfSettings {
 type FileOrPickedLogo = File | { blob: Blob; mimeType: string; width: number; height: number };
 
 export default function PdfSettingsPage() {
+  const { t } = useLanguage();
   const { user, loading } = useAuth();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -445,14 +447,14 @@ export default function PdfSettingsPage() {
           <Link
             href="/settings"
             className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            aria-label="Back"
+            aria-label={t("Back")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </Link>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            PDF Settings
+            {t("PDF Settings")}
           </h1>
         </header>
 
@@ -465,7 +467,7 @@ export default function PdfSettingsPage() {
                 onClick={() => { setSaveError(null); handleChooseLogoClick(); }}
                 className="rounded-lg border border-red-300 bg-white px-3 py-1.5 font-medium text-red-700 hover:bg-red-50 dark:border-red-700 dark:bg-slate-800 dark:text-red-300 dark:hover:bg-red-900/20"
               >
-                Try again
+                {t("Try again")}
               </button>
             )}
           </div>
@@ -483,7 +485,7 @@ export default function PdfSettingsPage() {
             <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
-            <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">Content Type</span>
+            <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">{t("Content Type")}</span>
             <div className="flex rounded-full bg-gray-100 p-0.5 dark:bg-slate-700">
               <button
                 type="button"
@@ -504,7 +506,7 @@ export default function PdfSettingsPage() {
 
           {/* Row 2: Y Position — [Label] [From|Logo|To] [ Up ] [ Value ] [ Down ]; Up = move up, Down = move down */}
           <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-slate-100 px-4 py-2.5 dark:border-slate-700/80">
-            <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">Y Position</span>
+            <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">{t("Y Position")}</span>
             <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
@@ -572,7 +574,7 @@ export default function PdfSettingsPage() {
 
           {/* Row 3: Text size — label + Bold (next to label), then [Up] [value] [Down] pt — same layout as Y Position */}
           <div className="flex min-h-[52px] flex-nowrap items-center gap-3 border-b border-slate-100 px-4 py-2.5 dark:border-slate-700/80">
-            <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">Text size</span>
+            <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-300">{t("Text size")}</span>
             <button
               type="button"
               title={textBold ? "Bold (on)" : "Not bold (off)"}
@@ -628,7 +630,7 @@ export default function PdfSettingsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
             <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">
-              {contentType === "logo" ? "Upload Logo" : "Enter Text"}
+              {contentType === "logo" ? t("Upload Logo") : t("Enter Text")}
             </span>
             {contentType === "text" ? (
               <input
@@ -654,7 +656,7 @@ export default function PdfSettingsPage() {
                   disabled={uploadingLogo || loadingSettings}
                   className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                 >
-                  {uploadingLogo ? "Uploading..." : logoPath ? "Change logo" : "Choose file"}
+                  {uploadingLogo ? t("Uploading...") : logoPath ? t("Change logo") : t("Choose file")}
                 </button>
                 {logoPreviewUrl && (
                   <img src={logoPreviewUrl} alt="Logo preview" className="h-8 w-8 rounded-lg object-cover" />
@@ -669,7 +671,7 @@ export default function PdfSettingsPage() {
               <svg className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
               </svg>
-              <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">Logo Zoom</span>
+              <span className="flex-1 text-base font-medium text-slate-900 dark:text-slate-100">{t("Logo Zoom")}</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -709,7 +711,7 @@ export default function PdfSettingsPage() {
             </svg>
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                Formalize address
+                {t("Formalize address")}
               </p>
             </div>
             <button
@@ -741,7 +743,7 @@ export default function PdfSettingsPage() {
               disabled={loadingSettings}
               className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-base font-semibold text-slate-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
             >
-              Reset to defaults
+              {t("Reset to defaults")}
             </button>
             <button
               type="button"
@@ -749,17 +751,17 @@ export default function PdfSettingsPage() {
               disabled={loadingSettings}
               className="flex-1 rounded-xl bg-primary-500 px-4 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
             >
-              {saved ? "Saved" : "Save Changes"}
+              {saved ? t("Saved") : t("Save Changes")}
             </button>
           </div>
           <p className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
-            Live preview below reflects these settings and PDF generation.
+            {t("Live preview below reflects these settings and PDF generation.")}
           </p>
         </div>
 
         {/* ── Live Preview ── */}
         <div className="mt-6 w-full px-0">
-          <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Live Preview</h2>
+          <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">{t("Live Preview")}</h2>
           <div
             ref={previewContainerRef}
             className="relative w-full overflow-hidden bg-white shadow-sm dark:bg-slate-800/50"

@@ -11,8 +11,10 @@ import {
   fetchIsListedWorker,
   type AdminWorkerRow,
 } from "@/lib/admin-workers-supabase";
+import { useLanguage } from "@/lib/language-context";
 
 export default function AdminSettingsPage() {
+  const { t } = useLanguage();
   const { user, loading } = useAuth();
   const router = useRouter();
   const [workers, setWorkers] = useState<AdminWorkerRow[]>([]);
@@ -75,11 +77,11 @@ export default function AdminSettingsPage() {
     if (!user?.id) return;
     const next = emailInput.trim().toLowerCase();
     if (!next) {
-      setFormError("Enter an email.");
+      setFormError(t("Enter an email."));
       return;
     }
     if (next === adminEmail) {
-      setFormError("Use a different email than your admin account.");
+      setFormError(t("Use a different email than your admin account."));
       return;
     }
     setSaving(true);
@@ -88,7 +90,7 @@ export default function AdminSettingsPage() {
     if (error) {
       setFormError(
         error.message.includes("duplicate") || error.message.includes("unique")
-          ? "This email is already assigned as a worker."
+          ? t("This email is already assigned as a worker.")
           : error.message
       );
       return;
@@ -130,29 +132,29 @@ export default function AdminSettingsPage() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">Admin</h1>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">{t("Admin")}</h1>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 text-sm shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Admin email
+            {t("Admin email")}
           </p>
           <p className="mt-1 truncate text-base text-slate-900 dark:text-slate-100">{user.email}</p>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Workers</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("Workers")}</h2>
 
           <form onSubmit={handleAdd} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
               <label htmlFor="worker-email" className="sr-only">
-                Worker email
+                {t("Worker email")}
               </label>
               <input
                 id="worker-email"
                 type="email"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="worker@example.com"
+                placeholder={t("Worker email")}
                 autoComplete="email"
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
@@ -162,7 +164,7 @@ export default function AdminSettingsPage() {
               disabled={saving}
               className="min-h-touch shrink-0 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
             >
-              {saving ? "Adding…" : "Add worker"}
+              {saving ? t("Adding…") : t("Add worker")}
             </button>
           </form>
           {formError ? (
@@ -171,7 +173,7 @@ export default function AdminSettingsPage() {
 
           <ul className="mt-4 divide-y divide-slate-200 dark:divide-slate-600">
             {workersLoading ? (
-              <li className="py-3 text-sm text-slate-500">Loading…</li>
+              <li className="py-3 text-sm text-slate-500">{t("Loading")}…</li>
             ) : workers.length === 0 ? (
               <li className="py-3 text-sm text-slate-500">No workers yet.</li>
             ) : (
@@ -187,7 +189,7 @@ export default function AdminSettingsPage() {
                     onClick={() => void handleRemove(w)}
                     className="shrink-0 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
-                    {busyId === w.id ? "…" : "Remove"}
+                    {busyId === w.id ? "…" : t("Remove")}
                   </button>
                 </li>
               ))

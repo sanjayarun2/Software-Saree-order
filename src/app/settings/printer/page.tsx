@@ -13,8 +13,10 @@ import {
   testSavedPosPrinter,
   type SavedPosPrinter,
 } from "@/lib/pos-bluetooth-print";
+import { useLanguage } from "@/lib/language-context";
 
 export default function PrinterSetupPage() {
+  const { t } = useLanguage();
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -132,7 +134,7 @@ export default function PrinterSetupPage() {
     <ErrorBoundary>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
-          Printer Setup
+          {t("Printer Setup")}
         </h1>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
@@ -153,7 +155,7 @@ export default function PrinterSetupPage() {
               disabled={!isAndroidNative || scanning}
               className="min-h-[44px] rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50"
             >
-              {scanning ? "Scanning..." : "Scan Printers"}
+              {scanning ? t("Scanning...") : t("Scan Printers")}
             </button>
             {saved ? (
               <button
@@ -162,7 +164,7 @@ export default function PrinterSetupPage() {
                 disabled={!isAndroidNative || testing}
                 className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
               >
-                {testing ? "Testing..." : "Test Printer"}
+                {testing ? t("Testing...") : t("Test Printer")}
               </button>
             ) : null}
             {saved ? (
@@ -175,14 +177,14 @@ export default function PrinterSetupPage() {
                 }}
                 className="min-h-[44px] rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
               >
-                Clear Saved Printer
+                {t("Clear Saved Printer")}
               </button>
             ) : null}
           </div>
 
           {saved ? (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Current saved printer:{" "}
+              {t("Current saved printer:")}{" "}
               <span className="font-semibold">{saved.name || saved.address || saved.id}</span>
               {saved.address && saved.name ? (
                 <span className="text-emerald-700 dark:text-emerald-400"> ({saved.address})</span>
@@ -212,7 +214,7 @@ export default function PrinterSetupPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {p.name || "Unnamed printer"}
+                    {p.name || t("Unnamed printer")}
                   </p>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {p.address || p.id}
@@ -224,7 +226,7 @@ export default function PrinterSetupPage() {
                   disabled={savingId === p.id}
                   className="min-h-[40px] rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                 >
-                  {savingId === p.id ? "Saving..." : "Use this"}
+                  {savingId === p.id ? "Saving..." : t("Use this")}
                 </button>
               </div>
             ))}
@@ -232,7 +234,7 @@ export default function PrinterSetupPage() {
         ) : null}
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manual Add (fallback)</h2>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("Manual Add (fallback)")}</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             If scan does not list your printer, enter MAC address from printer slip and save.
           </p>
@@ -241,14 +243,14 @@ export default function PrinterSetupPage() {
               type="text"
               value={manualName}
               onChange={(e) => setManualName(e.target.value)}
-              placeholder="Printer name (optional)"
+              placeholder={t("Printer name (optional)")}
               className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
             />
             <input
               type="text"
               value={manualAddress}
               onChange={(e) => setManualAddress(e.target.value)}
-              placeholder="MAC address (e.g. 00:29:F3:4F:63:DA)"
+              placeholder={t("MAC address (e.g. 00:29:F3:4F:63:DA)")}
               className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-primary-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
             />
           </div>
@@ -257,7 +259,7 @@ export default function PrinterSetupPage() {
             onClick={saveManualPrinter}
             className="mt-3 min-h-[40px] rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
           >
-            Save Manual Printer
+            {t("Save Manual Printer")}
           </button>
         </div>
       </div>

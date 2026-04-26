@@ -320,11 +320,11 @@ export default function OrdersPage() {
           </svg>
           <input
             type="search"
-            placeholder="Search by mobile, name or consignment..."
+            placeholder={t("Search by mobile, name or consignment...")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="min-h-[44px] flex-1 rounded-xl border-0 bg-transparent px-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder-slate-400 md:min-h-[48px] md:text-base"
-            aria-label="Search orders by mobile, name or consignment"
+            aria-label={t("Search orders by mobile, name or consignment")}
           />
         </div>
 
@@ -352,7 +352,7 @@ export default function OrdersPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {status === "PENDING" ? "Booking From date" : "Dispatch From date"}
+                  {status === "PENDING" ? t("Booking From date") : t("Dispatch From date")}
                 </label>
                 <input
                   type="date"
@@ -363,7 +363,7 @@ export default function OrdersPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {status === "PENDING" ? "Booking To date" : "Dispatch To date"}
+                  {status === "PENDING" ? t("Booking To date") : t("Dispatch To date")}
                 </label>
                 <input
                   type="date"
@@ -464,13 +464,13 @@ export default function OrdersPage() {
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 dark:text-slate-400">
                         {order.booked_by?.trim() ? (
-                          <span>Booked By ({order.booked_by.trim()})</span>
+                          <span>{t("Booked By")} ({order.booked_by.trim()})</span>
                         ) : null}
                         <span className="tabular-nums">
                           {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
                         </span>
                         {(order.quantity != null && Number(order.quantity) >= 1) && (
-                          <span>Qty: {Number(order.quantity)}</span>
+                          <span>{t("Qty")}: {Number(order.quantity)}</span>
                         )}
                         {order.status === "DESPATCHED" && (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">

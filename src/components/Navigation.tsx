@@ -248,12 +248,12 @@ export function RailNav({
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           } ${!showLabels ? "justify-center" : ""}`}
-          title="Refer a Friend"
+          title={t("Refer a Friend")}
         >
           <span className="text-xl shrink-0" aria-hidden>🎁</span>
           {showLabels && (
             <span className="text-base font-normal whitespace-nowrap overflow-hidden">
-              Refer a Friend
+              {t("Refer a Friend")}
             </span>
           )}
         </button>
@@ -263,7 +263,7 @@ export function RailNav({
           className={`flex items-center gap-3 rounded-lg px-3 py-3 text-base ${navItemInactive} ${
             isMobile ? "min-h-[52px]" : "min-h-[50px]"
           } ${!showLabels ? "justify-center" : ""}`}
-          title="Join WhatsApp"
+          title={t("Join WhatsApp")}
         >
           <span className="text-xl shrink-0" aria-hidden>
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -272,7 +272,7 @@ export function RailNav({
           </span>
           {showLabels && (
             <span className="text-base font-normal whitespace-nowrap overflow-hidden">
-              Join WhatsApp
+              {t("Join WhatsApp")}
             </span>
           )}
         </button>

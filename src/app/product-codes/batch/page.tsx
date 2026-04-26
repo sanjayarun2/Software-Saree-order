@@ -11,8 +11,10 @@ import {
   storedImageToBlob,
   type StoredBatchImage,
 } from "@/lib/product-code-batch-images";
+import { useLanguage } from "@/lib/language-context";
 
 function BatchDetailInner() {
+  const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const batchId = searchParams.get("id")?.trim() ?? "";
@@ -69,13 +71,13 @@ function BatchDetailInner() {
           type="button"
           onClick={() => router.push("/product-codes/")}
           className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[12px] bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-200"
-          aria-label="Back"
+          aria-label={t("Back")}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Batch</h1>
+        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">{t("Batch")}</h1>
       </header>
 
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 py-6 pb-28">
@@ -84,7 +86,7 @@ function BatchDetailInner() {
         ) : images.length === 0 ? (
           <BentoCard>
             <p className="text-center text-sm text-gray-500 dark:text-slate-400">
-              No saved images for this batch (older batches may not have stored photos).
+              {t("No saved images for this batch (older batches may not have stored photos).")}
             </p>
           </BentoCard>
         ) : (

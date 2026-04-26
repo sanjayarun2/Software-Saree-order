@@ -23,6 +23,7 @@ import {
 } from "@/lib/image-product-code";
 import { markBatchDownloaded } from "@/lib/product-code-gallery";
 import { revokeProductCodesDraftFiles, useProductCodesDraft } from "../product-codes-context";
+import { useLanguage } from "@/lib/language-context";
 
 function localYyyyMmDd(d: Date): string {
   const y = d.getFullYear();
@@ -32,6 +33,7 @@ function localYyyyMmDd(d: Date): string {
 }
 
 export default function ProductCodesProcessPage() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { pickDraft, setPickDraft } = useProductCodesDraft();
@@ -298,14 +300,14 @@ export default function ProductCodesProcessPage() {
           type="button"
           onClick={goBack}
           className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 text-slate-700 dark:border-slate-600 dark:text-slate-200"
-          aria-label="Back"
+          aria-label={t("Back")}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
-          {status === "generating" ? "Generating" : status === "ready" ? "Review" : "Error"}
+          {status === "generating" ? t("Generating") : status === "ready" ? t("Review") : t("Error")}
         </h1>
       </header>
 
@@ -318,7 +320,7 @@ export default function ProductCodesProcessPage() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
               <p className="text-center text-sm font-medium text-slate-600 dark:text-slate-300">
-                Generating product codes… {progress}%
+                {t("Generating product codes…")} {progress}%
               </p>
             </div>
             <div className="relative h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
@@ -356,13 +358,13 @@ export default function ProductCodesProcessPage() {
                 <div className="flex flex-col gap-3 p-4">
                   <p className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">{code}</p>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Qty</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{t("Qty")}</span>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => adjustQty(i, -1)}
                         className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-lg font-medium dark:border-slate-600"
-                        aria-label="Decrease quantity"
+                        aria-label={t("Decrease quantity")}
                       >
                         −
                       </button>
@@ -373,7 +375,7 @@ export default function ProductCodesProcessPage() {
                         type="button"
                         onClick={() => adjustQty(i, 1)}
                         className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-lg font-medium dark:border-slate-600"
-                        aria-label="Increase quantity"
+                        aria-label={t("Increase quantity")}
                       >
                         +
                       </button>
@@ -402,7 +404,7 @@ export default function ProductCodesProcessPage() {
             onClick={() => void handleSave()}
             className="min-h-[48px] w-full max-w-lg mx-auto flex items-center justify-center rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("Saving…") : t("Save")}
           </button>
         </div>
       )}
@@ -416,10 +418,10 @@ export default function ProductCodesProcessPage() {
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-800"
           >
             <h2 id="leave-title" className="text-lg font-semibold text-slate-900 dark:text-white">
-              Save batch?
+              {t("Save batch?")}
             </h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              You have not saved this batch. Save before leaving, or discard and go back.
+              {t("You have not saved this batch. Save before leaving, or discard and go back.")}
             </p>
             <div className="mt-6 flex flex-col gap-2">
               <button
@@ -435,14 +437,14 @@ export default function ProductCodesProcessPage() {
                 onClick={discardAndLeave}
                 className="min-h-[44px] rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-800 dark:border-slate-600 dark:text-slate-200"
               >
-                Discard
+                {t("Discard")}
               </button>
               <button
                 type="button"
                 onClick={() => setLeaveOpen(false)}
                 className="min-h-[44px] rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400"
               >
-                Cancel
+                {t("Cancel")}
               </button>
             </div>
           </div>

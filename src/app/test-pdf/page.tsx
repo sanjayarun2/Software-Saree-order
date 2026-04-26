@@ -3,12 +3,14 @@
 import React, { useState } from "react";
 import { downloadOrderPdf, downloadOrdersPdf } from "@/lib/pdf-utils";
 import type { Order } from "@/lib/db-types";
+import { useLanguage } from "@/lib/language-context";
 
 /**
  * Test page for verifying PDF download functionality.
  * This page helps debug PDF generation and download issues.
  */
 export default function TestPdfPage() {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<string>("");
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -91,34 +93,34 @@ export default function TestPdfPage() {
 
   return (
     <div className="container mx-auto max-w-4xl p-4">
-      <h1 className="mb-6 text-2xl font-bold">PDF Download Test Page</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t("PDF Download Test Page")}</h1>
 
       <div className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="text-lg font-semibold">Test Actions</h2>
+        <h2 className="text-lg font-semibold">{t("Test Actions")}</h2>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={testSingleOrder}
             className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
           >
-            Test Single Order PDF
+            {t("Test Single Order PDF")}
           </button>
           <button
             onClick={testMultipleOrders}
             className="rounded-lg bg-green-500 px-4 py-2 text-white hover:bg-green-600"
           >
-            Test Multiple Orders PDF
+            {t("Test Multiple Orders PDF")}
           </button>
           <button
             onClick={testBlobCreation}
             className="rounded-lg bg-purple-500 px-4 py-2 text-white hover:bg-purple-600"
           >
-            Test Blob Creation
+            {t("Test Blob Creation")}
           </button>
           <button
             onClick={clearLogs}
             className="rounded-lg bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
           >
-            Clear Logs
+            {t("Clear Logs")}
           </button>
         </div>
         {status && (
@@ -129,10 +131,10 @@ export default function TestPdfPage() {
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="mb-2 text-lg font-semibold">Debug Logs</h2>
+        <h2 className="mb-2 text-lg font-semibold">{t("Debug Logs")}</h2>
         <div className="max-h-96 overflow-y-auto rounded bg-gray-900 p-3 font-mono text-xs text-green-400">
           {logs.length === 0 ? (
-            <div className="text-gray-500">No logs yet. Click a test button above.</div>
+            <div className="text-gray-500">{t("No logs yet. Click a test button above.")}</div>
           ) : (
             logs.map((log, i) => (
               <div key={i} className="mb-1">
@@ -144,7 +146,7 @@ export default function TestPdfPage() {
       </div>
 
       <div className="mt-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
-        <h3 className="mb-2 font-semibold text-yellow-800 dark:text-yellow-200">How to Use</h3>
+        <h3 className="mb-2 font-semibold text-yellow-800 dark:text-yellow-200">{t("How to Use")}</h3>
         <ol className="list-inside list-decimal space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
           <li>Open browser DevTools (F12) and go to the Console tab</li>
           <li>Click the test buttons above</li>
