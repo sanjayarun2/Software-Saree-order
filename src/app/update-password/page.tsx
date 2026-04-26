@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
@@ -32,6 +33,7 @@ function hasRecoveryInHash(): boolean {
 }
 
 export default function UpdatePasswordPage() {
+  const { t } = useLanguage();
   const [openAppUrl, setOpenAppUrl] = useState("/dashboard/");
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [password, setPassword] = useState("");
@@ -98,7 +100,7 @@ export default function UpdatePasswordPage() {
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(t("Passwords do not match."));
       return;
     }
     setLoading(true);
@@ -108,7 +110,7 @@ export default function UpdatePasswordPage() {
       await supabase.auth.signOut();
       setShowSuccessModal(true);
     } catch (e) {
-      setError((e as Error).message || "Failed to update password. The link may have expired.");
+      setError((e as Error).message || t("Failed to update password. The link may have expired."));
     } finally {
       setLoading(false);
     }
@@ -129,17 +131,17 @@ export default function UpdatePasswordPage() {
           <div className="w-full max-w-md space-y-6 text-center">
             <BentoCard>
               <p className="text-slate-700 dark:text-slate-300">
-                Invalid or expired reset link. Request a new one.
+                {t("Invalid or expired reset link. Request a new one.")}
               </p>
               <Link
                 href="/forgot-password/"
                 className="mt-4 inline-block font-medium text-primary-600 underline dark:text-primary-400"
               >
-                Forgot Password
+                {t("Forgot Password")}
               </Link>
             </BentoCard>
             <Link href="/login/" className="text-sm text-primary-600 underline dark:text-primary-400">
-              Back to Login
+              {t("Back to Login")}
             </Link>
           </div>
         </div>
@@ -164,23 +166,23 @@ export default function UpdatePasswordPage() {
               </svg>
             </div>
             <h2 id="password-changed-title" className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              Password Changed!
+              {t("Password Changed!")}
             </h2>
             <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-              Your password has been updated. Sign in with your new password.
+              {t("Your password has been updated. Sign in with your new password.")}
             </p>
             <div className="flex w-full flex-col gap-3">
               <a
                 href={openAppUrl}
                 className="w-full rounded-xl bg-primary-500 px-4 py-3 text-center font-semibold text-white hover:bg-primary-600"
               >
-                Open App
+                {t("Open App")}
               </a>
               <Link
                 href="/login/"
                 className="w-full rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-center font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-gray-300 dark:hover:bg-slate-800"
               >
-                Back to Login
+                {t("Back to Login")}
               </Link>
             </div>
           </div>
@@ -194,10 +196,10 @@ export default function UpdatePasswordPage() {
               <AppLogo />
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                  Set New Password
+                  {t("Set New Password")}
                 </h1>
                 <p className="mt-2 text-slate-600 dark:text-slate-400">
-                  Enter your new password below.
+                  {t("Enter your new password below.")}
                 </p>
               </div>
             </div>
@@ -212,13 +214,13 @@ export default function UpdatePasswordPage() {
 
                 <div>
                   <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    New password
+                    {t("New password")}
                   </label>
                   <div className="relative">
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                      placeholder={t("At least 6 characters")}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -230,7 +232,7 @@ export default function UpdatePasswordPage() {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? t("Hide password") : t("Show password")}
                     >
                       {showPassword ? "🙈" : "👁"}
                     </button>
@@ -239,12 +241,12 @@ export default function UpdatePasswordPage() {
 
                 <div>
                   <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Confirm password
+                    {t("Confirm password")}
                   </label>
                   <input
                     id="confirmPassword"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Confirm new password"
+                    placeholder={t("Confirm new password")}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
@@ -259,14 +261,14 @@ export default function UpdatePasswordPage() {
                   disabled={loading}
                   className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
                 >
-                  {loading ? "Updating…" : "Reset Password"}
+                  {loading ? `${t("Loading")}...` : t("Reset Password")}
                 </button>
               </form>
             </BentoCard>
 
             <p className="text-center text-sm text-slate-600 dark:text-slate-400">
               <Link href="/login/" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
-                Back to Login
+                {t("Back to Login")}
               </Link>
             </p>
           </div>

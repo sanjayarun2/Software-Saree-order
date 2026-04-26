@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
@@ -20,6 +21,7 @@ export default function LoginPage() {
   const [deviceLimit, setDeviceLimit] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, user, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
 
   React.useEffect(() => {
@@ -48,7 +50,7 @@ export default function LoginPage() {
         setDeviceLimit(true);
         return;
       }
-      setError(err.message || "Login failed. Please try again.");
+      setError(err.message || `${t("Login")} ${t("Failed")}.`);
       return;
     }
     setLoading(false);
@@ -71,7 +73,7 @@ export default function LoginPage() {
             <AppLogo />
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                LOGIN
+                {t("Login")}
               </h1>
             </div>
           </div>
@@ -80,13 +82,13 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {resetSuccess && (
                 <p className="rounded-bento bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                  Password reset successfully. Sign in with your new password.
+                  {t("Password reset successfully. Sign in with your new password.")}
                 </p>
               )}
               {deviceLimit && (
                 <div className="rounded-bento bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-                  <p className="font-medium">This account is already signed in on the maximum number of devices.</p>
-                  <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">Need another device? Contact us on WhatsApp.</p>
+                  <p className="font-medium">{t("This account is already signed in on the maximum number of devices.")}</p>
+                  <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">{t("Need another device? Contact us on WhatsApp.")}</p>
                   <button
                     type="button"
                     onClick={openWhatsAppSupport}
@@ -104,13 +106,13 @@ export default function LoginPage() {
 
               <div>
                 <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Email
+                  {t("Email")}
                 </label>
                 <input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="Email"
+                  placeholder={t("Email")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -125,13 +127,13 @@ export default function LoginPage() {
 
               <div>
                 <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Password
+                  {t("Password")}
                 </label>
                 <div className="relative">
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Password"
+                    placeholder={t("Password")}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -142,7 +144,7 @@ export default function LoginPage() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t("Hide password") : t("Show password")}
                   >
                     {showPassword ? "🙈" : "👁"}
                   </button>
@@ -153,7 +155,7 @@ export default function LoginPage() {
                 href="/forgot-password/"
                 className="block text-sm text-primary-600 hover:underline dark:text-primary-400"
               >
-                Forgot Password?
+                {t("Forgot Password?")}
               </Link>
 
               <button
@@ -161,15 +163,15 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
               >
-                {loading ? "Signing in…" : "Login"}
+                {loading ? t("Signing in…") : t("Login")}
               </button>
             </form>
           </BentoCard>
 
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Don&apos;t have an account?{" "}
+            {t("Don't have an account?")}{" "}
             <Link href="/register/" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
-              Register
+              {t("Register")}
             </Link>
           </p>
         </div>

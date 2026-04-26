@@ -4,12 +4,14 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,11 +43,11 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
     if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError(t("Password must be at least 6 characters."));
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(t("Passwords do not match."));
       return;
     }
     setLoading(true);
@@ -58,7 +60,7 @@ export default function ResetPasswordPage() {
         router.replace("/login/?reset=success");
       }, 1500);
     } catch (e) {
-      setError((e as Error).message || "Failed to update password. The link may have expired.");
+      setError((e as Error).message || t("Failed to update password. The link may have expired."));
       setLoading(false);
     }
   };
@@ -78,17 +80,17 @@ export default function ResetPasswordPage() {
           <div className="w-full max-w-md space-y-6 text-center">
             <BentoCard>
               <p className="text-slate-700 dark:text-slate-300">
-                Invalid or expired reset link. Request a new one.
+                {t("Invalid or expired reset link. Request a new one.")}
               </p>
               <Link
                 href="/forgot-password/"
                 className="mt-4 inline-block font-medium text-primary-600 underline dark:text-primary-400"
               >
-                Forgot Password
+                {t("Forgot Password")}
               </Link>
             </BentoCard>
             <Link href="/login/" className="text-sm text-primary-600 underline dark:text-primary-400">
-              Back to Login
+              {t("Back to Login")}
             </Link>
           </div>
         </div>
@@ -101,7 +103,7 @@ export default function ResetPasswordPage() {
       <div className="flex min-h-screen flex-col items-center justify-center p-4 md:p-6">
         <BentoCard>
           <p className="text-center font-medium text-green-700 dark:text-green-300">
-            Password updated. Redirecting to login…
+            {t("Password updated. Redirecting to login…")}
           </p>
         </BentoCard>
       </div>
@@ -116,10 +118,10 @@ export default function ResetPasswordPage() {
             <AppLogo />
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                Set new password
+                {t("Set new password")}
               </h1>
               <p className="mt-2 text-slate-600 dark:text-slate-400">
-                Enter your new password below.
+                {t("Enter your new password below.")}
               </p>
             </div>
           </div>
@@ -134,13 +136,13 @@ export default function ResetPasswordPage() {
 
               <div>
                 <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  New password
+                  {t("New password")}
                 </label>
                 <div className="relative">
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="At least 6 characters"
+                    placeholder={t("At least 6 characters")}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -152,7 +154,7 @@ export default function ResetPasswordPage() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t("Hide password") : t("Show password")}
                   >
                     {showPassword ? "🙈" : "👁"}
                   </button>
@@ -161,12 +163,12 @@ export default function ResetPasswordPage() {
 
               <div>
                 <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Confirm password
+                  {t("Confirm password")}
                 </label>
                 <input
                   id="confirmPassword"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Confirm new password"
+                  placeholder={t("Confirm new password")}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
@@ -181,14 +183,14 @@ export default function ResetPasswordPage() {
                 disabled={loading}
                 className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
               >
-                {loading ? "Updating…" : "Update password"}
+                {loading ? `${t("Loading")}...` : t("Update password")}
               </button>
             </form>
           </BentoCard>
 
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             <Link href="/login/" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
-              Back to Login
+              {t("Back to Login")}
             </Link>
           </p>
         </div>

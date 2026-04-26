@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
@@ -24,6 +25,7 @@ export default function RegisterPage() {
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const openGmailLastAt = useRef(0);
   const { signUp } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export default function RegisterPage() {
         setError("EMAIL_EXISTS");
         return;
       }
-      setError(msg || "Registration failed. Please try again.");
+      setError(msg || `${t("Register")} ${t("Failed")}.`);
       return;
     }
     if (newUser?.identities && newUser.identities.length === 0) {
@@ -100,10 +102,10 @@ export default function RegisterPage() {
             <AppLogo />
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                REGISTER
+                {t("REGISTER")}
               </h1>
               <p className="mt-2 text-slate-600 dark:text-slate-400">
-                Create your account
+                {t("Create your account")}
               </p>
             </div>
           </div>
@@ -126,7 +128,7 @@ export default function RegisterPage() {
                   }}
                   className="block w-full min-h-[48px] touch-manipulation cursor-pointer select-none rounded-bento border border-gray-300 bg-white px-4 py-3 text-center font-semibold text-gray-700 hover:bg-gray-50 active:opacity-90 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
-                  Open Gmail
+                  {t("Open Gmail")}
                 </button>
               </div>
             ) : (
@@ -135,11 +137,11 @@ export default function RegisterPage() {
                   <div className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
                     {error === "EMAIL_EXISTS" ? (
                       <>
-                        <p className="font-medium">This email is already registered.</p>
+                        <p className="font-medium">{t("This email is already registered.")}</p>
                         <p className="mt-1">
-                          <Link href="/login/" className="underline">Login</Link>
+                          <Link href="/login/" className="underline">{t("Login")}</Link>
                           {" or "}
-                          <Link href="/forgot-password/" className="underline">Forgot password</Link>
+                          <Link href="/forgot-password/" className="underline">{t("Forgot password")}</Link>
                           {" to reset."}
                         </p>
                       </>
@@ -151,13 +153,13 @@ export default function RegisterPage() {
 
                 <div>
                   <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Email
+                    {t("Email")}
                   </label>
                   <input
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="Email"
+                    placeholder={t("Email")}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -172,13 +174,13 @@ export default function RegisterPage() {
 
                 <div>
                   <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Password
+                    {t("Password")}
                   </label>
                   <div className="relative">
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="Password"
+                      placeholder={t("Password")}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -190,7 +192,7 @@ export default function RegisterPage() {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? t("Hide password") : t("Show password")}
                     >
                       {showPassword ? "🙈" : "👁"}
                     </button>
@@ -199,14 +201,14 @@ export default function RegisterPage() {
 
                 <div>
                   <label htmlFor="mobile" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Mobile Number
+                    {t("Mobile Number")}
                   </label>
                   <input
                     id="mobile"
                     name="mobile"
                     type="tel"
                     list="mobile-suggestions"
-                    placeholder="Mobile number"
+                    placeholder={t("Mobile number")}
                     value={mobile}
                     onChange={(e) => setMobile(e.target.value)}
                     inputMode="tel"
@@ -225,16 +227,16 @@ export default function RegisterPage() {
                   disabled={loading}
                   className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
                 >
-                  {loading ? "Creating account…" : "Register"}
+                  {loading ? t("Creating account…") : t("Register")}
                 </button>
               </form>
             )}
           </BentoCard>
 
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Already have an account?{" "}
+            {t("Already have an account?")}{" "}
             <Link href="/login/" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
-              Login
+              {t("Login")}
             </Link>
           </p>
         </div>

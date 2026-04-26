@@ -3,11 +3,13 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 
 export default function ForgotPasswordPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export default function ForgotPasswordPage() {
       if (err) throw err;
       setSent(true);
     } catch (e) {
-      setError((e as Error).message || "Failed to send reset email");
+      setError((e as Error).message || t("Failed to send reset email"));
     } finally {
       setLoading(false);
     }
@@ -41,10 +43,10 @@ export default function ForgotPasswordPage() {
             <AppLogo />
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                Forgot Password?
+                {t("Forgot Password?")}
               </h1>
               <p className="mt-2 text-slate-600 dark:text-slate-400">
-                Enter your email to receive a reset link.
+                {t("Enter your email to receive a reset link.")}
               </p>
             </div>
           </div>
@@ -52,7 +54,7 @@ export default function ForgotPasswordPage() {
           <BentoCard>
             {sent ? (
               <p className="text-green-700 dark:text-green-300">
-                Check your email for the reset link.
+                {t("Check your email for the reset link.")}
               </p>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,7 +65,7 @@ export default function ForgotPasswordPage() {
                 )}
                 <input
                   type="email"
-                  placeholder="Email"
+                  placeholder={t("Email")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -74,7 +76,7 @@ export default function ForgotPasswordPage() {
                   disabled={loading}
                   className="w-full min-h-touch rounded-bento bg-primary-500 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
                 >
-                  {loading ? "Sending…" : "Send Reset Link"}
+                  {loading ? t("Sending…") : t("Send Reset Link")}
                 </button>
               </form>
             )}
@@ -82,7 +84,7 @@ export default function ForgotPasswordPage() {
 
           <p className="text-center text-sm">
             <Link href="/login/" className="text-primary-600 hover:underline dark:text-primary-400">
-              Back to Login
+              {t("Back to Login")}
             </Link>
           </p>
         </div>
