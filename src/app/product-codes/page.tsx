@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { IconTrash } from "@/components/ui/OrderIcons";
@@ -44,6 +45,7 @@ function batchQtyTotal(b: ProductCodeBatchRecord): number {
 
 export default function ProductCodesPage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const { pickDraft, setPickDraft } = useProductCodesDraft();
 
@@ -60,7 +62,7 @@ export default function ProductCodesPage() {
   const [galleryBusyId, setGalleryBusyId] = useState<string | null>(null);
 
   const customReady = period !== "custom" || (Boolean(customFrom) && Boolean(customTo));
-  const selectedLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today";
+  const selectedLabel = t(PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? "Today");
 
   const range = useMemo(
     () => getDashboardDateRange(period, customFrom, customTo),
@@ -105,7 +107,7 @@ export default function ProductCodesPage() {
   const onPickFiles = (list: FileList | null) => {
     if (!list?.length) return;
     const next = Array.from(list).filter((f) => f.type.startsWith("image/"));
-    if (next.length < list.length) setError("Non-image files were skipped.");
+    if (next.length < list.length) setError(t("Non-image files were skipped."));
     else setError(null);
     setFiles((prev) => [...prev, ...next].slice(0, MAX_FILES_PER_BATCH));
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -142,7 +144,7 @@ export default function ProductCodesPage() {
     e.preventDefault();
     e.stopPropagation();
     if (!user?.id) return;
-    if (!window.confirm("Delete this batch?")) return;
+    if (!window.confirm(t("Delete this batch?"))) return;
     await deleteProductCodeBatch(user.id, batchId);
     unmarkBatchDownloaded(batchId);
     await loadBatches();
@@ -165,7 +167,7 @@ export default function ProductCodesPage() {
     try {
       const imgs = await getProductCodeBatchImages(user.id, batchId);
       if (!imgs.length) {
-        setError("No saved images for this batch.");
+        setError(t("No saved images for this batch."));
         return;
       }
       const items = imgs.map((entry) => {
@@ -181,7 +183,7 @@ export default function ProductCodesPage() {
         );
       }
     } catch (err) {
-      setError((err as Error).message || "Could not save images.");
+      setError((err as Error).message || t("Could not save images."));
     } finally {
       setGalleryBusyId(null);
     }
@@ -196,7 +198,7 @@ export default function ProductCodesPage() {
       <div className="bg-slate-900 px-4 pb-6 pt-6 dark:bg-slate-950 lg:px-10">
         <div className="mx-auto flex max-w-6xl flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl font-bold text-white">Product codes</h1>
+            <h1 className="text-xl font-bold text-white">{t("Product codes")}</h1>
             <div ref={dateDropdownRef} className="relative shrink-0">
               <button
                 type="button"
@@ -236,7 +238,7 @@ export default function ProductCodesPage() {
                           : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
                       }`}
                     >
-                      {opt.label}
+                      {t(opt.label)}
                     </button>
                   ))}
 
@@ -284,7 +286,7 @@ export default function ProductCodesPage() {
                           {b.count > 1 ? ` → ${b.lastCode}` : ""}
                         </p>
                         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                          Qty: {qty}
+                          {t("Qty")}: {qty}
                         </span>
                       </div>
                     </div>
@@ -320,7 +322,7 @@ export default function ProductCodesPage() {
         ) : batches.length > 0 ? (
           <BentoCard>
             <p className="text-center text-sm text-gray-500 dark:text-slate-400">
-              No batches in this period. Try another date range.
+              {t("No batches in this period. Try another date range.")}
             </p>
           </BentoCard>
         ) : null}
@@ -337,8 +339,8 @@ export default function ProductCodesPage() {
 
           <p className="mb-4 text-center text-base font-medium text-gray-900 dark:text-slate-100">
             {files.length === 0
-              ? "No photos selected"
-              : `${files.length} photo${files.length === 1 ? "" : "s"} selected`}
+              ? t("No photos selected")
+              : `${files.length} ${t("photo selected")}`}
           </p>
 
           {error && (
@@ -353,7 +355,7 @@ export default function ProductCodesPage() {
             onClick={goGenerate}
             className="min-h-touch w-full rounded-bento bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
           >
-            Generate
+            {t("Generate")}
           </button>
         </BentoCard>
       </div>

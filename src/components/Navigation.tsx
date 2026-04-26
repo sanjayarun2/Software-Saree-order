@@ -185,7 +185,7 @@ export function RailNav({
       {/* Language toggle */}
       {showLabels && (
       <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
-        <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">Language</p>
+        <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">{t("Language")}</p>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-800">
           <button
             type="button"

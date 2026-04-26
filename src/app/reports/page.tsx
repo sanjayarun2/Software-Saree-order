@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { getOrders as svcGetOrders } from "@/lib/order-service";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -28,6 +29,7 @@ const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
 
 export default function ReportsPage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [period, setPeriod] = useState<ReportPeriod>("this_month");
   const [customFrom, setCustomFrom] = useState("");
@@ -56,7 +58,7 @@ export default function ReportsPage() {
       setOrders(currentCached);
       setPrevOrders(prevCached);
     } catch (e) {
-      setError((e as Error).message || "Failed to load data");
+      setError((e as Error).message || t("Failed to load data"));
       setOrders([]);
       setPrevOrders([]);
     } finally {
@@ -131,16 +133,16 @@ export default function ReportsPage() {
     <ErrorBoundary>
       <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
-          Sales Reports
+          {t("Sales Reports")}
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 lg:text-base">
-          Dispatched orders only, by dispatch date. View analytics and download PDF for auditors or IT filing.
+          {t("Dispatched orders only, by dispatch date. View analytics and download PDF for auditors or IT filing.")}
         </p>
 
         <BentoCard className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Select Report Period
+              {t("Select Report Period")}
             </label>
             <select
               value={period}
@@ -149,7 +151,7 @@ export default function ReportsPage() {
             >
               {PERIOD_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(opt.label)}
                 </option>
               ))}
             </select>
@@ -159,7 +161,7 @@ export default function ReportsPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  From Date
+                  {t("From Date")}
                 </label>
                 <input
                   type="date"
@@ -169,7 +171,7 @@ export default function ReportsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">To Date</label>
+                <label className="mb-1 block text-sm font-medium">{t("To Date")}</label>
                 <input
                   type="date"
                   value={customTo}
@@ -201,7 +203,7 @@ export default function ReportsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[16px] bg-primary-50 p-4 dark:bg-primary-900/20">
                   <p className="text-sm font-medium text-primary-600 dark:text-primary-400">
-                    Dispatched Orders
+                    {t("Dispatched Orders")}
                   </p>
                   <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                     {totalOrders}
@@ -222,7 +224,7 @@ export default function ReportsPage() {
                 </div>
                 <div className="rounded-[16px] bg-primary-50 p-4 dark:bg-primary-900/20">
                   <p className="text-sm font-medium text-primary-600 dark:text-primary-400">
-                    Total Sarees (from qty)
+                    {t("Total Sarees (from qty)")}
                   </p>
                   <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                     {totalSarees}
@@ -247,24 +249,20 @@ export default function ReportsPage() {
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   {ordersChangePercent >= 0 ? (
                     <>
-                      <span className="font-medium text-emerald-600">
-                        Sales increased
-                      </span>{" "}
+                      <span className="font-medium text-emerald-600">{t("Sales increased")}</span>{" "}
                       by {Math.abs(ordersChangePercent).toFixed(1)}% in orders
                       and {Math.abs(sareesChangePercent).toFixed(1)}% in sarees
                       compared to the previous period.
                     </>
                   ) : ordersChangePercent < 0 ? (
                     <>
-                      <span className="font-medium text-red-600">
-                        Sales decreased
-                      </span>{" "}
+                      <span className="font-medium text-red-600">{t("Sales decreased")}</span>{" "}
                       by {Math.abs(ordersChangePercent).toFixed(1)}% in orders
                       and {Math.abs(sareesChangePercent).toFixed(1)}% in sarees
                       compared to the previous period.
                     </>
                   ) : (
-                    <>No change from the previous period.</>
+                    <>{t("No change from the previous period.")}</>
                   )}
                 </p>
               </div>
@@ -274,12 +272,11 @@ export default function ReportsPage() {
                 disabled={orders.length === 0}
                 className="w-full rounded-[16px] bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
               >
-                Download PDF Report (Auditor / IT Filing)
+                {t("Download PDF Report (Auditor / IT Filing)")}
               </button>
 
               <p className="text-center text-xs text-slate-500">
-                PDF includes summary, comparison with previous period, and
-                detailed order table. Suitable for auditors and tax filing.
+                {t("PDF includes summary, comparison with previous period, and detailed order table. Suitable for auditors and tax filing.")}
               </p>
             </>
           )}

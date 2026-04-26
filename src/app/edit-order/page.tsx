@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -33,6 +34,7 @@ const COURIERS = [
 
 function EditOrderContent() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get("id");
@@ -66,7 +68,7 @@ function EditOrderContent() {
     const applyOrder = (o: Order | null) => {
       setFetchLoading(false);
       if (!o) {
-        setError("Order not found");
+        setError(t("Order not found"));
         return;
       }
       const recipientFromDb = o.recipient_details ?? "";
@@ -132,7 +134,7 @@ function EditOrderContent() {
       senderField.clear();
       router.replace(orderStatus === "DESPATCHED" ? "/orders/?tab=dispatched" : "/orders/?tab=pending");
     } catch (e) {
-      setError((e as Error).message || "Update failed");
+      setError((e as Error).message || t("Update failed"));
     } finally {
       setLoading(false);
     }
@@ -149,9 +151,9 @@ function EditOrderContent() {
   if (!orderId || error === "Order not found") {
     return (
       <div className="mx-auto max-w-2xl space-y-4 p-6">
-        <p className="text-slate-600 dark:text-slate-400">Order not found.</p>
+        <p className="text-slate-600 dark:text-slate-400">{t("Order not found.")}</p>
         <Link href="/orders/" className="text-primary-600 hover:underline">
-          ← Back to Orders
+          ← {t("Back")} {t("Orders")}
         </Link>
       </div>
     );
@@ -164,14 +166,14 @@ function EditOrderContent() {
           <Link
             href={orderStatus === "DESPATCHED" ? "/orders/?tab=dispatched" : "/orders/?tab=pending"}
             className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            aria-label="Back to Orders"
+            aria-label={`${t("Back")} ${t("Orders")}`}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </Link>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Edit Order
+            {t("Edit Order")}
           </h1>
         </header>
 
@@ -184,7 +186,7 @@ function EditOrderContent() {
             )}
 
             <div>
-              <label className="mb-1 block text-sm font-medium">TO (Customer)</label>
+              <label className="mb-1 block text-sm font-medium">{t("TO (Customer)")}</label>
               <InlineAutocompleteTextarea
                 value={recipient}
                 onChange={(v) => {
@@ -192,7 +194,7 @@ function EditOrderContent() {
                   recipientField.setValue(v);
                 }}
                 suggestions={suggestions?.recipients ?? []}
-                placeholder="Recipient address and details"
+                placeholder={t("Recipient address and details")}
                 maxLength={800}
                 rows={3}
                 className="mt-1"
@@ -201,7 +203,7 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">FROM (Sender)</label>
+              <label className="mb-1 block text-sm font-medium">{t("FROM (Sender)")}</label>
               <InlineAutocompleteTextarea
                 value={sender}
                 onChange={(v) => {
@@ -209,7 +211,7 @@ function EditOrderContent() {
                   senderField.setValue(v);
                 }}
                 suggestions={senderSuggestions}
-                placeholder="Sender address and details"
+                placeholder={t("Sender address and details")}
                 maxLength={800}
                 rows={3}
                 className="mt-1"
@@ -218,7 +220,7 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Qty (optional)</label>
+              <label className="mb-1 block text-sm font-medium">{t("Qty (optional)")}</label>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -248,13 +250,13 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Booked By</label>
+              <label className="mb-1 block text-sm font-medium">{t("Booked By")}</label>
               <input
                 type="text"
                 list="booked-by-list-edit"
                 value={bookedBy}
                 onChange={(e) => setBookedBy(e.target.value)}
-                placeholder="Name"
+                placeholder={t("Name")}
                 className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
               />
               <datalist id="booked-by-list-edit">
@@ -265,13 +267,13 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Booked Mobile No</label>
+              <label className="mb-1 block text-sm font-medium">{t("Booked Mobile No")}</label>
               <input
                 type="tel"
                 list="mobile-list-edit"
                 value={bookedMobile}
                 onChange={(e) => setBookedMobile(e.target.value)}
-                placeholder="Mobile number"
+                placeholder={t("Mobile number")}
                 className="w-full rounded-bento border px-4 py-2 dark:border-slate-600 dark:bg-slate-800"
               />
               <datalist id="mobile-list-edit">
@@ -282,7 +284,7 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Courier Name</label>
+              <label className="mb-1 block text-sm font-medium">{t("Courier Name")}</label>
               <select
                 value={courier}
                 onChange={(e) => setCourier(e.target.value)}
@@ -295,7 +297,7 @@ function EditOrderContent() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Booking date</label>
+              <label className="mb-1 block text-sm font-medium">{t("Booking date")}</label>
               <input
                 type="date"
                 value={bookingDate}
@@ -307,7 +309,7 @@ function EditOrderContent() {
 
             {orderStatus === "DESPATCHED" && (
               <div>
-                <label className="mb-1 block text-sm font-medium">Consignment number</label>
+                <label className="mb-1 block text-sm font-medium">{t("Consignment number")}</label>
                 <input
                   type="text"
                   value={trackingNumber}
@@ -322,7 +324,7 @@ function EditOrderContent() {
               disabled={loading}
               className="w-full min-h-touch rounded-bento bg-primary-500 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
             >
-              {loading ? "Updating…" : "Update Order"}
+              {loading ? `${t("Loading")}...` : t("Update Order")}
             </button>
           </form>
         </BentoCard>

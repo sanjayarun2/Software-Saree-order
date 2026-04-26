@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -30,6 +31,7 @@ const COURIERS = [
 
 export default function AddOrderPage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const { toast } = useToast();
   // Persist important text fields so they survive app/tab switches
@@ -172,14 +174,14 @@ export default function AddOrderPage() {
         quantity: quantity === "" ? 1 : Number(quantity),
       };
       await svcCreateOrder(user.id, insert);
-      toast("Order saved");
+      toast(t("Order saved"));
       // Clear cached draft on successful save
       recipientField.clear();
       senderField.clear();
       bookedByField.clear();
       router.replace("/orders/");
     } catch (e) {
-      setError((e as Error).message || "Save failed");
+      setError((e as Error).message || t("Save failed"));
     } finally {
       setLoading(false);
     }
@@ -206,7 +208,7 @@ export default function AddOrderPage() {
     <ErrorBoundary>
       <div className="web-container mx-auto max-w-2xl space-y-6 px-4 py-4 lg:space-y-8 lg:px-10 lg:py-8">
         <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 lg:text-2xl">
-          Add New Order
+          {t("Add New Order")}
         </h1>
 
         <BentoCard className="p-4 md:p-8">
@@ -218,7 +220,7 @@ export default function AddOrderPage() {
             )}
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">TO (customer address)</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("TO (customer address)")}</label>
               <InlineAutocompleteTextarea
                 value={recipient}
                 onChange={(v) => {
@@ -226,7 +228,7 @@ export default function AddOrderPage() {
                   recipientField.setValue(v);
                 }}
                 suggestions={suggestions?.recipients ?? []}
-                placeholder="Recipient address and details"
+                placeholder={t("Recipient address and details")}
                 maxLength={800}
                 rows={3}
                 className="mt-1 min-h-[44px] rounded-xl border-gray-200 bg-white text-gray-900 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px]"
@@ -236,7 +238,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">FROM (our address)</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("FROM (our address)")}</label>
               <InlineAutocompleteTextarea
                 value={sender}
                 onChange={(v) => {
@@ -244,7 +246,7 @@ export default function AddOrderPage() {
                   senderField.setValue(v);
                 }}
                 suggestions={senderSuggestions}
-                placeholder="Sender address and details"
+                placeholder={t("Sender address and details")}
                 maxLength={800}
                 rows={3}
                 className="mt-1 min-h-[44px] rounded-xl border-gray-200 bg-white text-gray-900 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px]"
@@ -254,9 +256,9 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Product Details</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Product Details")}</label>
               <div className="flex items-center gap-2">
-                <label className="text-base text-gray-600 dark:text-gray-400">Qty</label>
+                <label className="text-base text-gray-600 dark:text-gray-400">{t("Qty")}</label>
                 <div className="flex items-center rounded-[16px] border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-800">
                   <button
                     type="button"
@@ -288,7 +290,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Booked By</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Booked By")}</label>
               <input
                 type="text"
                 list="booked-by-list"
@@ -297,7 +299,7 @@ export default function AddOrderPage() {
                   setBookedBy(e.target.value);
                   bookedByField.setValue(e.target.value);
                 }}
-                placeholder="Name"
+                placeholder={t("Name")}
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
               <datalist id="booked-by-list">
@@ -308,7 +310,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Booked Mobile No</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Booked Mobile No")}</label>
               <input
                 type="tel"
                 list="mobile-list"
@@ -317,7 +319,7 @@ export default function AddOrderPage() {
                   setBookedMobile(e.target.value);
                   bookedMobileField.setValue(e.target.value);
                 }}
-                placeholder="Mobile number"
+                placeholder={t("Mobile number")}
                 className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
               />
               <datalist id="mobile-list">
@@ -328,7 +330,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Courier Name</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Courier Name")}</label>
               <select
                 value={courier}
                 onChange={(e) => {
@@ -345,7 +347,7 @@ export default function AddOrderPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">Booking date</label>
+              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Booking date")}</label>
               <input
                 type="date"
                 value={bookingDate}
@@ -359,7 +361,7 @@ export default function AddOrderPage() {
               disabled={loading}
               className="min-h-[44px] w-full rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 md:min-h-[50px] md:rounded-[16px]"
             >
-              {loading ? "Saving…" : "Save"}
+              {loading ? t("Saving…") : t("Save")}
             </button>
           </form>
         </BentoCard>

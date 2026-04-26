@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
 import { syncDashboardOrders } from "@/lib/order-service";
@@ -47,6 +48,7 @@ function ProductCodeIconOutlined({ className }: { className?: string }) {
 
 export default function SettingsPage() {
   const { user, loading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [isListedWorker, setIsListedWorker] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -105,12 +107,12 @@ export default function SettingsPage() {
     <ErrorBoundary>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-4 lg:px-10 lg:py-6">
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
-          Settings
+          {t("Settings")}
         </h1>
 
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 text-sm shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Account
+            {t("Account")}
           </p>
           <p className="mt-1 truncate text-base text-slate-900 dark:text-slate-100">{user.email}</p>
         </div>
@@ -123,10 +125,10 @@ export default function SettingsPage() {
             />
             <span className="text-sm text-slate-700 dark:text-slate-300">
               {syncing
-                ? "Syncing..."
+                ? t("Syncing...")
                 : lastSyncedAt
                   ? `Last synced ${new Date(lastSyncedAt).toLocaleDateString("en-GB")} ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                  : "Not synced yet"}
+                  : t("Not synced yet")}
             </span>
           </div>
           <button
@@ -138,7 +140,7 @@ export default function SettingsPage() {
             <svg className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
             </svg>
-            Sync Now
+            {t("Sync Now")}
           </button>
         </div>
 
@@ -150,7 +152,7 @@ export default function SettingsPage() {
                 className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
               >
                 <AdminIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
-                <span className="flex-1 text-base font-medium">Admin</span>
+                <span className="flex-1 text-base font-medium">{t("Admin")}</span>
                 <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
@@ -163,7 +165,7 @@ export default function SettingsPage() {
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
           >
             <PdfIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
-            <span className="flex-1 text-base font-medium">PDF Settings</span>
+            <span className="flex-1 text-base font-medium">{t("PDF Settings")}</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
@@ -174,7 +176,7 @@ export default function SettingsPage() {
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
           >
             <PrinterIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
-            <span className="flex-1 text-base font-medium">Printer Setup</span>
+            <span className="flex-1 text-base font-medium">{t("Printer Setup")}</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
@@ -185,7 +187,7 @@ export default function SettingsPage() {
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
           >
             <ProductCodeIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
-            <span className="flex-1 text-base font-medium">Product Code Settings</span>
+            <span className="flex-1 text-base font-medium">{t("Product Code Settings")}</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>

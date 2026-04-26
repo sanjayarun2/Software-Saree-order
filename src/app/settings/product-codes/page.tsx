@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   getProductCodeSettings,
@@ -44,6 +45,7 @@ function clearProductCodeCaches(): void {
 
 export default function ProductCodeSettingsPage() {
   const { user, loading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
 
   const [settings, setSettings] = useState<ProductCodeSettings>(getDefaultProductCodeSettings);
@@ -102,7 +104,7 @@ export default function ProductCodeSettingsPage() {
             </svg>
           </Link>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
-            Product Code Settings
+            {t("Product Code Settings")}
           </h1>
         </div>
 
@@ -110,11 +112,11 @@ export default function ProductCodeSettingsPage() {
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <div className="px-4 pt-3 pb-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Preview
+              {t("Preview")}
             </p>
           </div>
           <div className="relative mx-4 mb-4 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-900">
-            <span className="text-sm text-slate-400 dark:text-slate-600">Sample Image</span>
+            <span className="text-sm text-slate-400 dark:text-slate-600">{t("Sample Image")}</span>
             <span
               className="absolute font-bold"
               style={{
@@ -138,7 +140,7 @@ export default function ProductCodeSettingsPage() {
         {/* Placement */}
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Text Placement
+            {t("Text Placement")}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {PLACEMENTS.map((p) => (
@@ -152,7 +154,7 @@ export default function ProductCodeSettingsPage() {
                     : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                 }`}
               >
-                {p.label}
+                {t(p.label)}
               </button>
             ))}
           </div>
@@ -161,7 +163,7 @@ export default function ProductCodeSettingsPage() {
         {/* Text Size */}
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Text Size
+            {t("Text size")}
           </p>
           <div className="mt-3 flex items-center gap-4">
             <button
@@ -175,7 +177,7 @@ export default function ProductCodeSettingsPage() {
             </button>
             <div className="flex-1 text-center">
               <span className="text-base font-semibold tabular-nums text-slate-800 dark:text-slate-200">
-                {settings.sizeOffset === 0 ? "Default" : `${settings.sizeOffset > 0 ? "+" : ""}${settings.sizeOffset}`}
+                {settings.sizeOffset === 0 ? t("Default") : `${settings.sizeOffset > 0 ? "+" : ""}${settings.sizeOffset}`}
               </span>
             </div>
             <button
@@ -193,7 +195,7 @@ export default function ProductCodeSettingsPage() {
         {/* Color */}
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Text Color
+            {t("Text Color")}
           </p>
           <div className="mt-3 flex flex-wrap gap-3">
             {COLORS.map((c) => (
@@ -224,14 +226,14 @@ export default function ProductCodeSettingsPage() {
             onClick={handleSave}
             className="min-h-[48px] w-full rounded-xl bg-primary-500 px-4 py-3 text-center text-base font-semibold text-white hover:bg-primary-600 transition"
           >
-            {saved ? "Saved!" : "Save & Apply"}
+            {saved ? t("Saved!") : t("Save & Apply")}
           </button>
           <button
             type="button"
             onClick={handleReset}
             className="min-h-[44px] w-full rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
           >
-            Reset to Default
+            {t("Reset to Default")}
           </button>
         </div>
       </div>
