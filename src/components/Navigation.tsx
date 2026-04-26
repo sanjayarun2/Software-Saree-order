@@ -93,6 +93,9 @@ export function RailNav({
   const showLabels = !isWeb || !webCollapsed;
 
   const sidebarContent = (isMobile: boolean) => {
+    const sectionSpacing = isMobile ? "mb-4 pb-3" : "mb-6 pb-4";
+    const sectionTopMargin = isMobile ? "mt-3" : "mt-4";
+
     const openWhatsAppGroup = () => {
       if (typeof window !== "undefined") {
         window.open(WHATSAPP_SUPPORT_GROUP_URL, "_blank", "noopener,noreferrer");
@@ -127,7 +130,7 @@ export function RailNav({
     return (
       <>
       {/* User greeting */}
-      <div className={`mb-6 pb-4 border-b border-gray-200 dark:border-gray-600 ${!showLabels ? "flex justify-center" : ""}`}>
+      <div className={`${sectionSpacing} border-b border-gray-200 dark:border-gray-600 ${!showLabels ? "flex justify-center" : ""}`}>
         <div className={`flex items-center gap-3 ${!showLabels ? "justify-center" : ""}`}>
           {userInitials && (
             <div className={`flex shrink-0 items-center justify-center rounded-full bg-primary-100 text-xl font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300 ${showLabels ? "h-14 w-14" : "h-10 w-10 text-base"}`}>
@@ -147,7 +150,7 @@ export function RailNav({
 
       {/* Theme toggle */}
       {showLabels && (
-      <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
+      <div className={`${sectionSpacing} border-b border-gray-200 dark:border-gray-600`}>
         <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">{t("Theme")}</p>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-800">
           <button
@@ -184,7 +187,7 @@ export function RailNav({
 
       {/* Language toggle */}
       {showLabels && (
-      <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-600">
+      <div className={`${sectionSpacing} border-b border-gray-200 dark:border-gray-600`}>
         <p className="mb-2 text-sm font-normal text-gray-700 dark:text-gray-300">{t("Language")}</p>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-800">
           <button
@@ -241,7 +244,7 @@ export function RailNav({
       </div>
 
       {/* Bottom actions */}
-      <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
+      <div className={`${sectionTopMargin} flex flex-col gap-0.5 border-t border-gray-200 pt-3 dark:border-gray-600`}>
         <button
           type="button"
           onClick={openReferFriend}
@@ -277,7 +280,7 @@ export function RailNav({
           )}
         </button>
       </div>
-      <div className="mt-4 flex flex-col gap-0.5 border-t border-gray-200 pt-4 dark:border-gray-600">
+      <div className={`${sectionTopMargin} flex flex-col gap-0.5 border-t border-gray-200 pt-3 dark:border-gray-600`}>
         <Link
           href="/logout/"
           onClick={onMobileClose}
@@ -316,7 +319,7 @@ export function RailNav({
       )}
       {/* Mobile sidebar: flush left, rounded right, wider, floating shadow */}
       <aside
-        className={`fixed left-0 top-0 z-[60] flex h-full w-[min(288px,85%)] flex-col rounded-r-3xl bg-white py-6 pl-4 pr-6 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:bg-slate-900 ${
+        className={`fixed left-0 top-0 z-[60] flex h-full w-[min(288px,85%)] flex-col overflow-y-auto rounded-r-3xl bg-white py-5 pl-4 pr-4 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:bg-slate-900 ${
           mobileOpen ? "flex lg:hidden" : "hidden"
         }`}
         role="navigation"
