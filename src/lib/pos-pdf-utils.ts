@@ -16,8 +16,6 @@ const SIZE_LABEL = 14;
 const SIZE_ADDRESS = 12;
 const ADDRESS_PADDING = 4;
 const EDGE_SAFE_GAP = 4;
-const LOGO_MAX_W_MM = 25;
-const LOGO_MAX_H_MM = 25;
 const VERTICAL_OFFSET = 4;
 
 // A4 section geometry (read-only reference)
@@ -29,6 +27,8 @@ const COL_SIDE_GAIN_MM = 5;
 const LEFT_COL_W = BASE_COL_W + COL_SIDE_GAIN_MM;
 const RIGHT_COL_W = BASE_COL_W + COL_SIDE_GAIN_MM;
 const CENTER_COL_W = BASE_COL_W - COL_SIDE_GAIN_MM * 2;
+const LOGO_MAX_W_MM = CENTER_COL_W;
+const LOGO_MAX_H_MM = CENTER_COL_W;
 const leftColStart = A4_MARGIN;
 const centerColStart = leftColStart + LEFT_COL_W + A4_MARGIN;
 const rightColStart = centerColStart + CENTER_COL_W + A4_MARGIN;

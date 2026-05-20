@@ -979,9 +979,9 @@ export function prepareAddressForPdf(text: string, normalize: boolean): string {
   return normalize ? normalizeAddressBlock(stripped) : stripped;
 }
 
-// Square logo container so clipping is symmetric
-const LOGO_MAX_W_MM = 25;   // fixed logo container width (mm)
-const LOGO_MAX_H_MM = 25;   // fixed logo container height (mm)
+// Square logo fills center column width (edge to edge of centre column)
+const LOGO_MAX_W_MM = CENTER_COL_W;
+const LOGO_MAX_H_MM = CENTER_COL_W;
 
 const MAX_TO_SHIFT_MM = 15;  // max leftward shift for TO text toward logo
 /** Shrink label/address by this much (pt) per step until layout fits. */
