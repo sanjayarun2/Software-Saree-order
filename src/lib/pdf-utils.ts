@@ -787,8 +787,9 @@ function measureOrderSectionLayout(
   }
 
   const sectionH = SECTION_H;
+  /** Label baseline; first address line is +6 mm (default 8 → address starts at 14 mm). */
   const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
-  const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
+  const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 8;
   const placement = options.settings?.placement ?? "bottom";
   const logoYSetting =
     options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;

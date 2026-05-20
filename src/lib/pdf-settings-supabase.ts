@@ -36,10 +36,20 @@ const defaultSettings: Omit<PdfSettingsRow, "user_id" | "updated_at"> = {
   logo_path: null,
   logo_zoom: 1.0,
   logo_y_mm: 50,
-  from_y_mm: 27,
+  from_y_mm: 8,
   to_y_mm: 8,
   normalize_addresses: false,
 };
+
+/** Label Y=8 → first address line at 14mm. Migrate legacy FROM Y=27 for all users. */
+export function normalizePdfYPositions(row: PdfSettingsRow | null): PdfSettingsRow | null {
+  if (!row) return null;
+  const from_y_mm =
+    row.from_y_mm == null || Number(row.from_y_mm) === 27 ? 8 : row.from_y_mm;
+  const to_y_mm = row.to_y_mm == null ? 8 : row.to_y_mm;
+  if (from_y_mm === row.from_y_mm && to_y_mm === row.to_y_mm) return row;
+  return { ...row, from_y_mm, to_y_mm };
+}
 
 /** Fetch PDF settings for a user from Supabase. Returns null if not found. */
 export async function getPdfSettings(userId: string): Promise<PdfSettingsRow | null> {
@@ -52,7 +62,7 @@ export async function getPdfSettings(userId: string): Promise<PdfSettingsRow | n
     console.warn("[PDF Settings] getPdfSettings error:", error);
     return null;
   }
-  return data as PdfSettingsRow | null;
+  return normalizePdfYPositions(data as PdfSettingsRow | null);
 }
 
 /** Upsert PDF settings for a user. */

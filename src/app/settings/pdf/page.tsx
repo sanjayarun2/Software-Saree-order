@@ -101,7 +101,7 @@ export default function PdfSettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lowResWarning, setLowResWarning] = useState<string | null>(null);
   const [logoYmm, setLogoYmm] = useState(40);
-  const [fromYmm, setFromYmm] = useState(27);
+  const [fromYmm, setFromYmm] = useState(8);
   const [toYmm, setToYmm] = useState(8);
   const [normalizeAddresses, setNormalizeAddresses] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<YTarget>("logo");
@@ -146,7 +146,7 @@ export default function PdfSettingsPage() {
         setCustomText(row.custom_text ?? "");
         setLogoZoom(row.logo_zoom ?? 1.0);
         setLogoYmm(clampNum(row.logo_y_mm, 0, PDF_SECTION_H_MM, 40));
-        setFromYmm(clampNum(row.from_y_mm, 0, PDF_SECTION_H_MM, 27));
+        setFromYmm(clampNum(row.from_y_mm, 0, PDF_SECTION_H_MM, 8));
         setToYmm(clampNum(row.to_y_mm, 0, PDF_SECTION_H_MM, 8));
         const hasLocal =
           typeof window !== "undefined" &&
@@ -399,7 +399,7 @@ export default function PdfSettingsPage() {
       logo_path: null,
       logo_zoom: 1.0,
       logo_y_mm: 40,
-      from_y_mm: 27,
+      from_y_mm: 8,
       to_y_mm: 8,
       normalize_addresses: false,
     });
