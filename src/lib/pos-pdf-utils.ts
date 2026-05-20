@@ -1,6 +1,11 @@
 import { jsPDF } from "jspdf";
 import type { Order } from "./db-types";
-import { savePdfBlob, normalizeAddressBlock, type PdfRenderOptions } from "./pdf-utils";
+import {
+  savePdfBlob,
+  resolveOrderLabelLayout,
+  type PdfRenderOptions,
+  type ResolvedLabelLayout,
+} from "./pdf-utils";
 import { printPdfBase64ViaBluetooth } from "./pos-bluetooth-print";
 import { addPrinterLog } from "./printer-debug-log";
 
@@ -9,7 +14,6 @@ const FONT_HEADING = "helvetica";
 const FONT_BODY = "helvetica";
 const SIZE_LABEL = 14;
 const SIZE_ADDRESS = 12;
-const MAX_ADDRESS_LINES = 7;
 const ADDRESS_PADDING = 4;
 const EDGE_SAFE_GAP = 4;
 const LOGO_MAX_W_MM = 25;
@@ -20,7 +24,15 @@ const VERTICAL_OFFSET = 4;
 const A4_W = 210;
 const A4_MARGIN = 10;
 const SECTION_H = 74.25; // 297 / 4
-const COL_W = (A4_W - A4_MARGIN * 4) / 3; // ≈56.67mm
+const BASE_COL_W = (A4_W - A4_MARGIN * 4) / 3;
+const COL_SIDE_GAIN_MM = 5;
+const LEFT_COL_W = BASE_COL_W + COL_SIDE_GAIN_MM;
+const RIGHT_COL_W = BASE_COL_W + COL_SIDE_GAIN_MM;
+const CENTER_COL_W = BASE_COL_W - COL_SIDE_GAIN_MM * 2;
+const leftColStart = A4_MARGIN;
+const centerColStart = leftColStart + LEFT_COL_W + A4_MARGIN;
+const rightColStart = centerColStart + CENTER_COL_W + A4_MARGIN;
+const centerX = centerColStart + CENTER_COL_W / 2;
 
 // POS page sized to fit one rotated A4 section at 1:1 (no font distortion).
 // POS width  = SECTION_H = 74.25mm (fits 80mm POS paper; A4 section's vertical
@@ -45,21 +57,6 @@ function buildTimestampedFilename(prefix: string): string {
   const mm = String(now.getMinutes()).padStart(2, "0");
   const SS = String(now.getSeconds()).padStart(2, "0");
   return `${prefix}_${YYYY}${MM}${DD}_${HH}${mm}${SS}.pdf`;
-}
-
-function getAddressLines(
-  doc: { splitTextToSize: (s: string, w: number) => string[] },
-  text: string,
-  maxW: number
-): string[] {
-  const raw = text || "-";
-  const paragraphs = raw.split(/\r?\n/);
-  const lines: string[] = [];
-  for (const p of paragraphs) {
-    const wrapped = doc.splitTextToSize(p.trim() || " ", maxW);
-    lines.push(...wrapped);
-  }
-  return lines;
 }
 
 async function fetchPosRenderOptions(userId: string): Promise<PdfRenderOptions> {
@@ -205,62 +202,29 @@ async function getImageAspectRatio(base64: string): Promise<number | null> {
 function drawPosLabel(
   doc: jsPDF,
   order: Order,
-  options: PdfRenderOptions
+  options: PdfRenderOptions,
+  resolved: ResolvedLabelLayout
 ) {
-  // ── Settings (identical to A4 drawOrderLabel) ──
-  const shouldNormalize = options.settings?.normalize_addresses === true;
-  const rawFrom = order.sender_details ?? "";
-  const rawTo = order.recipient_details ?? "";
-  const fromSource = shouldNormalize ? normalizeAddressBlock(rawFrom) : rawFrom;
-  const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
-
-  const labelSize = options.settings?.text_size ?? SIZE_LABEL;
-  const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
+  const labelSize = resolved.labelSizePt;
+  const addressSize = resolved.addressSizePt;
   const textBold = options.settings?.text_bold !== false;
-  const lineHeightMm = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.5;
+  const lineHeightMm = resolved.addressSizePt * 0.5;
   const labelToAddressGap = 6;
 
-  const maxWFrom = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
-  const maxWTo = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
-
-  const fromLines = getAddressLines(doc as any, fromSource, maxWFrom).slice(0, MAX_ADDRESS_LINES);
-  const toLines = getAddressLines(doc as any, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+  const fromLines = resolved.fromLines;
+  const toLines = resolved.toLines;
+  const fromY = resolved.fromY;
+  const toY = resolved.toY;
+  const thanksCenterA4Y = resolved.logoCenterYRel;
 
   // ── A4-space column X positions (horizontal in A4) ──
-  const a4FromX = A4_MARGIN + ADDRESS_PADDING;                              // 14mm
-  const a4CenterColStart = A4_MARGIN + COL_W + A4_MARGIN;                   // ≈76.67mm
-  const a4CenterX = a4CenterColStart + COL_W / 2;                           // ≈105mm
-  const a4ToX = A4_MARGIN + (COL_W + A4_MARGIN) * 2 + ADDRESS_PADDING;      // ≈147.33mm
+  const a4FromX = A4_MARGIN + ADDRESS_PADDING;
+  const a4CenterX = centerX;
+  const a4ToX = rightColStart - resolved.toShiftMm + ADDRESS_PADDING;
 
-  // ── A4-space vertical Y positions (top-to-bottom within section) ──
-  const fromYBase = options.settings?.from_y_mm != null
-    ? clamp(options.settings.from_y_mm, 0, SECTION_H) : 27;
-  const toYBase = options.settings?.to_y_mm != null
-    ? clamp(options.settings.to_y_mm, 0, SECTION_H) : 8;
-
-  const logoYSetting = options.settings?.logo_y_mm != null
-    ? clamp(options.settings.logo_y_mm, 0, SECTION_H) : null;
-  const placement = options.settings?.placement ?? "bottom";
-  let thanksCenterA4Y = logoYSetting != null
-    ? logoYSetting
-    : placement === "top" ? 28 : SECTION_H - 28;
-
-  let fromY = fromYBase;
-  let toY = toYBase;
-
-  // Vertical auto-shift
-  const fromBlockBottom = fromY + labelToAddressGap + (fromLines.length > 0 ? (fromLines.length - 1) * lineHeightMm : 0);
-  const toBlockBottom = toY + labelToAddressGap + (toLines.length > 0 ? (toLines.length - 1) * lineHeightMm : 0);
-  const logoBottom = thanksCenterA4Y + LOGO_MAX_H_MM / 2;
-  const sectionBottomLimit = SECTION_H - VERTICAL_OFFSET;
-  const currentMaxBottom = Math.max(fromBlockBottom, toBlockBottom, logoBottom);
-
-  if (currentMaxBottom > sectionBottomLimit) {
-    const shiftUp = currentMaxBottom - sectionBottomLimit;
-    fromY = fromYBase - shiftUp;
-    toY = toYBase - shiftUp;
-    thanksCenterA4Y -= shiftUp;
-  }
+  const contentType = options.settings?.content_type ?? "logo";
+  const customText = (options.settings?.custom_text ?? "").trim();
+  const textSize = resolved.centerTextSizePt;
 
   // ── Coordinate transform ──
   // posY: A4 x → POS y, REVERSED so FROM (left in A4) is at bottom of strip
@@ -301,16 +265,12 @@ function drawPosLabel(
   });
 
   // ── CENTRE (logo or text) ──
-  const contentType = options.settings?.content_type ?? "logo";
-  const customText = (options.settings?.custom_text ?? "").trim();
-  const textSize = options.settings?.text_size ?? 15;
-
   const logoCenterPosY = posY(a4CenterX);
 
   if (contentType === "text" && customText) {
     doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
     doc.setFontSize(textSize);
-    const maxCenterW = COL_W - 8;
+    const maxCenterW = CENTER_COL_W - 8;
     const lines = doc.splitTextToSize(customText, maxCenterW);
     const lh = textSize * 0.4;
     const totalH = lines.length * lh;
@@ -364,9 +324,11 @@ function drawPosLabel(
 
 function renderOrdersToPosPdfDoc(orders: Order[], renderOptions: PdfRenderOptions): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
+  const d = doc as unknown as Parameters<typeof resolveOrderLabelLayout>[0];
   for (let i = 0; i < orders.length; i++) {
     if (i > 0) doc.addPage([POS_PAGE_W, POS_PAGE_H], "p");
-    drawPosLabel(doc, orders[i], renderOptions);
+    const resolved = resolveOrderLabelLayout(d, orders[i], renderOptions);
+    drawPosLabel(doc, orders[i], renderOptions, resolved);
   }
   return doc;
 }
@@ -402,7 +364,9 @@ export async function downloadOrderPosPdf(order: Order) {
   try {
     const renderOptions = await fetchPosRenderOptions(order.user_id);
     const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
-    drawPosLabel(doc, order, renderOptions);
+    const d = doc as unknown as Parameters<typeof resolveOrderLabelLayout>[0];
+    const resolved = resolveOrderLabelLayout(d, order, renderOptions);
+    drawPosLabel(doc, order, renderOptions, resolved);
     const filename = buildTimestampedFilename("SareeOrder_POS");
     const blob = doc.output("blob");
     await savePdfBlob(blob, filename);

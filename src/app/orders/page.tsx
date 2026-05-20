@@ -11,7 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconEdit, IconDispatch, IconUndo, IconPdf, IconPrint, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
 import FormatSelectionModal from "@/components/ui/FormatSelectionModal";
-import { downloadOrdersPdf } from "@/lib/pdf-utils";
+import { downloadOrdersPdf, PdfAddressTooLongError } from "@/lib/pdf-utils";
 import { downloadOrdersPosPdf, printOrdersPosPdf } from "@/lib/pos-pdf-utils";
 import { useSearch } from "@/lib/search-context";
 import {
@@ -677,8 +677,17 @@ export default function OrdersPage() {
               try {
                 await downloadOrdersPdf(ordersForPdfAndPrint);
               } catch (e) {
-                const errorMsg = e instanceof Error ? e.message : "Unknown error";
-                alert(`Failed to generate PDF: ${errorMsg}`);
+                const errorMsg =
+                  e instanceof PdfAddressTooLongError
+                    ? e.message
+                    : e instanceof Error
+                      ? e.message
+                      : "Unknown error";
+                alert(
+                  e instanceof PdfAddressTooLongError
+                    ? errorMsg
+                    : `Failed to generate PDF: ${errorMsg}`
+                );
               } finally {
                 setDownloadingPdf(false);
               }
@@ -688,8 +697,17 @@ export default function OrdersPage() {
               try {
                 await downloadOrdersPdf(ordersForPdfAndPrint);
               } catch (e) {
-                const errorMsg = e instanceof Error ? e.message : "Unknown error";
-                alert(`Failed to generate PDF: ${errorMsg}`);
+                const errorMsg =
+                  e instanceof PdfAddressTooLongError
+                    ? e.message
+                    : e instanceof Error
+                      ? e.message
+                      : "Unknown error";
+                alert(
+                  e instanceof PdfAddressTooLongError
+                    ? errorMsg
+                    : `Failed to generate PDF: ${errorMsg}`
+                );
               } finally {
                 setDownloadingPdf(false);
               }
@@ -702,8 +720,17 @@ export default function OrdersPage() {
               try {
                 await downloadOrdersPosPdf(ordersForPdfAndPrint);
               } catch (e) {
-                const errorMsg = e instanceof Error ? e.message : "Unknown error";
-                alert(`Failed to generate POS PDF: ${errorMsg}`);
+                const errorMsg =
+                  e instanceof PdfAddressTooLongError
+                    ? e.message
+                    : e instanceof Error
+                      ? e.message
+                      : "Unknown error";
+                alert(
+                  e instanceof PdfAddressTooLongError
+                    ? errorMsg
+                    : `Failed to generate POS PDF: ${errorMsg}`
+                );
               } finally {
                 setDownloadingPdf(false);
               }
@@ -712,8 +739,17 @@ export default function OrdersPage() {
               try {
                 await printOrdersPosPdf(ordersForPdfAndPrint);
               } catch (e) {
-                const errorMsg = e instanceof Error ? e.message : "Unknown error";
-                alert(`Printing failed: ${errorMsg}`);
+                const errorMsg =
+                  e instanceof PdfAddressTooLongError
+                    ? e.message
+                    : e instanceof Error
+                      ? e.message
+                      : "Unknown error";
+                alert(
+                  e instanceof PdfAddressTooLongError
+                    ? errorMsg
+                    : `Printing failed: ${errorMsg}`
+                );
               } finally {
                 setPrinting(false);
               }

@@ -557,7 +557,16 @@ const A4_H = 297;
 const SECTIONS_PER_PAGE = 4;
 const SECTION_H = A4_H / SECTIONS_PER_PAGE;
 const MARGIN = 10;
-const COL_W = (A4_W - MARGIN * 4) / 3;
+const BASE_COL_W = (A4_W - MARGIN * 4) / 3;
+/** Left/right +5mm each; center −10mm total — page width unchanged. */
+const COL_SIDE_GAIN_MM = 5;
+const LEFT_COL_W = BASE_COL_W + COL_SIDE_GAIN_MM;
+const RIGHT_COL_W = BASE_COL_W + COL_SIDE_GAIN_MM;
+const CENTER_COL_W = BASE_COL_W - COL_SIDE_GAIN_MM * 2;
+const leftColStart = MARGIN;
+const centerColStart = leftColStart + LEFT_COL_W + MARGIN;
+const rightColStart = centerColStart + CENTER_COL_W + MARGIN;
+const centerX = centerColStart + CENTER_COL_W / 2;
 
 // Typography (Helvetica only = identical on Mobile, Android, Web)
 const FONT_HEADING = "helvetica";
@@ -577,21 +586,301 @@ const ADDRESS_PADDING = 4;   // 4mm from column border to text start
 const EDGE_SAFE_GAP = 4;     // 4mm from text end to opposite border
 const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
 const THANKS_LINE_GAP = 3;   // slightly increased gap between center lines
+/** Minimum gap between center column edge and FROM/TO text (prevents column overlap). */
+const MIN_GAP_TO_CENTER_MM = 2;
 
-/** Split address by user newlines first, then wrap long lines to fit width. Preserves formatting. */
-function getAddressLines(
+/** Remove blank lines (whitespace-only) from pasted/typed addresses before PDF render. */
+export function stripEmptyAddressLines(text: string): string {
+  return (text || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .join("\n");
+}
+
+/** Max left shift for TO block so it never enters the center column. */
+function getMaxToShiftMm(): number {
+  const centerColEnd = centerColStart + CENTER_COL_W;
+  const minToTextX = centerColEnd + MIN_GAP_TO_CENTER_MM;
+  return Math.max(0, rightColStart + ADDRESS_PADDING - minToTextX);
+}
+
+function capToShiftMm(shift: number): number {
+  return Math.min(Math.max(0, shift), getMaxToShiftMm());
+}
+
+type SectionVerticalLayout = {
+  fromY: number;
+  toY: number;
+  logoCenterYRel: number;
+  fromLines: string[];
+  toLines: string[];
+  fits: boolean;
+};
+
+function getBaseTypographyPt(settings: PdfRenderOptions["settings"]): {
+  labelPt: number;
+  addressPt: number;
+  centerPt: number;
+} {
+  const ts = settings?.text_size;
+  if (ts != null) {
+    return { labelPt: ts, addressPt: ts, centerPt: ts };
+  }
+  return { labelPt: SIZE_LABEL, addressPt: SIZE_ADDRESS, centerPt: 15 };
+}
+
+/** Keep FROM/TO/logo inside one split vertically (shift only; never trim lines). */
+export function layoutBlocksInSection(
+  fromYBase: number,
+  toYBase: number,
+  logoCenterYRel: number,
+  fromLinesIn: string[],
+  toLinesIn: string[],
+  lineHeightMm: number,
+  labelToAddressGap: number,
+  logoHalfH: number,
+  centerBlockHalfH = 0
+): SectionVerticalLayout {
+  const fromLines = [...fromLinesIn];
+  const toLines = [...toLinesIn];
+  const topLimit = VERTICAL_OFFSET;
+  const bottomLimit = SECTION_H - VERTICAL_OFFSET;
+
+  const blockBottom = (yBase: number, lineCount: number): number =>
+    lineCount > 0
+      ? yBase + labelToAddressGap + (lineCount - 1) * lineHeightMm
+      : yBase;
+
+  let fromY = fromYBase;
+  let toY = toYBase;
+  let logoY = logoCenterYRel;
+
+  const logoTop = logoY - logoHalfH;
+  if (logoTop < topLimit) {
+    logoY += topLimit - logoTop;
+  }
+
+  let fromBottom = blockBottom(fromY, fromLines.length);
+  let toBottom = blockBottom(toY, toLines.length);
+  let logoBottom = logoY + Math.max(logoHalfH, centerBlockHalfH);
+  let maxBottom = Math.max(fromBottom, toBottom, logoBottom);
+
+  if (maxBottom > bottomLimit) {
+    let shiftUp = maxBottom - bottomLimit;
+    shiftUp = Math.min(
+      shiftUp,
+      Math.max(0, fromY - topLimit),
+      Math.max(0, toY - topLimit)
+    );
+    fromY -= shiftUp;
+    toY -= shiftUp;
+    logoY -= shiftUp;
+
+    fromBottom = blockBottom(fromY, fromLines.length);
+    toBottom = blockBottom(toY, toLines.length);
+    logoBottom = logoY + Math.max(logoHalfH, centerBlockHalfH);
+    maxBottom = Math.max(fromBottom, toBottom, logoBottom);
+  }
+
+  const fits =
+    maxBottom <= bottomLimit &&
+    fromY >= topLimit &&
+    toY >= topLimit &&
+    logoY - logoHalfH >= topLimit;
+
+  return { fromY, toY, logoCenterYRel: logoY, fromLines, toLines, fits };
+}
+
+function measureCenterBlockHalfH(
+  doc: DocShape,
+  options: PdfRenderOptions,
+  centerTextSizePt: number
+): number {
+  const contentType = options.settings?.content_type ?? "logo";
+  const customText = (options.settings?.custom_text ?? "").trim();
+  if (contentType === "text" && customText && doc.splitTextToSize) {
+    const maxCenterW = CENTER_COL_W - 8;
+    const centerLines = doc.splitTextToSize(customText, maxCenterW);
+    const centerLh = centerTextSizePt * 0.4;
+    return (centerLines.length * centerLh) / 2;
+  }
+  return LOGO_MAX_H_MM / 2;
+}
+
+function measureOrderSectionLayout(
+  doc: DocShape,
+  order: Order,
+  options: PdfRenderOptions,
+  toShiftMm: number,
+  labelSizePt: number,
+  addressSizePt: number,
+  centerTextSizePt: number
+): { fits: boolean; layout: SectionVerticalLayout; centerBlockHalfH: number } {
+  const shouldNormalize = options.settings?.normalize_addresses === true;
+  const fromSource = prepareAddressForPdf(order.sender_details ?? "", shouldNormalize);
+  const toSource = prepareAddressForPdf(order.recipient_details ?? "", shouldNormalize);
+
+  const maxWFrom = LEFT_COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
+  const rightColStartShifted = rightColStart - toShiftMm;
+  const rightTextStart = rightColStartShifted + ADDRESS_PADDING;
+  const maxWTo = Math.min(
+    RIGHT_COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP,
+    A4_W - MARGIN - EDGE_SAFE_GAP - rightTextStart
+  );
+
+  const textBold = options.settings?.text_bold !== false;
+  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  doc.setFontSize(addressSizePt);
+
+  const fromLines = getPdfAddressLines(doc, fromSource, maxWFrom);
+  const toLines = getPdfAddressLines(doc, toSource, maxWTo);
+
+  if (fromLines.length > MAX_ADDRESS_LINES || toLines.length > MAX_ADDRESS_LINES) {
+    return {
+      fits: false,
+      layout: {
+        fromY: 0,
+        toY: 0,
+        logoCenterYRel: 0,
+        fromLines,
+        toLines,
+        fits: false,
+      },
+      centerBlockHalfH: LOGO_MAX_H_MM / 2,
+    };
+  }
+
+  if (typeof doc.getTextWidth === "function") {
+    for (const line of fromLines) {
+      if (doc.getTextWidth(line) > maxWFrom - 0.5) {
+        return {
+          fits: false,
+          layout: {
+            fromY: 0,
+            toY: 0,
+            logoCenterYRel: 0,
+            fromLines,
+            toLines,
+            fits: false,
+          },
+          centerBlockHalfH: LOGO_MAX_H_MM / 2,
+        };
+      }
+    }
+    for (const line of toLines) {
+      if (doc.getTextWidth(line) > maxWTo - 0.5) {
+        return {
+          fits: false,
+          layout: {
+            fromY: 0,
+            toY: 0,
+            logoCenterYRel: 0,
+            fromLines,
+            toLines,
+            fits: false,
+          },
+          centerBlockHalfH: LOGO_MAX_H_MM / 2,
+        };
+      }
+    }
+  }
+
+  const sectionH = SECTION_H;
+  const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
+  const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
+  const placement = options.settings?.placement ?? "bottom";
+  const logoYSetting =
+    options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
+  const logoCenterYRel =
+    logoYSetting != null
+      ? logoYSetting
+      : placement === "top"
+        ? 28
+        : SECTION_H - 28;
+
+  const lineHeightMm = addressSizePt * 0.5;
+  const labelToAddressGap = 6;
+  const centerBlockHalfH = measureCenterBlockHalfH(doc, options, centerTextSizePt);
+
+  const layout = layoutBlocksInSection(
+    fromYBase,
+    toYBase,
+    logoCenterYRel,
+    fromLines,
+    toLines,
+    lineHeightMm,
+    labelToAddressGap,
+    LOGO_MAX_H_MM / 2,
+    centerBlockHalfH
+  );
+
+  return { fits: layout.fits, layout, centerBlockHalfH };
+}
+
+/** Shrink fonts in small steps until the label fits; otherwise ask user to shorten text. */
+export function resolveOrderLabelLayout(
+  doc: DocShape,
+  order: Order,
+  options: PdfRenderOptions
+): ResolvedLabelLayout {
+  const base = getBaseTypographyPt(options.settings);
+  let labelPt = base.labelPt;
+  let addressPt = base.addressPt;
+  let centerPt = base.centerPt;
+
+  while (labelPt >= PDF_MIN_LABEL_PT && addressPt >= PDF_MIN_ADDRESS_PT) {
+    const toShift = computeToShiftMm(doc, order, options, addressPt);
+    const measured = measureOrderSectionLayout(
+      doc,
+      order,
+      options,
+      toShift,
+      labelPt,
+      addressPt,
+      Math.max(centerPt, PDF_MIN_CENTER_TEXT_PT)
+    );
+
+    if (measured.fits) {
+      return {
+        labelSizePt: labelPt,
+        addressSizePt: addressPt,
+        centerTextSizePt: Math.max(centerPt, PDF_MIN_CENTER_TEXT_PT),
+        toShiftMm: toShift,
+        fromY: measured.layout.fromY,
+        toY: measured.layout.toY,
+        logoCenterYRel: measured.layout.logoCenterYRel,
+        fromLines: measured.layout.fromLines,
+        toLines: measured.layout.toLines,
+        centerBlockHalfH: measured.centerBlockHalfH,
+      };
+    }
+
+    labelPt -= PDF_FONT_SHRINK_STEP_PT;
+    addressPt -= PDF_FONT_SHRINK_STEP_PT;
+    centerPt -= PDF_FONT_SHRINK_STEP_PT;
+  }
+
+  throw new PdfAddressTooLongError();
+}
+
+/** Split address by user newlines first, then wrap long lines to fit width. Skips empty lines. */
+export function getPdfAddressLines(
   doc: { splitTextToSize: (s: string, w: number) => string[] },
   text: string,
   maxW: number
 ): string[] {
-  const raw = text || "-";
+  const raw = stripEmptyAddressLines(text);
+  if (!raw) return ["-"];
   const paragraphs = raw.split(/\r?\n/);
   const lines: string[] = [];
   for (const p of paragraphs) {
-    const wrapped = doc.splitTextToSize(p.trim() || " ", maxW);
+    const trimmed = p.trim();
+    if (!trimmed) continue;
+    const wrapped = doc.splitTextToSize(trimmed, maxW);
     lines.push(...wrapped);
   }
-  return lines;
+  return lines.length > 0 ? lines : ["-"];
 }
 
 /** Preserve user-typed / pasted lines exactly (no auto-wrapping), only splitting on explicit newlines. */
@@ -683,11 +972,47 @@ export function normalizeAddressBlock(text: string): string {
   return result.join("\n");
 }
 
+/** Address text ready for PDF: strip empty lines, optionally normalize. */
+export function prepareAddressForPdf(text: string, normalize: boolean): string {
+  const stripped = stripEmptyAddressLines(text);
+  if (!stripped) return "";
+  return normalize ? normalizeAddressBlock(stripped) : stripped;
+}
+
 // Square logo container so clipping is symmetric
 const LOGO_MAX_W_MM = 25;   // fixed logo container width (mm)
 const LOGO_MAX_H_MM = 25;   // fixed logo container height (mm)
 
 const MAX_TO_SHIFT_MM = 15;  // max leftward shift for TO text toward logo
+/** Shrink label/address by this much (pt) per step until layout fits. */
+const PDF_FONT_SHRINK_STEP_PT = 0.5;
+const PDF_MIN_LABEL_PT = 10;
+const PDF_MIN_ADDRESS_PT = 9;
+const PDF_MIN_CENTER_TEXT_PT = 9;
+
+/** Thrown when address text cannot fit even at minimum PDF font size. */
+export class PdfAddressTooLongError extends Error {
+  readonly name = "PdfAddressTooLongError";
+
+  constructor(
+    message = "Address text is too long for the label. Please shorten the sender and/or recipient address, then try again."
+  ) {
+    super(message);
+  }
+}
+
+export type ResolvedLabelLayout = {
+  labelSizePt: number;
+  addressSizePt: number;
+  centerTextSizePt: number;
+  toShiftMm: number;
+  fromY: number;
+  toY: number;
+  logoCenterYRel: number;
+  fromLines: string[];
+  toLines: string[];
+  centerBlockHalfH: number;
+};
 
 type DocShape = {
   setFont: (f: string, s: string) => void;
@@ -710,25 +1035,22 @@ type DocShape = {
 function computeToShiftMm(
   doc: DocShape,
   order: Order,
-  options: PdfRenderOptions
+  options: PdfRenderOptions,
+  addressSizePt: number
 ): number {
-  const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
-  const rightColEndBase = A4_W - MARGIN;
-  const rightTextStart = rightColStart + ADDRESS_PADDING;
-  const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
+  const maxWTo = RIGHT_COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
 
   const shouldNormalize = options.settings?.normalize_addresses === true;
   const rawTo = order.recipient_details ?? "";
-  const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
-  const toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+  const toSource = prepareAddressForPdf(rawTo, shouldNormalize);
+  const toLines = getPdfAddressLines(doc, toSource, maxWTo);
 
-  const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
   const textBold = options.settings?.text_bold !== false;
 
   if (typeof doc.getTextWidth !== "function") return 0;
 
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
-  doc.setFontSize(addressSize);
+  doc.setFontSize(addressSizePt);
 
   let maxLineWidth = 0;
   for (const line of toLines) {
@@ -739,7 +1061,7 @@ function computeToShiftMm(
   if (maxLineWidth <= maxWTo - 1) return 0;
 
   const overflow = maxLineWidth - (maxWTo - 1);
-  return Math.min(overflow + 2, MAX_TO_SHIFT_MM);
+  return capToShiftMm(Math.min(overflow + 2, MAX_TO_SHIFT_MM));
 }
 
 function drawOrderLabel(
@@ -747,79 +1069,30 @@ function drawOrderLabel(
   order: Order,
   sectionTop: number,
   options: PdfRenderOptions,
-  toShiftMm: number = 0
+  resolved: ResolvedLabelLayout
 ) {
-  const leftX = MARGIN + ADDRESS_PADDING;
-  const centerColStart = MARGIN + COL_W + MARGIN;
-  const centerX = centerColStart + COL_W / 2;  // logo never moves
-  const rightColStart = MARGIN + (COL_W + MARGIN) * 2;
-  const rightColStartShifted = rightColStart - toShiftMm;  // only TO shifts left
-  const rightColEndBase = A4_W - MARGIN;
-  const maxWFrom = COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
+  const leftX = leftColStart + ADDRESS_PADDING;
+  const rightColStartShifted = rightColStart - resolved.toShiftMm;
+  const rightX = rightColStartShifted + ADDRESS_PADDING;
 
-  const sectionH = SECTION_H;
-  const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
-  const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 27;
-  const labelSize = options.settings?.text_size ?? SIZE_LABEL;
-  const addressSize = options.settings?.text_size ?? SIZE_ADDRESS;
+  const labelSize = resolved.labelSizePt;
+  const addressSize = resolved.addressSizePt;
   const textBold = options.settings?.text_bold !== false;
-  const lineHeightMm = (options.settings?.text_size ?? SIZE_ADDRESS) * 0.5;
+  const lineHeightMm = resolved.addressSizePt * 0.5;
   const labelToAddressGap = 6;
 
-  const shouldNormalize = options.settings?.normalize_addresses === true;
-  const rawFrom = order.sender_details ?? "";
-  const rawTo = order.recipient_details ?? "";
-  const fromSource = shouldNormalize ? normalizeAddressBlock(rawFrom) : rawFrom;
-  const toSource = shouldNormalize ? normalizeAddressBlock(rawTo) : rawTo;
+  const fromLines = resolved.fromLines;
+  const toLines = resolved.toLines;
+  const thanksCenterY = sectionTop + resolved.logoCenterYRel;
 
-  const fromLines = getAddressLines(doc, fromSource, maxWFrom).slice(0, MAX_ADDRESS_LINES);
-  const rightTextStart = rightColStartShifted + ADDRESS_PADDING;
-  const maxWTo = rightColEndBase - EDGE_SAFE_GAP - rightTextStart;
-  const toLines = getAddressLines(doc, toSource, maxWTo).slice(0, MAX_ADDRESS_LINES);
+  const labelYFrom = sectionTop + resolved.fromY;
+  const addressStartYFrom = sectionTop + resolved.fromY + labelToAddressGap;
+  const labelYTo = sectionTop + resolved.toY;
+  const addressStartYTo = sectionTop + resolved.toY + labelToAddressGap;
 
-  // Placement for logo / center block
-  const placement = options.settings?.placement ?? "bottom";
-  const logoYSetting = options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
-  let thanksCenterY =
-    logoYSetting != null
-      ? sectionTop + logoYSetting
-      : placement === "top"
-        ? sectionTop + 28
-        : sectionTop + SECTION_H - 28;
-
-  // Vertical auto-shift per block: so this section's FROM/TO/logo stay inside bottom border
-  const topPadding = VERTICAL_OFFSET;
-  const bottomPadding = VERTICAL_OFFSET;
-
-  let fromY = fromYBase;
-  let toY = toYBase;
-
-  let labelYFrom = sectionTop + fromY;
-  let addressStartYFrom = sectionTop + fromY + labelToAddressGap;
-  let labelYTo = sectionTop + toY;
-  let addressStartYTo = sectionTop + toY + labelToAddressGap;
-
-  const fromBlockBottom =
-    fromLines.length > 0 ? addressStartYFrom + (fromLines.length - 1) * lineHeightMm : labelYFrom;
-  const toBlockBottom =
-    toLines.length > 0 ? addressStartYTo + (toLines.length - 1) * lineHeightMm : labelYTo;
-  const logoBottom = thanksCenterY + LOGO_MAX_H_MM / 2;
-
-  const sectionBottomLimit = sectionTop + sectionH - bottomPadding;
-  const currentMaxBottom = Math.max(fromBlockBottom, toBlockBottom, logoBottom);
-
-  if (currentMaxBottom > sectionBottomLimit) {
-    const shiftUp = currentMaxBottom - sectionBottomLimit;
-    fromY = fromYBase - shiftUp;
-    toY = toYBase - shiftUp;
-    thanksCenterY -= shiftUp;
-  }
-
-  // Recompute baselines after vertical shift
-  labelYFrom = sectionTop + fromY;
-  addressStartYFrom = sectionTop + fromY + labelToAddressGap;
-  labelYTo = sectionTop + toY;
-  addressStartYTo = sectionTop + toY + labelToAddressGap;
+  const contentType = options.settings?.content_type ?? "logo";
+  const customText = (options.settings?.custom_text ?? "").trim();
+  const textSize = resolved.centerTextSizePt;
 
   // FROM — left column (uses settings: text_size, text_bold)
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
@@ -832,15 +1105,11 @@ function drawOrderLabel(
   });
 
   // Centre: logo or text at adjusted centerX / thanksCenterY
-  const contentType = options.settings?.content_type ?? "logo";
-  const customText = (options.settings?.custom_text ?? "").trim();
-  const textSize = options.settings?.text_size ?? 15;
-
   if (contentType === "text" && customText && doc.splitTextToSize) {
     const textBoldInner = options.settings?.text_bold !== false;
     doc.setFont(FONT_BODY, textBoldInner ? "bold" : "normal");
     doc.setFontSize(textSize);
-    const maxCenterW = COL_W - 8;
+    const maxCenterW = CENTER_COL_W - 8;
     const lines = doc.splitTextToSize(customText, maxCenterW);
     const lineHeight = textSize * 0.4;
     const startY = thanksCenterY - (lines.length * lineHeight) / 2;
@@ -891,7 +1160,6 @@ function drawOrderLabel(
   }
 
   // TO — right column, left-aligned within its column
-  const rightX = rightColStartShifted + ADDRESS_PADDING;
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
   doc.text("TO:", rightX, labelYTo);
@@ -946,11 +1214,13 @@ export async function downloadOrderPdf(order: Order) {
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const d = doc as unknown as DocShape & Parameters<typeof drawSectionBorder>[0];
-    const pageShift = computeToShiftMm(d, order, renderOptions);
-    console.log(`[PDF] Drawing ${SECTIONS_PER_PAGE} sections (TO shift: ${pageShift}mm)...`);
+    const resolved = resolveOrderLabelLayout(d, order, renderOptions);
+    console.log(
+      `[PDF] Drawing ${SECTIONS_PER_PAGE} sections (TO shift: ${resolved.toShiftMm}mm, font: ${resolved.addressSizePt}pt)...`
+    );
     for (let i = 0; i < SECTIONS_PER_PAGE; i++) {
       drawSectionBorder(d, i * SECTION_H);
-      drawOrderLabel(d, order, i * SECTION_H, renderOptions, pageShift);
+      drawOrderLabel(d, order, i * SECTION_H, renderOptions, resolved);
     }
     const filename = buildTimestampedFilename("SareeOrder");
     console.log(`[PDF] Generating blob for filename: ${filename}`);
@@ -988,16 +1258,9 @@ export async function downloadOrdersPdf(orders: Order[]) {
     const userId = orders[0].user_id;
     const renderOptions = await fetchPdfSettingsForRendering(userId);
 
-    // Pre-compute per-page TO shift: scan each page's orders, take the max
-    const pageShifts: number[] = [];
-    for (let i = 0; i < orders.length; i += SECTIONS_PER_PAGE) {
-      const pageOrders = orders.slice(i, i + SECTIONS_PER_PAGE);
-      let maxShift = 0;
-      for (const o of pageOrders) {
-        const s = computeToShiftMm(d, o, renderOptions);
-        if (s > maxShift) maxShift = s;
-      }
-      pageShifts.push(maxShift);
+    const resolvedByOrder: ResolvedLabelLayout[] = [];
+    for (const o of orders) {
+      resolvedByOrder.push(resolveOrderLabelLayout(d, o, renderOptions));
     }
 
     console.log(`[PDF] Drawing ${orders.length} orders...`);
@@ -1007,9 +1270,8 @@ export async function downloadOrdersPdf(orders: Order[]) {
         doc.addPage([A4_W, A4_H], "p");
       }
       const sectionTop = slot * SECTION_H;
-      const currentPageShift = pageShifts[page] ?? 0;
       drawSectionBorder(d, sectionTop);
-      drawOrderLabel(d, orders[i], sectionTop, renderOptions, currentPageShift);
+      drawOrderLabel(d, orders[i], sectionTop, renderOptions, resolvedByOrder[i]);
       slot++;
       if (slot >= SECTIONS_PER_PAGE) {
         slot = 0;

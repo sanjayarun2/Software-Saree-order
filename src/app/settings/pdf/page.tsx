@@ -15,7 +15,7 @@ import {
   type PdfContentType,
   type PdfPlacement,
 } from "@/lib/pdf-settings-supabase";
-import { normalizeAddressBlock } from "@/lib/pdf-utils";
+import { normalizeAddressBlock, stripEmptyAddressLines } from "@/lib/pdf-utils";
 import {
   pickLogoImageNative,
   useNativeLogoPicker,
@@ -46,16 +46,23 @@ function clampNum(v: number | null | undefined, min: number, max: number, def: n
 
 const A4_W_MM = 210;
 const PDF_MARGIN_MM = 10;
-const PDF_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
+const PDF_BASE_COL_W_MM = (A4_W_MM - PDF_MARGIN_MM * 4) / 3;
+const PDF_COL_SIDE_GAIN_MM = 5;
+const PDF_LEFT_COL_W_MM = PDF_BASE_COL_W_MM + PDF_COL_SIDE_GAIN_MM;
+const PDF_RIGHT_COL_W_MM = PDF_BASE_COL_W_MM + PDF_COL_SIDE_GAIN_MM;
+const PDF_CENTER_COL_W_MM = PDF_BASE_COL_W_MM - PDF_COL_SIDE_GAIN_MM * 2;
+const PDF_CENTER_COL_START_MM = PDF_MARGIN_MM + PDF_LEFT_COL_W_MM + PDF_MARGIN_MM;
 // 4mm margin from the section border on both left and right, matching PDF engine.
 const PDF_ADDRESS_PADDING_MM = 4; // must match ADDRESS_PADDING in pdf-utils.ts
 const PDF_EDGE_SAFE_GAP_MM = 4;   // must match EDGE_SAFE_GAP in pdf-utils.ts
-const PDF_ADDRESS_MAX_W_MM = PDF_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
+const PDF_FROM_ADDRESS_MAX_W_MM = PDF_LEFT_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
+const PDF_TO_ADDRESS_MAX_W_MM = PDF_RIGHT_COL_W_MM - PDF_ADDRESS_PADDING_MM - PDF_EDGE_SAFE_GAP_MM;
 const PDF_VERTICAL_OFFSET_MM = 4; // must match VERTICAL_OFFSET in pdf-utils.ts
 const PDF_LOGO_BOX_MM = 25; // must match LOGO_MAX_W_MM / LOGO_MAX_H_MM in pdf-utils.ts
 const PDF_MAX_TO_SHIFT_MM = 15; // max leftward shift for TO text (logo stays fixed)
 const PDF_FROM_X_MM = PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
-const PDF_TO_X_MM = PDF_MARGIN_MM + (PDF_COL_W_MM + PDF_MARGIN_MM) * 2 + PDF_ADDRESS_PADDING_MM;
+const PDF_TO_X_MM =
+  PDF_CENTER_COL_START_MM + PDF_CENTER_COL_W_MM + PDF_MARGIN_MM + PDF_ADDRESS_PADDING_MM;
 const MM_PER_PT = 25.4 / 72;
 const defaultContentType: PdfContentType = "logo";
 const defaultPlacement: PdfPlacement = "bottom";
@@ -111,8 +118,14 @@ export default function PdfSettingsPage() {
   const previewFromRaw = "Global Tech Solutions\n123   Innovation   Drive,\nSilicon  Valley ,  CA   94043.\nPh:   +1  555 123 4567";
   const previewToRaw =
     "Anthony   Raj,\nNo.  45, Park View   Apartments,\nChennai ,   Tamil  Nadu  600001.\nPh: +91   98765  43210";
-  const previewFromText = normalizeAddresses ? normalizeAddressBlock(previewFromRaw) : previewFromRaw;
-  const previewToText = normalizeAddresses ? normalizeAddressBlock(previewToRaw) : previewToRaw;
+  const previewFromStripped = stripEmptyAddressLines(previewFromRaw);
+  const previewToStripped = stripEmptyAddressLines(previewToRaw);
+  const previewFromText = normalizeAddresses
+    ? normalizeAddressBlock(previewFromStripped)
+    : previewFromStripped;
+  const previewToText = normalizeAddresses
+    ? normalizeAddressBlock(previewToStripped)
+    : previewToStripped;
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -852,7 +865,7 @@ export default function PdfSettingsPage() {
                     style={{
                       top: `${fromTopPct}%`,
                       left: `${(PDF_FROM_X_MM / A4_W_MM) * 100}%`,
-                      width: `${(PDF_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
+                      width: `${(PDF_FROM_ADDRESS_MAX_W_MM / A4_W_MM) * 100}%`,
                     }}
                     onPointerDown={(e) => handlePreviewPointerDown(e, "from")}
                   >
@@ -932,7 +945,7 @@ export default function PdfSettingsPage() {
                     style={{
                       top: `${toTopPct}%`,
                       left: `${toLeftPct}%`,
-                      width: `${((PDF_ADDRESS_MAX_W_MM + previewToShiftMm) / A4_W_MM) * 100}%`,
+                      width: `${((PDF_TO_ADDRESS_MAX_W_MM + previewToShiftMm) / A4_W_MM) * 100}%`,
                     }}
                     onPointerDown={(e) => handlePreviewPointerDown(e, "to")}
                   >
