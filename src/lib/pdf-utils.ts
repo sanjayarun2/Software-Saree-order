@@ -630,6 +630,22 @@ function getBaseTypographyPt(settings: PdfRenderOptions["settings"]): {
   return { labelPt: SIZE_LABEL, addressPt: SIZE_ADDRESS, centerPt: 15 };
 }
 
+/** Merge/wrap overflow address lines instead of failing PDF generation. */
+function capPdfAddressLines(
+  doc: { splitTextToSize: (s: string, w: number) => string[] },
+  lines: string[],
+  maxW: number,
+  maxLines: number
+): string[] {
+  if (lines.length <= maxLines) return lines;
+  const head = lines.slice(0, maxLines - 1);
+  const overflow = lines.slice(maxLines - 1).join(" ");
+  const tailWrapped = doc.splitTextToSize(overflow, maxW);
+  const combined = [...head, ...tailWrapped];
+  if (combined.length <= maxLines) return combined;
+  return [...head, combined.slice(maxLines - 1).join(" ")];
+}
+
 /** Keep FROM/TO/logo inside one split vertically (shift only; never trim lines). */
 export function layoutBlocksInSection(
   fromYBase: number,
@@ -646,6 +662,7 @@ export function layoutBlocksInSection(
   const toLines = [...toLinesIn];
   const topLimit = VERTICAL_OFFSET;
   const bottomLimit = SECTION_H - VERTICAL_OFFSET;
+  const effectiveLogoHalf = Math.max(logoHalfH, centerBlockHalfH);
 
   const blockBottom = (yBase: number, lineCount: number): number =>
     lineCount > 0
@@ -654,40 +671,42 @@ export function layoutBlocksInSection(
 
   let fromY = fromYBase;
   let toY = toYBase;
-  let logoY = logoCenterYRel;
+  // Large logo box must stay inside section — clamp center Y before shifting text.
+  let logoY = clamp(
+    logoCenterYRel,
+    topLimit + effectiveLogoHalf,
+    bottomLimit - effectiveLogoHalf
+  );
 
-  const logoTop = logoY - logoHalfH;
-  if (logoTop < topLimit) {
-    logoY += topLimit - logoTop;
-  }
+  const measureBottoms = () => {
+    const fromBottom = blockBottom(fromY, fromLines.length);
+    const toBottom = blockBottom(toY, toLines.length);
+    const logoBottom = logoY + effectiveLogoHalf;
+    const maxBottom = Math.max(fromBottom, toBottom, logoBottom);
+    return { fromBottom, toBottom, logoBottom, maxBottom };
+  };
 
-  let fromBottom = blockBottom(fromY, fromLines.length);
-  let toBottom = blockBottom(toY, toLines.length);
-  let logoBottom = logoY + Math.max(logoHalfH, centerBlockHalfH);
-  let maxBottom = Math.max(fromBottom, toBottom, logoBottom);
+  let { maxBottom } = measureBottoms();
 
   if (maxBottom > bottomLimit) {
-    let shiftUp = maxBottom - bottomLimit;
-    shiftUp = Math.min(
-      shiftUp,
+    const overflow = maxBottom - bottomLimit;
+    const shiftUp = Math.min(
+      overflow,
       Math.max(0, fromY - topLimit),
-      Math.max(0, toY - topLimit)
+      Math.max(0, toY - topLimit),
+      Math.max(0, logoY - (topLimit + effectiveLogoHalf))
     );
     fromY -= shiftUp;
     toY -= shiftUp;
     logoY -= shiftUp;
-
-    fromBottom = blockBottom(fromY, fromLines.length);
-    toBottom = blockBottom(toY, toLines.length);
-    logoBottom = logoY + Math.max(logoHalfH, centerBlockHalfH);
-    maxBottom = Math.max(fromBottom, toBottom, logoBottom);
+    maxBottom = measureBottoms().maxBottom;
   }
 
   const fits =
     maxBottom <= bottomLimit &&
     fromY >= topLimit &&
     toY >= topLimit &&
-    logoY - logoHalfH >= topLimit;
+    logoY - effectiveLogoHalf >= topLimit;
 
   return { fromY, toY, logoCenterYRel: logoY, fromLines, toLines, fits };
 }
@@ -733,58 +752,18 @@ function measureOrderSectionLayout(
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSizePt);
 
-  const fromLines = getPdfAddressLines(doc, fromSource, maxWFrom);
-  const toLines = getPdfAddressLines(doc, toSource, maxWTo);
-
-  if (fromLines.length > MAX_ADDRESS_LINES || toLines.length > MAX_ADDRESS_LINES) {
-    return {
-      fits: false,
-      layout: {
-        fromY: 0,
-        toY: 0,
-        logoCenterYRel: 0,
-        fromLines,
-        toLines,
-        fits: false,
-      },
-      centerBlockHalfH: LOGO_MAX_H_MM / 2,
-    };
-  }
-
-  if (typeof doc.getTextWidth === "function") {
-    for (const line of fromLines) {
-      if (doc.getTextWidth(line) > maxWFrom - 0.5) {
-        return {
-          fits: false,
-          layout: {
-            fromY: 0,
-            toY: 0,
-            logoCenterYRel: 0,
-            fromLines,
-            toLines,
-            fits: false,
-          },
-          centerBlockHalfH: LOGO_MAX_H_MM / 2,
-        };
-      }
-    }
-    for (const line of toLines) {
-      if (doc.getTextWidth(line) > maxWTo - 0.5) {
-        return {
-          fits: false,
-          layout: {
-            fromY: 0,
-            toY: 0,
-            logoCenterYRel: 0,
-            fromLines,
-            toLines,
-            fits: false,
-          },
-          centerBlockHalfH: LOGO_MAX_H_MM / 2,
-        };
-      }
-    }
-  }
+  const fromLines = capPdfAddressLines(
+    doc,
+    getPdfAddressLines(doc, fromSource, maxWFrom),
+    maxWFrom,
+    MAX_ADDRESS_LINES
+  );
+  const toLines = capPdfAddressLines(
+    doc,
+    getPdfAddressLines(doc, toSource, maxWTo),
+    maxWTo,
+    MAX_ADDRESS_LINES
+  );
 
   const sectionH = SECTION_H;
   /** Label baseline; first address line is +6 mm (default 8 → address starts at 14 mm). */
@@ -793,16 +772,22 @@ function measureOrderSectionLayout(
   const placement = options.settings?.placement ?? "bottom";
   const logoYSetting =
     options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
-  const logoCenterYRel =
+  const centerBlockHalfH = measureCenterBlockHalfH(doc, options, centerTextSizePt);
+  const logoHalfH = Math.max(LOGO_MAX_H_MM / 2, centerBlockHalfH);
+  let logoCenterYRel =
     logoYSetting != null
       ? logoYSetting
       : placement === "top"
         ? 28
         : SECTION_H - 28;
+  logoCenterYRel = clamp(
+    logoCenterYRel,
+    VERTICAL_OFFSET + logoHalfH,
+    SECTION_H - VERTICAL_OFFSET - logoHalfH
+  );
 
   const lineHeightMm = addressSizePt * 0.5;
   const labelToAddressGap = 6;
-  const centerBlockHalfH = measureCenterBlockHalfH(doc, options, centerTextSizePt);
 
   const layout = layoutBlocksInSection(
     fromYBase,
