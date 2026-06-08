@@ -135,8 +135,15 @@ export default function ApiSettingsPage() {
     if (result.errors.length) {
       setError(result.errors.join(" "));
     }
-    if (result.imported > 0) {
-      setInfo(t("Imported {count} website order(s).").replace("{count}", String(result.imported)));
+    if (result.imported > 0 || result.updated > 0) {
+      const parts: string[] = [];
+      if (result.imported > 0) {
+        parts.push(t("Imported {count} website order(s).").replace("{count}", String(result.imported)));
+      }
+      if (result.updated > 0) {
+        parts.push(t("Updated {count} order payment status.").replace("{count}", String(result.updated)));
+      }
+      setInfo(parts.join(" "));
     } else if (!result.errors.length) {
       setInfo(
         result.skipped > 0

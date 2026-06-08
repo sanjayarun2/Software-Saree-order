@@ -1,4 +1,5 @@
-import type { OrderInsert } from "./db-types";
+import type { Order, OrderInsert } from "./db-types";
+import { normalizeWebsitePaymentStatus } from "./order-payment-status";
 import {
   type ApiIntegrationRow,
   DEFAULT_VELO_WEBSITE_BASE_URL,
@@ -6,7 +7,7 @@ import {
   updateApiIntegrationSyncState,
 } from "./api-settings-supabase";
 import { getAllOrders } from "./local-store";
-import { createOrder, getSuggestions } from "./order-service";
+import { createOrder, getSuggestions, updateOrder } from "./order-service";
 import { buildSuggestionsFromOrders } from "./order-suggestions";
 import { supabase } from "./supabase";
 
@@ -16,6 +17,7 @@ const POLL_LIMIT = 50;
 
 export type VeloWebsitePollResult = {
   imported: number;
+  updated: number;
   skipped: number;
   errors: string[];
 };
@@ -50,6 +52,8 @@ type VeloWebsiteOrderPayload = {
   paidAt?: string;
   orderDate?: string;
   bookedAt?: string;
+  paymentStatus?: string;
+  payment_status?: string;
 };
 
 type VeloOrdersApiResponse = {
@@ -189,24 +193,28 @@ async function getDefaultSenderAddress(userId: string): Promise<string> {
   return "Shop Address";
 }
 
-async function isExternalOrderImported(userId: string, externalOrderId: string): Promise<boolean> {
+async function findImportedWebsiteOrder(
+  userId: string,
+  externalOrderId: string
+): Promise<Order | null> {
   const map = await getAllOrders(userId);
-  if (Object.values(map).some((o) => o.external_order_id === externalOrderId)) {
-    return true;
-  }
+  const local = Object.values(map).find(
+    (o) => o.external_order_id === externalOrderId
+  );
+  if (local) return local;
 
   const { data, error } = await supabase
     .from("orders")
-    .select("id")
+    .select("*")
     .eq("user_id", userId)
     .eq("external_order_id", externalOrderId)
     .maybeSingle();
 
   if (error) {
-    console.warn("[VeloSync] duplicate check failed:", error.message);
-    return false;
+    console.warn("[VeloSync] find imported order failed:", error.message);
+    return null;
   }
-  return !!data;
+  return (data as Order) ?? null;
 }
 
 function mapWebsiteOrderToInsert(
@@ -233,6 +241,9 @@ function mapWebsiteOrderToInsert(
     quantity: totalQty,
     order_source: "website",
     external_order_id: externalOrderId,
+    payment_status: normalizeWebsitePaymentStatus(
+      order.paymentStatus ?? order.payment_status
+    ),
   };
 }
 
@@ -365,10 +376,17 @@ async function importOrdersForIntegration(
   userId: string,
   integration: ApiIntegrationRow,
   senderDetails: string
-): Promise<{ imported: number; skipped: number; nextSince: string | null; error: string | null }> {
+): Promise<{
+  imported: number;
+  updated: number;
+  skipped: number;
+  nextSince: string | null;
+  error: string | null;
+}> {
   const data = await fetchVeloOrders(integration);
   const orders = Array.isArray(data.orders) ? data.orders : [];
   let imported = 0;
+  let updated = 0;
   let skipped = 0;
 
   for (const raw of orders) {
@@ -378,8 +396,17 @@ async function importOrdersForIntegration(
       continue;
     }
 
-    if (await isExternalOrderImported(userId, externalId)) {
-      skipped++;
+    const paymentStatus = normalizeWebsitePaymentStatus(
+      raw.paymentStatus ?? raw.payment_status
+    );
+    const existing = await findImportedWebsiteOrder(userId, externalId);
+    if (existing) {
+      if (existing.payment_status !== paymentStatus) {
+        await updateOrder(userId, existing.id, { payment_status: paymentStatus });
+        updated++;
+      } else {
+        skipped++;
+      }
       continue;
     }
 
@@ -398,17 +425,22 @@ async function importOrdersForIntegration(
   }
 
   const nextSince = data.nextSince?.trim() || null;
-  return { imported, skipped, nextSince, error: null };
+  return { imported, updated, skipped, nextSince, error: null };
 }
 
 export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsitePollResult> {
-  if (pollInFlight) return { imported: 0, skipped: 0, errors: [] };
+  if (pollInFlight) return { imported: 0, updated: 0, skipped: 0, errors: [] };
   if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return { imported: 0, skipped: 0, errors: ["Offline"] };
+    return { imported: 0, updated: 0, skipped: 0, errors: ["Offline"] };
   }
 
   pollInFlight = true;
-  const result: VeloWebsitePollResult = { imported: 0, skipped: 0, errors: [] };
+  const result: VeloWebsitePollResult = {
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    errors: [],
+  };
 
   try {
     const integrations = await getEnabledApiIntegrations(userId);
@@ -421,6 +453,7 @@ export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsite
       try {
         const batch = await importOrdersForIntegration(userId, integration, senderDetails);
         result.imported += batch.imported;
+        result.updated += batch.updated;
         result.skipped += batch.skipped;
 
         await updateApiIntegrationSyncState(integration.id, {
@@ -441,7 +474,7 @@ export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsite
     pollInFlight = false;
   }
 
-  if (result.imported > 0 && typeof window !== "undefined") {
+  if ((result.imported > 0 || result.updated > 0) && typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("velo-website-orders-imported", { detail: result }));
   }
 

@@ -1,5 +1,7 @@
 export type OrderStatus = "PENDING" | "DESPATCHED";
 export type OrderSource = "manual" | "website";
+/** Website orders only: paid checkout vs unpaid / failed / pending attempt. */
+export type OrderPaymentStatus = "paid" | "unpaid";
 
 export interface Order {
   id: string;
@@ -15,6 +17,7 @@ export interface Order {
   tracking_number?: string | null;
   order_source?: OrderSource | null;
   external_order_id?: string | null;
+  payment_status?: OrderPaymentStatus | null;
   created_at: string;
   updated_at: string;
   user_id: string;
@@ -32,4 +35,5 @@ export interface OrderInsert {
   quantity?: number | null;
   order_source?: OrderSource;
   external_order_id?: string | null;
+  payment_status?: OrderPaymentStatus | null;
 }

@@ -20,6 +20,10 @@ import {
   updateOrderStatus as svcUpdateOrderStatus,
 } from "@/lib/order-service";
 import type { Order, OrderStatus } from "@/lib/db-types";
+import {
+  isPaidOrderPayment,
+  shouldShowPaymentBadge,
+} from "@/lib/order-payment-status";
 
 function getAddressSummary(text: string, maxLen = 45): string {
   const first = (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "";
@@ -492,6 +496,17 @@ export default function OrdersPage() {
                         {isWebsiteOrder && (
                           <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
                             {t("Web")}
+                          </span>
+                        )}
+                        {shouldShowPaymentBadge(order.order_source, order.payment_status) && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                              isPaidOrderPayment(order.payment_status)
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                            }`}
+                          >
+                            {isPaidOrderPayment(order.payment_status) ? t("Paid") : t("Unpaid")}
                           </span>
                         )}
                         {order.status === "DESPATCHED" && (
