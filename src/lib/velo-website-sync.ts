@@ -23,7 +23,7 @@ export type VeloWebsitePollResult = {
 type VeloLineItem = {
   name?: string;
   title?: string;
-  productName?: string;
+  productName?: string | null;
   product?: string | { name?: string; title?: string; productName?: string };
   quantity?: number;
   qty?: number;
@@ -58,6 +58,16 @@ type VeloOrdersApiResponse = {
 };
 
 let pollInFlight = false;
+
+const VELO_PROXY_FUNCTION = "velo-website-orders";
+
+function formatFetchError(err: unknown): string {
+  const msg = (err as Error).message || "Connection failed";
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+    return "Cannot reach Velo website API from this device (network/CORS). Deploy the velo-website-orders Supabase Edge Function, or update CORS on the shop API.";
+  }
+  return msg;
+}
 
 function normalizeBaseUrl(url: string): string {
   return (url || DEFAULT_VELO_WEBSITE_BASE_URL).replace(/\/$/, "");
@@ -226,6 +236,84 @@ function mapWebsiteOrderToInsert(
   };
 }
 
+async function fetchVeloOrdersViaProxy(
+  opts: {
+    integrationId?: string;
+    apiKey?: string;
+    apiBaseUrl?: string;
+    since: string;
+    limit: number;
+  }
+): Promise<VeloOrdersApiResponse> {
+  const { data, error } = await supabase.functions.invoke(VELO_PROXY_FUNCTION, {
+    body: {
+      integration_id: opts.integrationId,
+      api_key: opts.apiKey,
+      api_base_url: opts.apiBaseUrl,
+      since: opts.since,
+      limit: opts.limit,
+    },
+  });
+
+  if (error) {
+    if (/function not found|404|not deployed/i.test(error.message)) {
+      throw new Error(
+        "Supabase proxy not deployed. Deploy function velo-website-orders in your Supabase project."
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  if (data && typeof data === "object" && "error" in data && data.error) {
+    throw new Error(String(data.error));
+  }
+
+  return data as VeloOrdersApiResponse;
+}
+
+async function fetchVeloOrdersDirect(
+  integration: ApiIntegrationRow,
+  since: string
+): Promise<VeloOrdersApiResponse> {
+  const base = normalizeBaseUrl(integration.api_base_url);
+  const url = `${base}/api/velo/orders?since=${encodeURIComponent(since)}&limit=${POLL_LIMIT}`;
+
+  const res = await fetch(url, {
+    headers: { "x-velo-key": integration.api_key.trim() },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Velo API ${res.status}: failed to fetch orders`);
+  }
+
+  return (await res.json()) as VeloOrdersApiResponse;
+}
+
+async function fetchVeloOrders(
+  integration: ApiIntegrationRow
+): Promise<VeloOrdersApiResponse> {
+  const since = integration.last_since || EPOCH_SINCE;
+
+  try {
+    return await fetchVeloOrdersViaProxy({
+      integrationId: integration.id,
+      since,
+      limit: POLL_LIMIT,
+    });
+  } catch (proxyErr) {
+    const proxyMsg = (proxyErr as Error).message || "";
+    if (!/not deployed|function not found/i.test(proxyMsg)) {
+      throw proxyErr;
+    }
+    try {
+      return await fetchVeloOrdersDirect(integration, since);
+    } catch (directErr) {
+      throw new Error(formatFetchError(directErr));
+    }
+  }
+}
+
 export async function testVeloWebsiteConnection(
   apiKey: string,
   apiBaseUrl?: string
@@ -234,6 +322,25 @@ export async function testVeloWebsiteConnection(
   if (!key) return { ok: false, error: "API key is required." };
 
   const base = normalizeBaseUrl(apiBaseUrl ?? DEFAULT_VELO_WEBSITE_BASE_URL);
+
+  try {
+    const data = await fetchVeloOrdersViaProxy({
+      apiKey: key,
+      apiBaseUrl: base,
+      since: EPOCH_SINCE,
+      limit: 1,
+    });
+    if (!data || (!Array.isArray(data.orders) && !data.nextSince)) {
+      return { ok: false, error: "Unexpected API response format." };
+    }
+    return { ok: true };
+  } catch (proxyErr) {
+    const proxyMsg = (proxyErr as Error).message || "";
+    if (!/not deployed|function not found/i.test(proxyMsg)) {
+      return { ok: false, error: proxyMsg || "Connection failed." };
+    }
+  }
+
   const url = `${base}/api/velo/orders?since=${encodeURIComponent(EPOCH_SINCE)}&limit=1`;
 
   try {
@@ -250,27 +357,8 @@ export async function testVeloWebsiteConnection(
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: (e as Error).message || "Connection failed." };
+    return { ok: false, error: formatFetchError(e) };
   }
-}
-
-async function fetchVeloOrders(
-  integration: ApiIntegrationRow
-): Promise<VeloOrdersApiResponse> {
-  const base = normalizeBaseUrl(integration.api_base_url);
-  const since = integration.last_since || EPOCH_SINCE;
-  const url = `${base}/api/velo/orders?since=${encodeURIComponent(since)}&limit=${POLL_LIMIT}`;
-
-  const res = await fetch(url, {
-    headers: { "x-velo-key": integration.api_key.trim() },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`Velo API ${res.status}: failed to fetch orders`);
-  }
-
-  return (await res.json()) as VeloOrdersApiResponse;
 }
 
 async function importOrdersForIntegration(
