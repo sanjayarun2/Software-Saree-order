@@ -1,4 +1,5 @@
 export type OrderStatus = "PENDING" | "DESPATCHED";
+export type OrderSource = "manual" | "website";
 
 export interface Order {
   id: string;
@@ -12,6 +13,8 @@ export interface Order {
   status: OrderStatus;
   quantity?: number | null;
   tracking_number?: string | null;
+  order_source?: OrderSource | null;
+  external_order_id?: string | null;
   created_at: string;
   updated_at: string;
   user_id: string;
@@ -27,4 +30,6 @@ export interface OrderInsert {
   status: OrderStatus;
   user_id: string;
   quantity?: number | null;
+  order_source?: OrderSource;
+  external_order_id?: string | null;
 }

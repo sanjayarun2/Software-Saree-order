@@ -37,6 +37,14 @@ function AdminIconOutlined({ className }: { className?: string }) {
   );
 }
 
+function ApiIconOutlined({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+    </svg>
+  );
+}
+
 function ProductCodeIconOutlined({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -177,6 +185,17 @@ export default function SettingsPage() {
           >
             <PrinterIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
             <span className="flex-1 text-base font-medium">{t("Printer Setup")}</span>
+            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+          <div className="border-t border-white/30 dark:border-white/10" />
+          <Link
+            href="/settings/api"
+            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+          >
+            <ApiIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+            <span className="flex-1 text-base font-medium">{t("API Settings")}</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>

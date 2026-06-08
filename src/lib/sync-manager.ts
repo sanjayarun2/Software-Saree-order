@@ -1,4 +1,5 @@
 import { flushOutbox, syncDashboardOrders, syncOrders } from "./order-service";
+import { pollVeloWebsiteOrders } from "./velo-website-sync";
 import { mergeOrders } from "./local-store";
 import { evictStaleEntries } from "./local-store";
 import { supabase } from "./supabase";
@@ -8,6 +9,8 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 let initialized = false;
 let userId: string | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let websitePollTimer: ReturnType<typeof setInterval> | null = null;
+const WEBSITE_POLL_INTERVAL_MS = 15_000;
 let realtimeChannel: RealtimeChannel | null = null;
 let syncInFlight = false;
 
@@ -18,12 +21,24 @@ function isNetworkError(err: unknown): boolean {
   return false;
 }
 
+async function safeWebsitePoll() {
+  if (!userId) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+  try {
+    await pollVeloWebsiteOrders(userId);
+  } catch (err) {
+    console.warn("[SyncManager] website poll failed:", err);
+  }
+}
+
 async function safeSync() {
   if (!userId || syncInFlight) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   syncInFlight = true;
   try {
     await flushOutbox(userId);
+    await safeWebsitePoll();
     await syncDashboardOrders(userId);
   } catch (err) {
     if (isNetworkError(err) && userId) {
@@ -76,12 +91,22 @@ function startPolling() {
     if (document.visibilityState !== "visible") return;
     safeSync();
   }, POLL_INTERVAL_MS);
+
+  websitePollTimer = setInterval(() => {
+    if (!userId) return;
+    if (document.visibilityState !== "visible") return;
+    safeWebsitePoll();
+  }, WEBSITE_POLL_INTERVAL_MS);
 }
 
 function stopPolling() {
   if (pollTimer != null) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (websitePollTimer != null) {
+    clearInterval(websitePollTimer);
+    websitePollTimer = null;
   }
 }
 
@@ -141,6 +166,7 @@ export function initSyncManager(uid: string): void {
 
   if (navigator.onLine) {
     setTimeout(() => safeSync(), 1500);
+    setTimeout(() => safeWebsitePoll(), 2500);
   }
 }
 

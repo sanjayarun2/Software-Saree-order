@@ -185,6 +185,14 @@ export default function OrdersPage() {
     }
   }, [user, status, allOrders, fromDate, toDate]);
 
+  useEffect(() => {
+    const onImported = () => {
+      void fetchOrders();
+    };
+    window.addEventListener("velo-website-orders-imported", onImported);
+    return () => window.removeEventListener("velo-website-orders-imported", onImported);
+  }, [fetchOrders]);
+
   const filteredOrders = React.useMemo(() => {
     let list = orders.filter((o) => o.status === status);
     const raw = query.trim();
@@ -410,8 +418,17 @@ export default function OrdersPage() {
                 </p>
               </BentoCard>
             ) : (
-              filteredOrders.map((order, i) => (
-                <BentoCard key={order.id} className="flex items-center justify-between gap-4 py-4">
+              filteredOrders.map((order, i) => {
+                const isWebsiteOrder = order.order_source === "website";
+                return (
+                <BentoCard
+                  key={order.id}
+                  className={`flex items-center justify-between gap-4 py-4 ${
+                    isWebsiteOrder
+                      ? "border-sky-300/80 bg-sky-50/70 dark:border-sky-700/60 dark:bg-sky-950/40"
+                      : ""
+                  }`}
+                >
                   <div
                     className={`flex min-w-0 flex-1 items-center gap-4 ${status === "PENDING" ? "touch-manipulation select-none" : ""}`}
                     style={
@@ -471,6 +488,11 @@ export default function OrdersPage() {
                         </span>
                         {(order.quantity != null && Number(order.quantity) >= 1) && (
                           <span>{t("Qty")}: {Number(order.quantity)}</span>
+                        )}
+                        {isWebsiteOrder && (
+                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+                            {t("Web")}
+                          </span>
                         )}
                         {order.status === "DESPATCHED" && (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -533,7 +555,8 @@ export default function OrdersPage() {
                     )}
                   </div>
                 </BentoCard>
-              ))
+                );
+              })
             )}
           </div>
         )}
