@@ -162,7 +162,8 @@ function buildRecipientDetails(order: VeloWebsiteOrderPayload, externalId: strin
     parts.push(...productLines);
   }
 
-  parts.push(`Web #${externalId}`);
+  const idChunks = externalId.match(/.{1,12}/g) ?? [externalId];
+  parts.push(`Web # ${idChunks.join(" ")}`);
   return parts.join("\n").slice(0, MAX_RECIPIENT_LEN);
 }
 
