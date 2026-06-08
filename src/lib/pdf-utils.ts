@@ -639,22 +639,6 @@ function softBreakLongRuns(text: string, chunkSize = 14): string {
     .join("");
 }
 
-function linesExceedMaxWidth(
-  doc: DocShape,
-  lines: string[],
-  maxW: number,
-  fontStyle: "bold" | "normal",
-  fontSizePt: number
-): boolean {
-  if (typeof doc.getTextWidth !== "function") return false;
-  doc.setFont(FONT_BODY, fontStyle);
-  doc.setFontSize(fontSizePt);
-  for (const line of lines) {
-    if (doc.getTextWidth(line) > maxW + 0.5) return true;
-  }
-  return false;
-}
-
 type SectionVerticalLayout = {
   fromY: number;
   toY: number;
@@ -676,22 +660,24 @@ function getBaseTypographyPt(settings: PdfRenderOptions["settings"]): {
   return { labelPt: SIZE_LABEL, addressPt: SIZE_ADDRESS, centerPt: 15 };
 }
 
-/** Merge/wrap overflow address lines instead of failing PDF generation. */
-function capPdfAddressLines(
+/** Wrap every line to column width, then cap line count without leaving overflow tokens. */
+function fitAddressLinesToColumn(
   doc: { splitTextToSize: (s: string, w: number) => string[] },
-  lines: string[],
+  text: string,
   maxW: number,
   maxLines: number
 ): string[] {
-  if (lines.length <= maxLines) return lines;
-  const head = lines.slice(0, maxLines - 1);
-  const overflow = softBreakLongRuns(lines.slice(maxLines - 1).join(" "));
-  const tailWrapped = doc.splitTextToSize(overflow, maxW);
+  const wrapped = getPdfAddressLines(doc, text, maxW);
+  if (wrapped.length <= maxLines) return wrapped;
+
+  const head = wrapped.slice(0, maxLines - 1);
+  const tailSource = softBreakLongRuns(wrapped.slice(maxLines - 1).join(" "));
+  const tailWrapped = doc.splitTextToSize(tailSource, maxW);
   const combined = [...head, ...tailWrapped];
   if (combined.length <= maxLines) return combined;
-  const tail = softBreakLongRuns(combined.slice(maxLines - 1).join(" "));
-  const lastWrapped = doc.splitTextToSize(tail, maxW);
-  return [...head, lastWrapped[0] ?? tail.slice(0, 40)];
+
+  const lastChunk = doc.splitTextToSize(tailSource, maxW)[0] ?? tailSource;
+  return [...head, lastChunk];
 }
 
 /** Keep FROM/TO/logo inside one split vertically (shift only; never trim lines). */
@@ -750,6 +736,13 @@ export function layoutBlocksInSection(
     maxBottom = measureBottoms().maxBottom;
   }
 
+  // Last resort: pin labels to top margin if a small nudge still overflows.
+  if (maxBottom > bottomLimit && (fromY > topLimit || toY > topLimit)) {
+    fromY = topLimit;
+    toY = topLimit;
+    maxBottom = measureBottoms().maxBottom;
+  }
+
   const fits =
     maxBottom <= bottomLimit &&
     fromY >= topLimit &&
@@ -795,18 +788,8 @@ function measureOrderSectionLayout(
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSizePt);
 
-  const fromLines = capPdfAddressLines(
-    doc,
-    getPdfAddressLines(doc, fromSource, maxWFrom),
-    maxWFrom,
-    MAX_ADDRESS_LINES
-  );
-  const toLines = capPdfAddressLines(
-    doc,
-    getPdfAddressLines(doc, toSource, maxWTo),
-    maxWTo,
-    MAX_ADDRESS_LINES
-  );
+  const fromLines = fitAddressLinesToColumn(doc, fromSource, maxWFrom, MAX_ADDRESS_LINES);
+  const toLines = fitAddressLinesToColumn(doc, toSource, maxWTo, MAX_ADDRESS_LINES);
 
   const sectionH = SECTION_H;
   /** Label baseline; first address line is +6 mm (default 8 → address starts at 14 mm). */
@@ -844,11 +827,7 @@ function measureOrderSectionLayout(
     centerBlockHalfH
   );
 
-  const widthFits =
-    !linesExceedMaxWidth(doc, fromLines, maxWFrom, textBold ? "bold" : "normal", addressSizePt) &&
-    !linesExceedMaxWidth(doc, toLines, maxWTo, textBold ? "bold" : "normal", addressSizePt);
-
-  return { fits: layout.fits && widthFits, layout, centerBlockHalfH };
+  return { fits: layout.fits, layout, centerBlockHalfH };
 }
 
 /** Shrink fonts in small steps until the label fits; otherwise ask user to shorten text. */
@@ -1005,11 +984,36 @@ export function normalizeAddressBlock(text: string): string {
   return result.join("\n");
 }
 
+/** Drop website order item lines (--- / Items: / product rows); keep name, address, Web #. */
+function stripPdfItemDetails(text: string): string {
+  const lines = text.split("\n");
+  const kept: string[] = [];
+  let inItemsSection = false;
+
+  for (const line of lines) {
+    const trim = line.trim();
+    if (trim === "---" || /^Items:$/i.test(trim)) {
+      inItemsSection = true;
+      continue;
+    }
+    if (inItemsSection) {
+      if (/^Web\s*#/i.test(trim)) {
+        inItemsSection = false;
+        kept.push(line);
+      }
+      continue;
+    }
+    kept.push(line);
+  }
+
+  return kept.join("\n");
+}
+
 /** Address text ready for PDF: strip empty lines, optionally normalize. */
 export function prepareAddressForPdf(text: string, normalize: boolean): string {
   let stripped = stripEmptyAddressLines(text);
   if (!stripped) return "";
-  stripped = stripped
+  stripped = stripPdfItemDetails(stripped)
     .split("\n")
     .map((line) =>
       line.replace(/^Web\s*#\s*(\S+)/i, (_match, id: string) => {
@@ -1091,20 +1095,19 @@ function computeToShiftMm(
     const maxWTo = getRightColumnMaxTextWidth(toShift);
     toLines = getPdfAddressLines(doc, toSource, maxWTo);
     const textBold = options.settings?.text_bold !== false;
-    if (
-      typeof doc.getTextWidth !== "function" ||
-      !linesExceedMaxWidth(doc, toLines, maxWTo, textBold ? "bold" : "normal", addressSizePt)
-    ) {
-      return toShift;
-    }
-    let maxLineWidth = 0;
+    if (typeof doc.getTextWidth !== "function") return toShift;
+
     doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
     doc.setFontSize(addressSizePt);
+
+    let maxLineWidth = 0;
     for (const line of toLines) {
-      maxLineWidth = Math.max(maxLineWidth, doc.getTextWidth!(line));
+      maxLineWidth = Math.max(maxLineWidth, doc.getTextWidth(line));
     }
-    const overflow = maxLineWidth - (maxWTo - 0.5);
-    const nextShift = capToShiftMm(toShift + overflow + 1);
+    if (maxLineWidth <= maxWTo - 0.25) return toShift;
+
+    const overflow = maxLineWidth - (maxWTo - 0.25);
+    const nextShift = capToShiftMm(toShift + overflow + 0.5);
     if (nextShift <= toShift) break;
     toShift = nextShift;
   }
@@ -1213,9 +1216,9 @@ function drawOrderLabel(
   doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
   doc.setFontSize(addressSize);
   const maxWToDraw = getRightColumnMaxTextWidth(resolved.toShiftMm);
-  const safeToLines = capPdfAddressLines(
+  const safeToLines = fitAddressLinesToColumn(
     doc,
-    toLines.flatMap((line) => doc.splitTextToSize(softBreakLongRuns(line), maxWToDraw)),
+    toLines.join("\n"),
     maxWToDraw,
     MAX_ADDRESS_LINES
   );
