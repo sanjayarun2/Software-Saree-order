@@ -59,9 +59,12 @@ function delay(ms: number): Promise<void> {
  * Uses longer delays between web downloads to prevent browser throttling for large batches.
  */
 export async function saveProductCodeImagesToGalleryOrDownloads(
-  items: { blob: Blob; filename: string }[]
+  items: { blob: Blob; filename: string }[],
+  options?: { folderName?: string }
 ): Promise<boolean> {
   if (typeof window === "undefined" || items.length === 0) return false;
+
+  const folderName = options?.folderName ?? "VeloProductCodes";
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -70,7 +73,7 @@ export async function saveProductCodeImagesToGalleryOrDownloads(
       for (let i = 0; i < items.length; i++) {
         const { blob, filename } = items[i]!;
         const buf = await blob.arrayBuffer();
-        const path = `VeloProductCodes/${day}/${filename.replace(/[/\\]/g, "_")}`;
+        const path = `${folderName}/${day}/${filename.replace(/[/\\]/g, "_")}`;
         await Filesystem.writeFile({
           path,
           data: arrayBufferToBase64(buf),

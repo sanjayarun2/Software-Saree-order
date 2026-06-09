@@ -1,0 +1,472 @@
+"use client";
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
+import { ensureProductCodePrefix } from "@/lib/product-code-prefix-supabase";
+import {
+  blobToBase64Payload,
+  deleteBulkProductBatchImages,
+  putBulkProductBatchImages,
+} from "@/lib/bulk-product-batch-images";
+import { prependBulkProductBatch } from "@/lib/bulk-product-batch-storage";
+import { reserveCodesForDay } from "@/lib/product-code-storage";
+import {
+  downloadBlob,
+  extensionForBlob,
+  gcPause,
+  safeFilename,
+  stampProductCodeOnFile,
+} from "@/lib/image-product-code";
+import { markBatchDownloaded } from "@/lib/product-code-gallery";
+import { revokeBulkProductsDraftFiles, useBulkProductsDraft } from "../../bulk-products-context";
+import { useLanguage } from "@/lib/language-context";
+
+function localYyyyMmDd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export default function BulkProductsProcessPage() {
+  const { t } = useLanguage();
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const { pickDraft, setPickDraft } = useBulkProductsDraft();
+
+  const [status, setStatus] = useState<"generating" | "ready" | "error">("generating");
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [codes, setCodes] = useState<string[]>([]);
+  const [stampedBlobs, setStampedBlobs] = useState<Blob[]>([]);
+  const [originals, setOriginals] = useState<File[]>([]);
+  const [quantities, setQuantities] = useState<number[]>([]);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+
+  const form = pickDraft?.form;
+  const namePrefix = form?.namePrefix.trim() ?? "";
+
+  const previewUrls = useMemo(
+    () => stampedBlobs.map((b) => URL.createObjectURL(b)),
+    [stampedBlobs]
+  );
+
+  useEffect(() => {
+    return () => previewUrls.forEach((u) => URL.revokeObjectURL(u));
+  }, [previewUrls]);
+
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/login/");
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!pickDraft?.files.length || !pickDraft.form.namePrefix.trim()) {
+      router.replace("/products/?tab=bulk");
+    }
+  }, [authLoading, pickDraft, router]);
+
+  const filesKey = useMemo(
+    () =>
+      pickDraft?.files.length
+        ? `${pickDraft.form.namePrefix}|${pickDraft.files.map((f) => `${f.name}-${f.lastModified}`).join("|")}`
+        : "",
+    [pickDraft]
+  );
+
+  const genEpochRef = useRef(0);
+  const pickDraftRef = useRef(pickDraft);
+  pickDraftRef.current = pickDraft;
+  const userId = user?.id;
+
+  useEffect(() => {
+    const draft = pickDraftRef.current;
+    if (!filesKey || authLoading || !userId || !draft?.files.length) return;
+
+    const draftFiles = draft.files;
+    const uid = userId;
+    const myEpoch = ++genEpochRef.current;
+    let cancelled = false;
+
+    const timer = window.setTimeout(() => {
+      if (myEpoch !== genEpochRef.current) return;
+
+      void (async () => {
+        setStatus("generating");
+        setProgress(0);
+        setError(null);
+
+        try {
+          const files: File[] = [];
+          for (const draftFile of draftFiles) {
+            const response = await fetch(draftFile.objectUrl);
+            if (!response.ok) {
+              throw new Error(`${draftFile.name}: Could not access selected image`);
+            }
+            const blob = await response.blob();
+            files.push(
+              new File([blob], draftFile.name, {
+                type: draftFile.type || blob.type || "image/jpeg",
+                lastModified: draftFile.lastModified || Date.now(),
+              })
+            );
+          }
+          if (cancelled || myEpoch !== genEpochRef.current) return;
+          if (!files.length) {
+            throw new Error("Selected photos are no longer available. Please pick them again.");
+          }
+
+          const anchorDate = new Date();
+          const prefix = await ensureProductCodePrefix();
+          if (cancelled || myEpoch !== genEpochRef.current) return;
+          const dayKey = localYyyyMmDd(new Date());
+          const { codes: reserved } = await reserveCodesForDay(
+            uid,
+            dayKey,
+            prefix,
+            anchorDate,
+            files.length
+          );
+          if (cancelled || myEpoch !== genEpochRef.current) return;
+
+          const blobs: Blob[] = [];
+          for (let i = 0; i < files.length; i++) {
+            if (cancelled || myEpoch !== genEpochRef.current) return;
+            try {
+              const stamped = await stampProductCodeOnFile(files[i]!, reserved[i]!);
+              blobs.push(stamped);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Could not load image";
+              throw new Error(`${files[i]!.name}: ${msg}`);
+            }
+            setProgress(Math.round(((i + 1) / files.length) * 100));
+            await gcPause(i, files.length);
+          }
+
+          if (cancelled || myEpoch !== genEpochRef.current) return;
+          setCodes(reserved);
+          setStampedBlobs(blobs);
+          setOriginals(files);
+          setQuantities(files.map(() => 1));
+          setStatus("ready");
+        } catch (e) {
+          if (cancelled || myEpoch !== genEpochRef.current) return;
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error("[products/bulk/process]", e);
+          setError(msg || "Something went wrong");
+          setStatus("error");
+        }
+      })();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [filesKey, authLoading, userId]);
+
+  useEffect(() => {
+    if (saved || status !== "ready") return;
+    const onBeforeUnload = (ev: BeforeUnloadEvent) => {
+      ev.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [saved, status]);
+
+  const adjustQty = useCallback((index: number, delta: number) => {
+    setQuantities((prev) =>
+      prev.map((q, i) => {
+        if (i !== index) return q;
+        return Math.min(999, Math.max(1, q + delta));
+      })
+    );
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!user?.id || !form || saved || status !== "ready" || codes.length === 0) return;
+    setSaving(true);
+    const batchId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${codes[0]}`;
+
+    try {
+      const lines = codes.map((code, i) => ({
+        code,
+        qty: quantities[i] ?? 1,
+        productName: `${namePrefix} ${i + 1}`.trim(),
+      }));
+
+      const imageRows = [];
+      for (let i = 0; i < stampedBlobs.length; i++) {
+        const payload = await blobToBase64Payload(stampedBlobs[i]!);
+        imageRows.push({
+          code: codes[i]!,
+          mime: payload.mime,
+          dataBase64: payload.dataBase64,
+        });
+      }
+      await putBulkProductBatchImages(user.id, batchId, imageRows);
+
+      try {
+        await prependBulkProductBatch(user.id, {
+          id: batchId,
+          firstCode: codes[0]!,
+          lastCode: codes[codes.length - 1]!,
+          count: codes.length,
+          createdAt: new Date().toISOString(),
+          lines,
+          form,
+          uploadStatus: "pending",
+        });
+      } catch (batchErr) {
+        await deleteBulkProductBatchImages(user.id, batchId);
+        throw batchErr;
+      }
+
+      for (let i = 0; i < stampedBlobs.length; i++) {
+        const file = originals[i]!;
+        const blob = stampedBlobs[i]!;
+        const code = codes[i]!;
+        const ext = extensionForBlob(file, blob);
+        downloadBlob(blob, safeFilename(code, ext));
+        if ((i + 1) % 5 === 0 && i + 1 < stampedBlobs.length) {
+          await new Promise((r) => setTimeout(r, 1500));
+        } else if (i + 1 < stampedBlobs.length) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+
+      markBatchDownloaded(batchId);
+      setSaved(true);
+      revokeBulkProductsDraftFiles(pickDraft?.files);
+      flushSync(() => setPickDraft(null));
+      router.push("/products/?tab=bulk");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[products/bulk/save]", e);
+      setError(msg || "Save failed");
+    } finally {
+      setSaving(false);
+      setLeaveOpen(false);
+    }
+  }, [
+    user?.id,
+    form,
+    saved,
+    status,
+    codes,
+    quantities,
+    stampedBlobs,
+    originals,
+    namePrefix,
+    pickDraft?.files,
+    setPickDraft,
+    router,
+  ]);
+
+  const goBack = useCallback(() => {
+    if (saved) {
+      router.push("/products/?tab=bulk");
+      return;
+    }
+    if (status === "generating") {
+      if (window.confirm(t("Leave? Generation is not finished."))) {
+        revokeBulkProductsDraftFiles(pickDraft?.files);
+        setPickDraft(null);
+        router.push("/products/?tab=bulk");
+      }
+      return;
+    }
+    if (status === "ready") {
+      setLeaveOpen(true);
+      return;
+    }
+    revokeBulkProductsDraftFiles(pickDraft?.files);
+    setPickDraft(null);
+    router.push("/products/?tab=bulk");
+  }, [saved, status, pickDraft?.files, setPickDraft, router, t]);
+
+  const discardAndLeave = useCallback(() => {
+    setLeaveOpen(false);
+    revokeBulkProductsDraftFiles(pickDraft?.files);
+    setPickDraft(null);
+    router.push("/products/?tab=bulk");
+  }, [pickDraft?.files, setPickDraft, router]);
+
+  if (authLoading || !user) {
+    return <DashboardSkeleton />;
+  }
+
+  if (!pickDraft?.files.length && status === "generating") {
+    return <DashboardSkeleton />;
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+        <button
+          type="button"
+          onClick={goBack}
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 text-slate-700 dark:border-slate-600 dark:text-slate-200"
+          aria-label={t("Back")}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+          {status === "generating"
+            ? t("Generating")
+            : status === "ready"
+              ? t("Review batch")
+              : t("Error")}
+        </h1>
+      </header>
+
+      <div className="mx-auto w-full max-w-lg flex-1 px-4 py-6 pb-32">
+        {form?.description.trim() ? (
+          <p className="mb-4 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            {form.description.trim()}
+          </p>
+        ) : null}
+
+        {status === "generating" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center gap-2">
+              <svg className="h-5 w-5 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-center text-sm font-medium text-slate-600 dark:text-slate-300">
+                {t("Generating product codes…")} {progress}%
+              </p>
+            </div>
+            <div className="relative h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className="h-full rounded-full bg-primary-500 transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {status === "error" && error && (
+          <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            {error}
+          </p>
+        )}
+
+        {status === "ready" && (
+          <ul className="flex flex-col gap-4">
+            {codes.map((code, i) => (
+              <li
+                key={`${code}-${i}`}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800/80"
+              >
+                <div className="aspect-[4/3] w-full bg-slate-100 dark:bg-slate-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={previewUrls[i]} alt="" className="h-full w-full object-contain" />
+                </div>
+                <div className="flex flex-col gap-3 p-4">
+                  <p className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">{code}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    {namePrefix} {i + 1}
+                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{t("Qty")}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => adjustQty(i, -1)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-lg font-medium dark:border-slate-600"
+                        aria-label={t("Decrease quantity")}
+                      >
+                        −
+                      </button>
+                      <span className="min-w-[2rem] text-center text-base font-semibold tabular-nums">
+                        {quantities[i] ?? 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => adjustQty(i, 1)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-lg font-medium dark:border-slate-600"
+                        aria-label={t("Increase quantity")}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {error && status === "ready" && (
+          <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {status === "ready" && !saved && (
+        <div className="fixed left-0 right-0 z-30 border-t border-slate-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 max-lg:bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] lg:bottom-0 lg:left-64">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void handleSave()}
+            className="mx-auto flex min-h-[48px] w-full max-w-lg items-center justify-center rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
+          >
+            {saving ? t("Saving…") : t("Save batch")}
+          </button>
+        </div>
+      )}
+
+      {leaveOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-800"
+          >
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t("Save batch?")}</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {t("You have not saved this batch. Save before leaving, or discard and go back.")}
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={saving}
+                className="min-h-[44px] rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {t("Save")}
+              </button>
+              <button
+                type="button"
+                onClick={discardAndLeave}
+                className="min-h-[44px] rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-800 dark:border-slate-600 dark:text-slate-200"
+              >
+                {t("Discard")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeaveOpen(false)}
+                className="min-h-[44px] rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400"
+              >
+                {t("Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
 import { BentoCard } from "@/components/ui/BentoCard";
+import { IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import {
   startUploadProgressTicker,
   UploadProgressOverlay,
@@ -22,11 +25,28 @@ import {
   saveSingleProductDraft,
 } from "@/lib/product-form-draft";
 import {
-  BULK_UPLOAD_PROFILE,
-  compressImageFile,
-  recompressBase64Image,
-  SINGLE_UPLOAD_PROFILE,
-} from "@/lib/product-image-compress";
+  getBulkProductBatchImages,
+  storedImageToBlob,
+} from "@/lib/bulk-product-batch-images";
+import {
+  batchQtyTotal,
+  deleteBulkProductBatch,
+  getBulkProductBatches,
+  type BulkProductBatchRecord,
+} from "@/lib/bulk-product-batch-storage";
+import {
+  buildBulkBatchShareText,
+  uploadBulkProductBatchToWebsite,
+} from "@/lib/bulk-product-batch-upload";
+import { compressImageFile, recompressBase64Image, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
+import {
+  isBatchDownloaded,
+  markBatchDownloaded,
+  saveProductCodeImagesToGalleryOrDownloads,
+  unmarkBatchDownloaded,
+} from "@/lib/product-code-gallery";
+import { safeFilename } from "@/lib/image-product-code";
+import { shareProductCodeImagesAsFiles } from "@/lib/product-code-share";
 import { normalizeIsDraft, peekCollectionsCache } from "@/lib/velo-products-cache";
 import {
   clearProductSyncLogs,
@@ -35,7 +55,6 @@ import {
 } from "@/lib/product-sync-logs";
 import {
   deleteVeloProduct,
-  uploadBulkProductsSequential,
   fetchVeloCollections,
   listVeloProducts,
   peekVeloProductsList,
@@ -53,8 +72,47 @@ import {
   type VeloProductListItem,
   type VeloSingleProductForm,
 } from "@/lib/velo-products-types";
+import {
+  revokeBulkProductsDraftFiles,
+  useBulkProductsDraft,
+} from "./bulk-products-context";
 
 type TabId = "list" | "single" | "bulk" | "logs";
+
+const MAX_BULK_FILES = 50;
+
+function uploadStatusLabel(
+  status: BulkProductBatchRecord["uploadStatus"],
+  t: (k: string) => string
+): string {
+  switch (status) {
+    case "done":
+      return t("Uploaded");
+    case "partial":
+      return t("Partial upload");
+    case "failed":
+      return t("Upload failed");
+    case "uploading":
+      return t("Uploading");
+    default:
+      return t("Ready to upload");
+  }
+}
+
+function uploadStatusClass(status: BulkProductBatchRecord["uploadStatus"]): string {
+  switch (status) {
+    case "done":
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200";
+    case "partial":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200";
+    case "failed":
+      return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200";
+    case "uploading":
+      return "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200";
+    default:
+      return "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200";
+  }
+}
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "list", label: "Product List" },
@@ -801,23 +859,28 @@ function ProductBulkTab({
   onDone: () => void;
 }) {
   const { t } = useLanguage();
+  const router = useRouter();
+  const { pickDraft, setPickDraft } = useBulkProductsDraft();
   const [form, setForm] = useState<VeloBulkSharedForm>(() => loadBulkProductDraft() ?? { ...EMPTY_BULK_FORM });
-  const [images, setImages] = useState<{ fileName: string; base64: string }[]>([]);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [batches, setBatches] = useState<BulkProductBatchRecord[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [galleryBusyId, setGalleryBusyId] = useState<string | null>(null);
+  const [shareBusyId, setShareBusyId] = useState<string | null>(null);
+  const [uploadBusyId, setUploadBusyId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const loadBatches = useCallback(async () => {
+    const list = await getBulkProductBatches(userId);
+    setBatches(list);
+  }, [userId]);
+
   useEffect(() => {
-    return () => {
-      setUploadBusy(false);
-      setSubmitting(false);
-      setPhase(null);
-      setProgress(0);
-    };
-  }, []);
+    void loadBatches();
+  }, [loadBatches]);
 
   useEffect(() => {
     saveBulkProductDraft(form);
@@ -825,38 +888,18 @@ function ProductBulkTab({
 
   const patch = (p: Partial<VeloBulkSharedForm>) => setForm((prev) => ({ ...prev, ...p }));
 
-  const onPickImages = async (files: FileList | null) => {
+  const onPickImages = (files: FileList | null) => {
     if (!files?.length) return;
     setError(null);
-    setUploadBusy(true);
-    setSubmitting(false);
-    setPhase(t("Preparing images"));
-    setProgress(2);
-    const next: { fileName: string; base64: string }[] = [];
-    const list = Array.from(files).slice(0, 50);
-    for (let i = 0; i < list.length; i++) {
-      setProgress(Math.max(2, Math.round(((i + 0.15) / list.length) * 40)));
-      try {
-        const c = await compressImageFile(list[i], BULK_UPLOAD_PROFILE);
-        next.push({ fileName: c.fileName, base64: c.base64 });
-        setProgress(Math.round(((i + 1) / list.length) * 40));
-      } catch (e) {
-        setError((e as Error).message);
-        setUploadBusy(false);
-        setPhase(null);
-        setProgress(0);
-        return;
-      }
+    const next = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (next.length < files.length) {
+      setError(t("Non-image files were skipped."));
     }
-    setImages((prev) => [...prev, ...next].slice(0, 50));
-    setProgress(100);
-    await new Promise((r) => setTimeout(r, 350));
-    setUploadBusy(false);
-    setPhase(null);
-    setProgress(0);
+    setPickedFiles((prev) => [...prev, ...next].slice(0, MAX_BULK_FILES));
+    if (fileRef.current) fileRef.current.value = "";
   };
 
-  const onSubmit = async () => {
+  const goGenerate = () => {
     setError(null);
     setInfo(null);
     const errors = validateBulkForm({
@@ -864,7 +907,7 @@ function ProductBulkTab({
       collectionId: form.collectionId,
       price: form.price,
       stock: form.stock,
-      imageCount: images.length,
+      imageCount: pickedFiles.length,
       sizeConfig: form.sizeConfig,
     });
     setFieldErrors(errors);
@@ -873,60 +916,123 @@ function ProductBulkTab({
       return;
     }
 
-    setSubmitting(true);
-    setUploadBusy(true);
+    if (pickDraft?.files?.length) {
+      revokeBulkProductsDraftFiles(pickDraft.files);
+    }
+    const draftFiles = pickedFiles.map((file) => ({
+      name: file.name,
+      type: file.type || "image/jpeg",
+      lastModified: file.lastModified || Date.now(),
+      objectUrl: URL.createObjectURL(file),
+    }));
+    flushSync(() => {
+      setPickDraft({ files: draftFiles, form: { ...form } });
+    });
+    setPickedFiles([]);
+    router.push("/products/bulk/process/");
+  };
+
+  const handleDeleteBatch = async (batchId: string) => {
+    if (!window.confirm(t("Delete this batch?"))) return;
+    await deleteBulkProductBatch(userId, batchId);
+    unmarkBatchDownloaded(batchId);
+    await loadBatches();
+  };
+
+  const handleDownloadBatch = async (batch: BulkProductBatchRecord) => {
+    if (isBatchDownloaded(batch.id)) {
+      const again = window.confirm(
+        t("This batch was already downloaded. Download again?")
+      );
+      if (!again) return;
+    }
+    setGalleryBusyId(batch.id);
+    setError(null);
+    try {
+      const imgs = await getBulkProductBatchImages(userId, batch.id);
+      if (!imgs.length) {
+        setError(t("No saved images for this batch."));
+        return;
+      }
+      const items = imgs.map((entry) => {
+        const blob = storedImageToBlob(entry);
+        const ext = entry.mime.includes("png") ? "png" : "jpg";
+        return { blob, filename: safeFilename(entry.code, ext) };
+      });
+      const nativeSaved = await saveProductCodeImagesToGalleryOrDownloads(items, {
+        folderName: "VeloBulkProducts",
+      });
+      markBatchDownloaded(batch.id);
+      if (nativeSaved && Capacitor.isNativePlatform()) {
+        window.alert(
+          t("Saved {count} image(s) to VeloBulkProducts.").replace("{count}", String(items.length))
+        );
+      }
+    } catch (err) {
+      setError((err as Error).message || t("Could not save images."));
+    } finally {
+      setGalleryBusyId(null);
+    }
+  };
+
+  const handleShareBatch = async (batch: BulkProductBatchRecord) => {
+    setShareBusyId(batch.id);
+    setError(null);
+    try {
+      const imgs = await getBulkProductBatchImages(userId, batch.id);
+      if (!imgs.length) {
+        setError(t("No saved images for this batch."));
+        return;
+      }
+      const items = imgs.map((entry) => {
+        const blob = storedImageToBlob(entry);
+        const ext = entry.mime.includes("png") ? "png" : "jpg";
+        return { blob, filename: safeFilename(entry.code, ext) };
+      });
+      await shareProductCodeImagesAsFiles(items, {
+        title: batch.form.namePrefix.trim() || t("Bulk products"),
+        text: buildBulkBatchShareText(batch),
+      });
+    } catch (err) {
+      setError((err as Error).message || t("Could not share."));
+    } finally {
+      setShareBusyId(null);
+    }
+  };
+
+  const handleUploadBatch = async (batch: BulkProductBatchRecord) => {
+    if (batch.uploadStatus === "uploading") return;
+    setUploadBusyId(batch.id);
+    setBusy(true);
+    setError(null);
+    setInfo(null);
     setProgress(5);
+    setPhase(t("Preparing upload"));
 
     try {
-      const result = await uploadBulkProductsSequential(userId, {
-        namePrefix: form.namePrefix,
-        description: form.description,
-        collectionId: form.collectionId,
-        tags: form.tags,
-        badge: form.badge,
-        rating: form.rating,
-        price: form.price,
-        stock: form.stock,
-        isDraft: form.isDraft,
-        sizeConfig: form.sizeConfig,
-        images: images.map((img) => ({
-          imageBase64: img.base64,
-          imageFileName: img.fileName,
-        })),
+      const imgs = await getBulkProductBatchImages(userId, batch.id);
+      if (!imgs.length) {
+        setError(t("No saved images for this batch."));
+        return;
+      }
+
+      const result = await uploadBulkProductBatchToWebsite(userId, batch, imgs, {
         onProgress: (p) => {
-          setPhase(
-            t("Uploading product {current}/{total}")
-              .replace("{current}", String(p.current))
-              .replace("{total}", String(p.total))
-          );
+          setPhase(p.label);
           setProgress(p.percent);
-        },
-        recompressImage: async (base64, fileName) => {
-          const smaller = await recompressBase64Image(base64, fileName);
-          return { base64: smaller.base64, fileName: smaller.fileName };
         },
       });
 
-      setPhase(t("Creating products…"));
+      await loadBatches();
+      setPhase(t("Upload complete"));
       setProgress(100);
-      await new Promise((r) => setTimeout(r, 450));
-      clearBulkProductDraft();
-      setImages([]);
-      setForm({ ...EMPTY_BULK_FORM });
-
-      const warnings = [...result.warnings, ...result.failures];
-      const warnText =
-        warnings.length > 0
-          ? t(" {count} warning(s).").replace("{count}", String(warnings.length))
-          : "";
       const codePreview =
-        result.createdCodes.length > 0
-          ? ` ${result.createdCodes.slice(0, 5).join(", ")}${result.createdCodes.length > 5 ? "…" : ""}`
+        result.websiteCodes.length > 0
+          ? ` ${result.websiteCodes.slice(0, 5).join(", ")}${result.websiteCodes.length > 5 ? "…" : ""}`
           : "";
       setInfo(
-        t("Created {count} product(s).").replace("{count}", String(result.totalCreated)) +
-          codePreview +
-          warnText
+        t("Uploaded {count} product(s) to website.").replace("{count}", String(result.uploadedCount)) +
+          codePreview
       );
       if (result.failures.length > 0) {
         setError(result.failures.slice(0, 3).join(" "));
@@ -934,9 +1040,10 @@ function ProductBulkTab({
       onDone();
     } catch (e) {
       setError((e as Error).message);
+      await loadBatches();
     } finally {
-      setSubmitting(false);
-      setUploadBusy(false);
+      setUploadBusyId(null);
+      setBusy(false);
       setPhase(null);
       setProgress(0);
     }
@@ -945,14 +1052,104 @@ function ProductBulkTab({
   return (
     <div className="space-y-4">
       <UploadProgressOverlay
-        open={uploadBusy}
-        label={phase ?? t("Uploading...")}
+        open={busy}
+        label={phase ?? t("Working…")}
         progress={progress}
       />
 
+      {batches.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t("Saved batches")}</h2>
+          {batches.map((b, i) => {
+            const qty = batchQtyTotal(b);
+            const isUploading = uploadBusyId === b.id;
+            return (
+              <BentoCard key={b.id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
+                      {i + 1}
+                    </span>
+                    <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {b.form.namePrefix.trim()}
+                    </p>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${uploadStatusClass(b.uploadStatus)}`}
+                    >
+                      {uploadStatusLabel(b.uploadStatus, t)}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-[12px] text-slate-600 dark:text-slate-400">
+                    {b.firstCode}
+                    {b.count > 1 ? ` → ${b.lastCode}` : ""}
+                    <span className="ml-2 text-slate-500">
+                      {t("Qty")}: {qty}
+                    </span>
+                  </p>
+                  {b.form.description.trim() ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
+                      {b.form.description.trim()}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadBatch(b)}
+                    disabled={galleryBusyId === b.id || isUploading}
+                    className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-sky-100 text-sky-700 transition hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-900/40 dark:text-sky-200"
+                    title={t("Download")}
+                    aria-label={t("Download")}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M12 3v11" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M8 10l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleShareBatch(b)}
+                    disabled={shareBusyId === b.id || isUploading}
+                    className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-900/40 dark:text-emerald-200"
+                    title={t("Share via WhatsApp")}
+                    aria-label={t("Share via WhatsApp")}
+                  >
+                    <IconWhatsApp className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleUploadBatch(b)}
+                    disabled={isUploading || b.uploadStatus === "done" || b.lines?.every((l) => l.websiteCode)}
+                    className="min-h-[40px] rounded-[12px] bg-primary-500 px-3 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {isUploading
+                      ? t("Uploading")
+                      : b.uploadStatus === "done" || b.lines?.every((l) => l.websiteCode)
+                        ? t("Uploaded")
+                        : b.uploadStatus === "partial"
+                          ? t("Retry upload")
+                          : t("Upload")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteBatch(b.id)}
+                    disabled={isUploading}
+                    className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-red-50 text-red-600 transition hover:bg-red-100 disabled:opacity-50 dark:bg-red-900/30 dark:text-red-300"
+                    title={t("Delete")}
+                  >
+                    <IconTrash className="h-4 w-4" />
+                  </button>
+                </div>
+              </BentoCard>
+            );
+          })}
+        </div>
+      )}
+
       <BentoCard className="space-y-4 p-4">
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
-          {t("Each image gets the next website ST code in order (shared with shop admin).")}
+          {t("Stamp product codes on photos, save locally, share with description, then upload WebP to website.")}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2">
@@ -1037,51 +1234,53 @@ function ProductBulkTab({
             <span className={labelCls}>{t("Publish on website")}</span>
           </label>
           <div className="sm:col-span-2">
-            <TagsInput tags={form.tags} onChange={(tags) => patch({ tags })} disabled={submitting} />
+            <TagsInput tags={form.tags} onChange={(tags) => patch({ tags })} disabled={busy} />
           </div>
           <div className="sm:col-span-2">
             <SizeConfigEditor
               value={form.sizeConfig}
               onChange={(sizeConfig) => patch({ sizeConfig })}
-              disabled={submitting}
+              disabled={busy}
             />
           </div>
         </div>
 
         <div>
-          <span className={labelCls}>{t("Images")} * ({images.length}/50)</span>
+          <span className={labelCls}>
+            {t("Images")} * ({pickedFiles.length}/{MAX_BULK_FILES})
+          </span>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
             multiple
             className="hidden"
-            onChange={(e) => void onPickImages(e.target.files)}
+            onChange={(e) => onPickImages(e.target.files)}
           />
           <button
             type="button"
-            disabled={submitting}
+            disabled={busy}
             onClick={() => fileRef.current?.click()}
             className="mt-2 min-h-[44px] rounded-xl border border-dashed border-gray-300 px-4 py-2 text-sm dark:border-slate-600"
           >
             {t("Select images from device")}
           </button>
           {fieldErrors.images && <p className="mt-1 text-xs text-red-600">{fieldErrors.images}</p>}
-          {images.length > 0 && (
+          {pickedFiles.length > 0 && (
             <p className="mt-2 text-xs text-slate-500">
-              {images.map((i) => i.fileName).slice(0, 5).join(", ")}
-              {images.length > 5 ? ` +${images.length - 5}` : ""}
+              {pickedFiles.map((f) => f.name).slice(0, 5).join(", ")}
+              {pickedFiles.length > 5 ? ` +${pickedFiles.length - 5}` : ""}
             </p>
           )}
         </div>
 
         <button
           type="button"
-          disabled={submitting}
-          onClick={() => void onSubmit()}
+          disabled={busy || pickedFiles.length === 0}
+          onClick={goGenerate}
           className="min-h-[44px] w-full rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white disabled:opacity-50"
         >
-          {submitting ? t("Creating products…") : t("Create bulk products")}
+          {t("Generate batch")}
         </button>
       </BentoCard>
     </div>

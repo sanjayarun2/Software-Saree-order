@@ -1,11 +1,18 @@
 import { Capacitor } from "@capacitor/core";
 
+export type ShareCodedImagesOptions = {
+  title?: string;
+  /** Caption / message body (e.g. product description + code range). */
+  text?: string;
+};
+
 /**
  * Opens the system share sheet with all batch images so the user can pick WhatsApp
  * (and attachments appear as selected files where the OS supports it).
  */
 export async function shareProductCodeImagesAsFiles(
-  items: { blob: Blob; filename: string }[]
+  items: { blob: Blob; filename: string }[],
+  options?: ShareCodedImagesOptions
 ): Promise<void> {
   if (typeof window === "undefined" || items.length === 0) return;
 
@@ -13,13 +20,18 @@ export async function shareProductCodeImagesAsFiles(
     ({ blob, filename }) => new File([blob], filename, { type: blob.type || "image/jpeg" })
   );
 
+  const title = options?.title ?? "Product codes";
+  const text =
+    options?.text?.trim() ||
+    `${files.length} coded photo${files.length === 1 ? "" : "s"}`;
+
   try {
+    if (navigator.share && navigator.canShare?.({ files, text })) {
+      await navigator.share({ files, title, text });
+      return;
+    }
     if (navigator.share && navigator.canShare?.({ files })) {
-      await navigator.share({
-        files,
-        title: "Product codes",
-        text: `${files.length} coded photo${files.length === 1 ? "" : "s"}`,
-      });
+      await navigator.share({ files, title, text });
       return;
     }
   } catch (e) {
@@ -57,7 +69,8 @@ export async function shareProductCodeImagesAsFiles(
         const can = await Share.canShare();
         if (can.value) {
           await Share.share({
-            title: "Product codes",
+            title,
+            text,
             url: written[0],
             dialogTitle: "Share via WhatsApp or other app",
           });
@@ -69,10 +82,9 @@ export async function shareProductCodeImagesAsFiles(
     }
   }
 
+  const fallback = `${text}\n\n(${items.length} photo${items.length === 1 ? "" : "s"} — attach from your downloads or gallery.)`;
   window.open(
-    `https://wa.me/?text=${encodeURIComponent(
-      `Product codes (${items.length} photos) — open your gallery or downloads to attach images.`
-    )}`,
+    `https://wa.me/?text=${encodeURIComponent(fallback)}`,
     "_blank",
     "noopener,noreferrer"
   );
