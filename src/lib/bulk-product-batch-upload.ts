@@ -1,14 +1,16 @@
+import { recompressBase64Image } from "./product-image-compress";
 import {
-  BULK_UPLOAD_PROFILE,
-  compressImageFile,
-  recompressBase64Image,
-} from "./product-image-compress";
-import { storedImageToBlob } from "./bulk-product-batch-images";
+  getBulkProductBatchImages,
+  getBulkProductBatchUploadImages,
+  storedImageToBlob,
+} from "./bulk-product-batch-images";
 import type { StoredBulkBatchImage } from "./bulk-product-batch-images";
 import type { BulkProductBatchLine, BulkProductBatchRecord } from "./bulk-product-batch-storage";
 import { updateBulkProductBatch } from "./bulk-product-batch-storage";
+import { buildBulkProductName } from "./bulk-product-naming";
 import { uploadProductReliable } from "./velo-products-api";
 import { invalidateProductsListCache, normalizeIsDraft } from "./velo-products-cache";
+import { compressImageFile, BULK_UPLOAD_PROFILE } from "./product-image-compress";
 
 export type BulkBatchUploadProgress = {
   current: number;
@@ -23,15 +25,28 @@ function resolveLines(
 ): BulkProductBatchLine[] {
   if (batch.lines?.length) return batch.lines;
   const prefix = batch.form.namePrefix.trim();
-  return images.map((im, i) => ({
+  return images.map((im) => ({
     code: im.code,
     qty: 1,
-    productName: `${prefix} ${i + 1}`.trim(),
+    productName: buildBulkProductName(prefix, im.code),
   }));
 }
 
+async function resolveUploadPayloadFromShare(
+  code: string,
+  shareImage: StoredBulkBatchImage
+): Promise<{ base64: string; fileName: string }> {
+  const blob = storedImageToBlob(shareImage);
+  const ext = shareImage.mime.includes("png") ? ".png" : ".jpg";
+  const sourceFile = new File([blob], `${code}${ext}`, {
+    type: shareImage.mime || "image/jpeg",
+  });
+  const compressed = await compressImageFile(sourceFile, BULK_UPLOAD_PROFILE);
+  return { base64: compressed.base64, fileName: compressed.fileName };
+}
+
 /**
- * WebP-optimize stamped images, then upload one product per request (reliable upsert).
+ * Upload using pre-built WebP payloads when available; falls back to on-the-fly compress.
  */
 export async function uploadBulkProductBatchToWebsite(
   userId: string,
@@ -70,6 +85,8 @@ export async function uploadBulkProductBatchToWebsite(
   }
 
   let step = 0;
+  const prebuiltRows = await getBulkProductBatchUploadImages(userId, batch.id);
+  const prebuiltByCode = new Map(prebuiltRows.map((row) => [row.code, row]));
 
   for (const i of pendingIndices) {
     const line = updatedLines[i]!;
@@ -80,31 +97,20 @@ export async function uploadBulkProductBatchToWebsite(
       current: step,
       total: pendingIndices.length,
       percent: Math.round(5 + ((step - 0.5) / pendingIndices.length) * 90),
-      label: `Optimizing & uploading ${step}/${pendingIndices.length}`,
+      label: `Uploading ${step}/${pendingIndices.length}`,
     });
 
     try {
-      const blob = storedImageToBlob(image);
-      const ext = image.mime.includes("png") ? ".png" : ".jpg";
-      const sourceFile = new File([blob], `${line.code}${ext}`, {
-        type: image.mime || "image/jpeg",
-      });
-
-      opts?.onProgress?.({
-        current: step,
-        total: pendingIndices.length,
-        percent: Math.round(5 + ((step - 0.65) / pendingIndices.length) * 90),
-        label: `Converting to WebP ${step}/${pendingIndices.length}`,
-      });
-
-      const compressed = await compressImageFile(sourceFile, BULK_UPLOAD_PROFILE);
-
-      opts?.onProgress?.({
-        current: step,
-        total: pendingIndices.length,
-        percent: Math.round(5 + ((step - 0.15) / pendingIndices.length) * 90),
-        label: `Uploading ${step}/${pendingIndices.length}`,
-      });
+      const prebuilt = prebuiltByCode.get(line.code);
+      let payload: { base64: string; fileName: string };
+      if (prebuilt?.dataBase64) {
+        payload = {
+          base64: prebuilt.dataBase64,
+          fileName: prebuilt.fileName || `${line.code}.webp`,
+        };
+      } else {
+        payload = await resolveUploadPayloadFromShare(line.code, image);
+      }
 
       const res = await uploadProductReliable(
         userId,
@@ -119,8 +125,8 @@ export async function uploadBulkProductBatchToWebsite(
           stock: form.stock,
           isDraft: normalizeIsDraft(form.isDraft),
           sizeConfig: form.sizeConfig,
-          imageBase64: compressed.base64,
-          imageFileName: compressed.fileName,
+          imageBase64: payload.base64,
+          imageFileName: payload.fileName,
         },
         {
           deferCacheInvalidation: true,
@@ -164,7 +170,7 @@ export async function uploadBulkProductBatchToWebsite(
 
   invalidateProductsListCache(userId);
 
-  const newlyUploaded = pendingIndices.some((i) => updatedLines[i]?.websiteCode);
+  const newlyUploaded = pendingIndices.some((idx) => updatedLines[idx]?.websiteCode);
   if (!newlyUploaded && failures.length > 0) {
     throw new Error(failures[0] ?? "Upload failed.");
   }

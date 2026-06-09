@@ -21,6 +21,8 @@ import {
   stampProductCodeOnFile,
 } from "@/lib/image-product-code";
 import { markBatchDownloaded } from "@/lib/product-code-gallery";
+import { buildBulkProductName } from "@/lib/bulk-product-naming";
+import { prepareBulkBatchForUpload } from "@/lib/bulk-product-batch-prep";
 import { revokeBulkProductsDraftFiles, useBulkProductsDraft } from "../../bulk-products-context";
 import { useLanguage } from "@/lib/language-context";
 
@@ -200,7 +202,7 @@ export default function BulkProductsProcessPage() {
       const lines = codes.map((code, i) => ({
         code,
         qty: quantities[i] ?? 1,
-        productName: `${namePrefix} ${i + 1}`.trim(),
+        productName: buildBulkProductName(namePrefix, code),
       }));
 
       const imageRows = [];
@@ -224,11 +226,16 @@ export default function BulkProductsProcessPage() {
           lines,
           form,
           uploadStatus: "pending",
+          prepStatus: "pending",
         });
       } catch (batchErr) {
         await deleteBulkProductBatchImages(user.id, batchId);
         throw batchErr;
       }
+
+      void prepareBulkBatchForUpload(user.id, batchId).catch((prepErr) => {
+        console.error("[products/bulk/prep]", prepErr);
+      });
 
       for (let i = 0; i < stampedBlobs.length; i++) {
         const file = originals[i]!;
@@ -377,7 +384,7 @@ export default function BulkProductsProcessPage() {
                 <div className="flex flex-col gap-3 p-4">
                   <p className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">{code}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {namePrefix} {i + 1}
+                    {buildBulkProductName(namePrefix, code)}
                   </p>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm text-slate-600 dark:text-slate-400">{t("Qty")}</span>

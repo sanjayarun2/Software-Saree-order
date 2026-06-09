@@ -21,6 +21,12 @@ export type BulkProductBatchUploadStatus =
   | "partial"
   | "failed";
 
+export type BulkProductBatchPrepStatus =
+  | "pending"
+  | "preparing"
+  | "ready"
+  | "failed";
+
 export type BulkProductBatchRecord = {
   id: string;
   firstCode: string;
@@ -30,6 +36,10 @@ export type BulkProductBatchRecord = {
   lines?: BulkProductBatchLine[];
   form: VeloBulkSharedForm;
   uploadStatus: BulkProductBatchUploadStatus;
+  /** WebP upload payloads prepared in background (separate from share images). */
+  prepStatus?: BulkProductBatchPrepStatus;
+  prepReadyCount?: number;
+  prepError?: string;
   uploadedCount?: number;
   websiteCodes?: string[];
   uploadError?: string;

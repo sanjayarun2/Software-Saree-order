@@ -38,6 +38,7 @@ import {
   buildBulkBatchShareText,
   uploadBulkProductBatchToWebsite,
 } from "@/lib/bulk-product-batch-upload";
+import { prepareBulkBatchForUpload } from "@/lib/bulk-product-batch-prep";
 import { compressImageFile, recompressBase64Image, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
 import {
   isBatchDownloaded,
@@ -80,6 +81,38 @@ import {
 type TabId = "list" | "single" | "bulk" | "logs";
 
 const MAX_BULK_FILES = 50;
+
+function prepStatusLabel(
+  batch: BulkProductBatchRecord,
+  t: (k: string) => string
+): string | null {
+  if (batch.uploadStatus === "done" || batch.lines?.every((l) => l.websiteCode)) {
+    return null;
+  }
+  switch (batch.prepStatus) {
+    case "preparing":
+      return t("Preparing upload");
+    case "ready":
+      return t("Ready to upload");
+    case "failed":
+      return t("Prep failed");
+    default:
+      return t("Waiting to prepare");
+  }
+}
+
+function prepStatusClass(prepStatus: BulkProductBatchRecord["prepStatus"]): string {
+  switch (prepStatus) {
+    case "ready":
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200";
+    case "preparing":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200";
+    case "failed":
+      return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200";
+    default:
+      return "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300";
+  }
+}
 
 function uploadStatusLabel(
   status: BulkProductBatchRecord["uploadStatus"],
@@ -871,6 +904,8 @@ function ProductBulkTab({
   const [galleryBusyId, setGalleryBusyId] = useState<string | null>(null);
   const [shareBusyId, setShareBusyId] = useState<string | null>(null);
   const [uploadBusyId, setUploadBusyId] = useState<string | null>(null);
+  const [prepBusyId, setPrepBusyId] = useState<string | null>(null);
+  const prepStartedRef = useRef(new Set<string>());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadBatches = useCallback(async () => {
@@ -878,9 +913,55 @@ function ProductBulkTab({
     setBatches(list);
   }, [userId]);
 
+  const runPrepForBatch = useCallback(
+    async (batchId: string, opts?: { showOverlay?: boolean }) => {
+      setPrepBusyId(batchId);
+      if (opts?.showOverlay) {
+        setBusy(true);
+        setPhase(t("Preparing upload"));
+        setProgress(2);
+      }
+      try {
+        await prepareBulkBatchForUpload(userId, batchId, {
+          onProgress: (p) => {
+            if (opts?.showOverlay) {
+              setPhase(p.label);
+              setProgress(p.percent);
+            }
+          },
+        });
+        await loadBatches();
+      } catch (e) {
+        prepStartedRef.current.delete(batchId);
+        await loadBatches();
+        if (opts?.showOverlay) {
+          setError((e as Error).message);
+        }
+      } finally {
+        setPrepBusyId(null);
+        if (opts?.showOverlay) {
+          setBusy(false);
+          setPhase(null);
+          setProgress(0);
+        }
+      }
+    },
+    [userId, loadBatches, t]
+  );
+
   useEffect(() => {
     void loadBatches();
   }, [loadBatches]);
+
+  useEffect(() => {
+    for (const b of batches) {
+      if (b.uploadStatus === "done" || b.lines?.every((l) => l.websiteCode)) continue;
+      if (b.prepStatus === "ready" || b.prepStatus === "preparing") continue;
+      if (prepStartedRef.current.has(b.id)) continue;
+      prepStartedRef.current.add(b.id);
+      void runPrepForBatch(b.id);
+    }
+  }, [batches, runPrepForBatch]);
 
   useEffect(() => {
     saveBulkProductDraft(form);
@@ -1007,16 +1088,27 @@ function ProductBulkTab({
     setError(null);
     setInfo(null);
     setProgress(5);
-    setPhase(t("Preparing upload"));
 
     try {
-      const imgs = await getBulkProductBatchImages(userId, batch.id);
+      let activeBatch = batch;
+      if (activeBatch.prepStatus !== "ready") {
+        setPhase(t("Preparing upload"));
+        await runPrepForBatch(activeBatch.id, { showOverlay: false });
+        const refreshed = (await getBulkProductBatches(userId)).find((b) => b.id === batch.id);
+        if (refreshed) activeBatch = refreshed;
+        if (activeBatch.prepStatus !== "ready") {
+          setError(activeBatch.prepError || t("Upload preparation failed. Retrying during upload."));
+        }
+      }
+
+      const imgs = await getBulkProductBatchImages(userId, activeBatch.id);
       if (!imgs.length) {
         setError(t("No saved images for this batch."));
         return;
       }
 
-      const result = await uploadBulkProductBatchToWebsite(userId, batch, imgs, {
+      setPhase(t("Uploading"));
+      const result = await uploadBulkProductBatchToWebsite(userId, activeBatch, imgs, {
         onProgress: (p) => {
           setPhase(p.label);
           setProgress(p.percent);
@@ -1063,6 +1155,9 @@ function ProductBulkTab({
           {batches.map((b, i) => {
             const qty = batchQtyTotal(b);
             const isUploading = uploadBusyId === b.id;
+            const isPreparing = prepBusyId === b.id || b.prepStatus === "preparing";
+            const prepLabel = prepStatusLabel(b, t);
+            const uploadDone = b.uploadStatus === "done" || b.lines?.every((l) => l.websiteCode);
             return (
               <BentoCard key={b.id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 flex-1">
@@ -1073,11 +1168,26 @@ function ProductBulkTab({
                     <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                       {b.form.namePrefix.trim()}
                     </p>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${uploadStatusClass(b.uploadStatus)}`}
-                    >
-                      {uploadStatusLabel(b.uploadStatus, t)}
-                    </span>
+                    {prepLabel ? (
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${prepStatusClass(b.prepStatus)}`}
+                      >
+                        {isPreparing && b.prepReadyCount
+                          ? `${prepLabel} (${b.prepReadyCount}/${b.count})`
+                          : prepLabel}
+                      </span>
+                    ) : null}
+                    {!uploadDone ? (
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${uploadStatusClass(b.uploadStatus)}`}
+                      >
+                        {uploadStatusLabel(b.uploadStatus, t)}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                        {t("Uploaded")}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 truncate font-mono text-[12px] text-slate-600 dark:text-slate-400">
                     {b.firstCode}
@@ -1096,7 +1206,7 @@ function ProductBulkTab({
                   <button
                     type="button"
                     onClick={() => void handleDownloadBatch(b)}
-                    disabled={galleryBusyId === b.id || isUploading}
+                    disabled={galleryBusyId === b.id || isUploading || isPreparing}
                     className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-sky-100 text-sky-700 transition hover:bg-sky-200 disabled:opacity-50 dark:bg-sky-900/40 dark:text-sky-200"
                     title={t("Download")}
                     aria-label={t("Download")}
@@ -1110,7 +1220,7 @@ function ProductBulkTab({
                   <button
                     type="button"
                     onClick={() => void handleShareBatch(b)}
-                    disabled={shareBusyId === b.id || isUploading}
+                    disabled={shareBusyId === b.id || isUploading || isPreparing}
                     className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-900/40 dark:text-emerald-200"
                     title={t("Share via WhatsApp")}
                     aria-label={t("Share via WhatsApp")}
@@ -1120,16 +1230,20 @@ function ProductBulkTab({
                   <button
                     type="button"
                     onClick={() => void handleUploadBatch(b)}
-                    disabled={isUploading || b.uploadStatus === "done" || b.lines?.every((l) => l.websiteCode)}
+                    disabled={isUploading || isPreparing || uploadDone}
                     className="min-h-[40px] rounded-[12px] bg-primary-500 px-3 text-xs font-semibold text-white disabled:opacity-50"
                   >
                     {isUploading
                       ? t("Uploading")
-                      : b.uploadStatus === "done" || b.lines?.every((l) => l.websiteCode)
-                        ? t("Uploaded")
-                        : b.uploadStatus === "partial"
-                          ? t("Retry upload")
-                          : t("Upload")}
+                      : isPreparing
+                        ? t("Preparing upload")
+                        : uploadDone
+                          ? t("Uploaded")
+                          : b.prepStatus === "ready"
+                            ? t("Upload")
+                            : b.uploadStatus === "partial"
+                              ? t("Retry upload")
+                              : t("Upload")}
                   </button>
                   <button
                     type="button"

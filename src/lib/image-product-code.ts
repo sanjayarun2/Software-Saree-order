@@ -85,12 +85,42 @@ function drawTextOverlay(imageData: ImageData, code: string): ImageData {
       break;
   }
 
-  const lineWidth = Math.max(2.5, fontSize / 9);
-  ctx.strokeStyle = "rgba(0,0,0,0.92)";
-  ctx.lineWidth = lineWidth;
-  ctx.lineJoin = "round";
-  ctx.fillStyle = settings.color;
-  ctx.strokeText(code, x, y);
+  const metrics = ctx.measureText(code);
+  const textWidth = metrics.width;
+  const boxPadX = Math.round(fontSize * 0.38);
+  const boxPadY = Math.round(fontSize * 0.28);
+  const boxW = textWidth + boxPadX * 2;
+  const boxH = fontSize + boxPadY * 2;
+
+  let boxX = x;
+  if (ctx.textAlign === "right") {
+    boxX = x - textWidth - boxPadX;
+  } else {
+    boxX = x - boxPadX;
+  }
+
+  let boxY = y;
+  if (ctx.textBaseline === "bottom") {
+    boxY = y - fontSize - boxPadY;
+  } else {
+    boxY = y - boxPadY;
+  }
+
+  const radius = Math.round(fontSize * 0.22);
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.beginPath();
+  if (typeof (ctx as CanvasRenderingContext2D).roundRect === "function") {
+    (ctx as CanvasRenderingContext2D).roundRect(boxX, boxY, boxW, boxH, radius);
+  } else {
+    ctx.rect(boxX, boxY, boxW, boxH);
+  }
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.lineWidth = Math.max(1, fontSize / 14);
+  ctx.stroke();
+
+  ctx.fillStyle = "#111111";
   ctx.fillText(code, x, y);
 
   const result = ctx.getImageData(0, 0, w, h);
