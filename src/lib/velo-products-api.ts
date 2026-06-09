@@ -65,9 +65,22 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function isPayloadTooLargeMessage(message: string) {
+  return /413|payload too large|entity too large|content too large|body exceeded|request entity too large|too large/i.test(
+    message
+  );
+}
+
 function isRetryable(status: number, message: string) {
+  if (status === 413 || isPayloadTooLargeMessage(message)) return false;
   if (status >= 500) return true;
   return /network|timeout|failed to fetch|load failed|temporarily/i.test(message);
+}
+
+function payloadTooLargeError() {
+  return new VeloProductsApiError(
+    "Upload too large (413). Images are being sent one at a time with stronger compression — if this persists, use smaller photos."
+  );
 }
 
 function newRequestId() {
@@ -131,7 +144,20 @@ function extractInvokeErrorMessage(payload: unknown): string | null {
 
 function throwInvokeFailure(payload: unknown, invokeError: Error | null): never {
   const message = extractInvokeErrorMessage(payload);
+  const invokeMsg = invokeError?.message ?? "";
+  const status =
+    invokeError &&
+    "context" in invokeError &&
+    typeof (invokeError as { context?: { status?: number } }).context?.status === "number"
+      ? (invokeError as { context: { status: number } }).context.status
+      : 0;
+
+  if (status === 413 || isPayloadTooLargeMessage(`${message} ${invokeMsg}`)) {
+    throw payloadTooLargeError();
+  }
+
   if (message) {
+    if (isPayloadTooLargeMessage(message)) throw payloadTooLargeError();
     if (/image|imageBase64|featuredImageMediaId/i.test(message)) {
       throw new VeloProductsApiError(
         "Product image is invalid or missing. Pick the photo again and retry."
@@ -146,6 +172,7 @@ function throwInvokeFailure(payload: unknown, invokeError: Error | null): never 
         "Products API proxy not deployed. Deploy velo-website-products in Supabase."
       );
     }
+    if (isPayloadTooLargeMessage(invokeError.message)) throw payloadTooLargeError();
     throw new VeloProductsApiError(invokeError.message);
   }
 
@@ -450,6 +477,104 @@ export async function bulkUpsertVeloProducts(
     invalidateProductsListCache(userId);
     return res;
   });
+}
+
+export type BulkUploadProgress = {
+  current: number;
+  total: number;
+  percent: number;
+  label: string;
+};
+
+/** Upload bulk images one-by-one to avoid HTTP 413 payload limits. */
+export async function uploadBulkProductsSequential(
+  userId: string,
+  data: {
+    namePrefix: string;
+    description: string;
+    collectionId: string;
+    tags: string[];
+    badge: string;
+    rating: string;
+    price: string;
+    stock: number;
+    isDraft: boolean;
+    sizeConfig: VeloSizeConfig;
+    images: { imageBase64: string; imageFileName: string }[];
+    onProgress?: (progress: BulkUploadProgress) => void;
+    recompressImage?: (
+      base64: string,
+      fileName: string
+    ) => Promise<{ base64: string; fileName: string }>;
+  }
+) {
+  const { images, onProgress, recompressImage, ...shared } = data;
+  let totalCreated = 0;
+  const createdCodes: string[] = [];
+  const warnings: string[] = [];
+  const failures: string[] = [];
+
+  for (let i = 0; i < images.length; i++) {
+    const current = i + 1;
+    const label = `Uploading product ${current}/${images.length}`;
+    onProgress?.({
+      current,
+      total: images.length,
+      percent: Math.round(5 + ((current - 0.5) / images.length) * 90),
+      label,
+    });
+
+    let imageBase64 = images[i].imageBase64;
+    let imageFileName = images[i].imageFileName;
+    const productName = `${shared.namePrefix.trim()} ${current}`;
+
+    const uploadOne = () =>
+      bulkUpsertVeloProducts(userId, {
+        ...shared,
+        itemIndexOffset: i,
+        items: [
+          {
+            imageBase64,
+            imageFileName,
+            name: productName,
+          },
+        ],
+      });
+
+    try {
+      let res = await uploadOne();
+      totalCreated += res.createdCount ?? 0;
+      createdCodes.push(...formatBulkCreatedCodes(res.created));
+      if (res.warnings?.length) warnings.push(...res.warnings);
+      if (res.errors?.length) warnings.push(...res.errors);
+    } catch (firstError) {
+      const msg = (firstError as Error).message;
+
+      if (recompressImage && isPayloadTooLargeMessage(msg)) {
+        try {
+          const smaller = await recompressImage(imageBase64, imageFileName);
+          imageBase64 = smaller.base64;
+          imageFileName = smaller.fileName;
+          const res = await uploadOne();
+          totalCreated += res.createdCount ?? 0;
+          createdCodes.push(...formatBulkCreatedCodes(res.created));
+          if (res.warnings?.length) warnings.push(...res.warnings);
+          continue;
+        } catch (retryError) {
+          failures.push(`${productName}: ${(retryError as Error).message}`);
+          continue;
+        }
+      }
+
+      failures.push(`${productName}: ${msg}`);
+    }
+  }
+
+  if (totalCreated === 0 && failures.length > 0) {
+    throw new VeloProductsApiError(failures[0] ?? "Bulk upload failed.");
+  }
+
+  return { totalCreated, createdCodes, warnings, failures };
 }
 
 export function formatBulkCreatedCodes(

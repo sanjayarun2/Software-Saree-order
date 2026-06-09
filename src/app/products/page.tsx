@@ -21,7 +21,12 @@ import {
   saveBulkProductDraft,
   saveSingleProductDraft,
 } from "@/lib/product-form-draft";
-import { chunkArray, compressImageFile } from "@/lib/product-image-compress";
+import {
+  BULK_UPLOAD_PROFILE,
+  compressImageFile,
+  recompressBase64Image,
+  SINGLE_UPLOAD_PROFILE,
+} from "@/lib/product-image-compress";
 import { normalizeIsDraft, peekCollectionsCache } from "@/lib/velo-products-cache";
 import {
   clearProductSyncLogs,
@@ -29,10 +34,9 @@ import {
   type ProductSyncLogEntry,
 } from "@/lib/product-sync-logs";
 import {
-  bulkUpsertVeloProducts,
   deleteVeloProduct,
+  uploadBulkProductsSequential,
   fetchVeloCollections,
-  formatBulkCreatedCodes,
   listVeloProducts,
   peekVeloProductsList,
   prefetchVeloProductsList,
@@ -480,7 +484,16 @@ function ProductSingleTab({
   const [submitting, setSubmitting] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      setUploadBusy(false);
+      setUploadPhase(null);
+      setUploadProgress(0);
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -513,11 +526,12 @@ function ProductSingleTab({
   const onPickImage = async (files: FileList | null) => {
     if (!files?.[0]) return;
     setError(null);
+    setUploadBusy(true);
     setUploadPhase(t("Preparing image…"));
     setUploadProgress(8);
     const stopTicker = startUploadProgressTicker(setUploadProgress, 8, 38, 2500);
     try {
-      const compressed = await compressImageFile(files[0]);
+      const compressed = await compressImageFile(files[0], SINGLE_UPLOAD_PROFILE);
       stopTicker();
       setUploadProgress(100);
       patch({
@@ -530,6 +544,7 @@ function ProductSingleTab({
       stopTicker();
       setError((e as Error).message);
     } finally {
+      setUploadBusy(false);
       setUploadPhase(null);
       setUploadProgress(0);
     }
@@ -546,27 +561,48 @@ function ProductSingleTab({
     }
 
     setSubmitting(true);
+    setUploadBusy(true);
     setUploadPhase(t("Uploading product…"));
     setUploadProgress(42);
     const stopTicker = startUploadProgressTicker(setUploadProgress, 42, 92, 35_000);
     try {
-      const res = await upsertVeloProduct(userId, {
-        productId: form.productId,
-        veloExternalId: form.veloExternalId,
-        name: form.name,
-        description: form.description,
-        collectionId: form.collectionId,
-        tags: form.tags,
-        badge: form.badge,
-        rating: form.rating,
-        price: form.price,
-        stock: form.stock,
-        isDraft: normalizeIsDraft(form.isDraft),
-        featuredImageMediaId: form.featuredImageMediaId,
-        imageBase64: form.imageBase64,
-        imageFileName: form.imageFileName,
-        sizeConfig: form.sizeConfig,
-      });
+      let imageBase64 = form.imageBase64;
+      let imageFileName = form.imageFileName;
+
+      const tryUpsert = () =>
+        upsertVeloProduct(userId, {
+          productId: form.productId,
+          veloExternalId: form.veloExternalId,
+          name: form.name,
+          description: form.description,
+          collectionId: form.collectionId,
+          tags: form.tags,
+          badge: form.badge,
+          rating: form.rating,
+          price: form.price,
+          stock: form.stock,
+          isDraft: normalizeIsDraft(form.isDraft),
+          featuredImageMediaId: form.featuredImageMediaId,
+          imageBase64,
+          imageFileName,
+          sizeConfig: form.sizeConfig,
+        });
+
+      let res;
+      try {
+        res = await tryUpsert();
+      } catch (firstError) {
+        const msg = (firstError as Error).message;
+        if (/413|too large/i.test(msg) && imageBase64) {
+          const smaller = await recompressBase64Image(imageBase64, imageFileName);
+          imageBase64 = smaller.base64;
+          imageFileName = smaller.fileName;
+          res = await tryUpsert();
+        } else {
+          throw firstError;
+        }
+      }
+
       clearSingleProductDraft();
       setForm({ ...EMPTY_SINGLE_FORM });
       const stCode = res.product?.productCode;
@@ -592,7 +628,9 @@ function ProductSingleTab({
         setError((e as Error).message);
       }
     } finally {
+      stopTicker();
       setSubmitting(false);
+      setUploadBusy(false);
       setUploadPhase(null);
       setUploadProgress(0);
     }
@@ -601,8 +639,8 @@ function ProductSingleTab({
   return (
     <>
       <UploadProgressOverlay
-        open={Boolean(uploadPhase)}
-        label={uploadPhase ?? ""}
+        open={uploadBusy}
+        label={uploadPhase ?? t("Uploading...")}
         progress={uploadProgress}
       />
       <BentoCard className="space-y-4 p-4">
@@ -779,7 +817,17 @@ function ProductBulkTab({
   const [phase, setPhase] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      setUploadBusy(false);
+      setSubmitting(false);
+      setPhase(null);
+      setProgress(0);
+    };
+  }, []);
 
   useEffect(() => {
     saveBulkProductDraft(form);
@@ -790,6 +838,8 @@ function ProductBulkTab({
   const onPickImages = async (files: FileList | null) => {
     if (!files?.length) return;
     setError(null);
+    setUploadBusy(true);
+    setSubmitting(false);
     setPhase(t("Preparing images"));
     setProgress(2);
     const next: { fileName: string; base64: string }[] = [];
@@ -797,11 +847,12 @@ function ProductBulkTab({
     for (let i = 0; i < list.length; i++) {
       setProgress(Math.max(2, Math.round(((i + 0.15) / list.length) * 40)));
       try {
-        const c = await compressImageFile(list[i]);
+        const c = await compressImageFile(list[i], BULK_UPLOAD_PROFILE);
         next.push({ fileName: c.fileName, base64: c.base64 });
         setProgress(Math.round(((i + 1) / list.length) * 40));
       } catch (e) {
         setError((e as Error).message);
+        setUploadBusy(false);
         setPhase(null);
         setProgress(0);
         return;
@@ -810,6 +861,7 @@ function ProductBulkTab({
     setImages((prev) => [...prev, ...next].slice(0, 50));
     setProgress(100);
     await new Promise((r) => setTimeout(r, 350));
+    setUploadBusy(false);
     setPhase(null);
     setProgress(0);
   };
@@ -832,37 +884,38 @@ function ProductBulkTab({
     }
 
     setSubmitting(true);
-    setPhase(t("Uploading..."));
+    setUploadBusy(true);
     setProgress(5);
-    const batches = chunkArray(images, 5);
-    let totalCreated = 0;
-    const warnings: string[] = [];
-    const createdCodes: string[] = [];
-    let itemOffset = 0;
 
     try {
-      for (let i = 0; i < batches.length; i++) {
-        setPhase(
-          t("Uploading batch {current}/{total}")
-            .replace("{current}", String(i + 1))
-            .replace("{total}", String(batches.length))
-        );
-        setProgress(40 + Math.round(((i + 1) / batches.length) * 55));
-
-        const res = await bulkUpsertVeloProducts(userId, {
-          ...form,
-          itemIndexOffset: itemOffset,
-          items: batches[i].map((img) => ({
-            imageBase64: img.base64,
-            imageFileName: img.fileName,
-          })),
-        });
-        itemOffset += batches[i].length;
-        totalCreated += res.createdCount ?? 0;
-        createdCodes.push(...formatBulkCreatedCodes(res.created));
-        if (res.warnings?.length) warnings.push(...res.warnings);
-        if (res.errors?.length) warnings.push(...res.errors);
-      }
+      const result = await uploadBulkProductsSequential(userId, {
+        namePrefix: form.namePrefix,
+        description: form.description,
+        collectionId: form.collectionId,
+        tags: form.tags,
+        badge: form.badge,
+        rating: form.rating,
+        price: form.price,
+        stock: form.stock,
+        isDraft: form.isDraft,
+        sizeConfig: form.sizeConfig,
+        images: images.map((img) => ({
+          imageBase64: img.base64,
+          imageFileName: img.fileName,
+        })),
+        onProgress: (p) => {
+          setPhase(
+            t("Uploading product {current}/{total}")
+              .replace("{current}", String(p.current))
+              .replace("{total}", String(p.total))
+          );
+          setProgress(p.percent);
+        },
+        recompressImage: async (base64, fileName) => {
+          const smaller = await recompressBase64Image(base64, fileName);
+          return { base64: smaller.base64, fileName: smaller.fileName };
+        },
+      });
 
       setPhase(t("Creating products…"));
       setProgress(100);
@@ -871,24 +924,29 @@ function ProductBulkTab({
       setImages([]);
       setForm({ ...EMPTY_BULK_FORM });
 
+      const warnings = [...result.warnings, ...result.failures];
       const warnText =
         warnings.length > 0
           ? t(" {count} warning(s).").replace("{count}", String(warnings.length))
           : "";
       const codePreview =
-        createdCodes.length > 0
-          ? ` ${createdCodes.slice(0, 5).join(", ")}${createdCodes.length > 5 ? "…" : ""}`
+        result.createdCodes.length > 0
+          ? ` ${result.createdCodes.slice(0, 5).join(", ")}${result.createdCodes.length > 5 ? "…" : ""}`
           : "";
       setInfo(
-        t("Created {count} product(s).").replace("{count}", String(totalCreated)) +
+        t("Created {count} product(s).").replace("{count}", String(result.totalCreated)) +
           codePreview +
           warnText
       );
+      if (result.failures.length > 0) {
+        setError(result.failures.slice(0, 3).join(" "));
+      }
       onDone();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSubmitting(false);
+      setUploadBusy(false);
       setPhase(null);
       setProgress(0);
     }
@@ -897,7 +955,7 @@ function ProductBulkTab({
   return (
     <div className="space-y-4">
       <UploadProgressOverlay
-        open={Boolean(submitting || phase)}
+        open={uploadBusy}
         label={phase ?? t("Uploading...")}
         progress={progress}
       />
