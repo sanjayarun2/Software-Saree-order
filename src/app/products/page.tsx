@@ -432,7 +432,7 @@ function ProductListTab({
             {t("Refresh")}
           </button>
           {refreshingList && items.length > 0 && (
-            <span className="text-xs text-slate-500">{t("Updatingâ€¦")}</span>
+            <span className="text-xs text-slate-500">{t("Updating…")}</span>
           )}
         </div>
       </BentoCard>
@@ -463,10 +463,10 @@ function ProductListTab({
                 <div>
                   <p className="font-semibold text-slate-900 dark:text-slate-100">{p.name}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {p.productCode || "â€”"} Â· {p.collectionName || t("No collection")}
+                    {p.productCode || "—"} · {p.collectionName || t("No collection")}
                   </p>
                   <p className="mt-1 text-sm">
-                    â‚¹{p.price} Â· {t("Stock")}: {p.stock ?? 0}
+                    ₹{p.price} · {t("Stock")}: {p.stock ?? 0}
                   </p>
                   <span
                     className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -518,7 +518,7 @@ function ProductListTab({
           onClick={() => void load(page + 1, true)}
           className="w-full min-h-[44px] rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold dark:border-slate-600 dark:bg-slate-800"
         >
-          {loadingList ? t("Loadingâ€¦") : t("Load more")}
+          {loadingList ? `${t("Loading")}…` : t("Load more")}
         </button>
       )}
     </div>
@@ -593,7 +593,7 @@ function ProductSingleTab({
     if (!files?.[0]) return;
     setError(null);
     setUploadBusy(true);
-    setUploadPhase(t("Preparing imageâ€¦"));
+    setUploadPhase(t("Preparing image…"));
     setUploadProgress(8);
     const stopTicker = startUploadProgressTicker(setUploadProgress, 8, 38, 2500);
     try {
@@ -628,7 +628,7 @@ function ProductSingleTab({
 
     setSubmitting(true);
     setUploadBusy(true);
-    setUploadPhase(t("Uploading productâ€¦"));
+    setUploadPhase(t("Uploading product…"));
     setUploadProgress(42);
     const stopTicker = startUploadProgressTicker(setUploadProgress, 42, 92, 35_000);
     try {
@@ -842,7 +842,7 @@ function ProductSingleTab({
         onClick={() => void onSubmit()}
         className="min-h-[44px] w-full rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white disabled:opacity-50"
       >
-        {submitting ? t("Savingâ€¦") : form.productId ? t("Update product") : t("Create product")}
+        {submitting ? t("Saving…") : form.productId ? t("Update product") : t("Create product")}
       </button>
     </BentoCard>
     </>
@@ -1104,7 +1104,7 @@ function ProductSyncLogsTab({ setInfo }: { setInfo: (v: string | null) => void }
             </div>
             <p className="mt-1 text-slate-600 dark:text-slate-300">{log.message}</p>
             <p className="mt-1 text-xs text-slate-500">
-              {new Date(log.at).toLocaleString()} Â· {log.requestId.slice(0, 8)}
+              {new Date(log.at).toLocaleString()} · {log.requestId.slice(0, 8)}
             </p>
             {log.details && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{log.details}</p>}
           </BentoCard>

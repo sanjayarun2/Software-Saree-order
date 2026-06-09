@@ -27,9 +27,9 @@ function resolveSlug(input: ShopProductLinkInput): string | null {
 }
 
 /**
- * Cart-first storefront links.
- * Cart: /cart?add={productId}&quantity=1 (shop reads on cart page mount).
- * Product page: /products/{slug} or /collections/{collection}/products/{slug}.
+ * Cart-first storefront links (Sakthi Textiles shop).
+ * Cart: /cart?add={productId}&quantity=1 — shop CartDeepLinkAdd adds item on load.
+ * Product page: /shop/{slug} (storefront product detail route).
  */
 export function buildShopProductLinks(input: ShopProductLinkInput): ShopProductLinks {
   const productId = input.productId.trim();
@@ -40,18 +40,12 @@ export function buildShopProductLinks(input: ShopProductLinkInput): ShopProductL
   const base = normalizeShopBaseUrl(input.shopBaseUrl);
   const encodedId = encodeShopPathSegment(productId);
   const slug = resolveSlug(input);
-  const collectionSlug = input.collectionSlug?.trim();
 
   const cartUrl = `${base}/cart?add=${encodedId}&quantity=1`;
 
   let productUrl = cartUrl;
   if (slug) {
-    const encodedSlug = encodeShopPathSegment(slug);
-    if (collectionSlug) {
-      productUrl = `${base}/collections/${encodeShopPathSegment(collectionSlug)}/products/${encodedSlug}`;
-    } else {
-      productUrl = `${base}/products/${encodedSlug}`;
-    }
+    productUrl = `${base}/shop/${encodeShopPathSegment(slug)}`;
   }
 
   return {
