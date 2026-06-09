@@ -4,6 +4,7 @@ import {
 } from "./api-settings-supabase";
 import { appendProductSyncLog } from "./product-sync-logs";
 import { supabase } from "./supabase";
+import { isBase64WithinUploadLimit } from "./product-image-compress";
 import {
   invalidateProductsListCache,
   normalizeIsDraft,
@@ -79,7 +80,7 @@ function isRetryable(status: number, message: string) {
 
 function payloadTooLargeError() {
   return new VeloProductsApiError(
-    "Upload too large (413). Images are being sent one at a time with stronger compression — if this persists, use smaller photos."
+    "Photo too large to upload (413). We compressed it automatically — please retry. If it continues, pick a smaller image."
   );
 }
 
@@ -150,7 +151,9 @@ function throwInvokeFailure(payload: unknown, invokeError: Error | null): never 
     "context" in invokeError &&
     typeof (invokeError as { context?: { status?: number } }).context?.status === "number"
       ? (invokeError as { context: { status: number } }).context.status
-      : 0;
+      : payload && typeof payload === "object" && "status" in payload
+        ? Number((payload as { status: unknown }).status) || 0
+        : 0;
 
   if (status === 413 || isPayloadTooLargeMessage(`${message} ${invokeMsg}`)) {
     throw payloadTooLargeError();
@@ -380,25 +383,32 @@ function normalizeSizeConfig(config: VeloSizeConfig) {
   };
 }
 
+export type VeloProductUpsertInput = {
+  productId?: string;
+  veloExternalId?: string;
+  name: string;
+  description: string;
+  collectionId: string;
+  tags: string[];
+  badge: string;
+  rating: string;
+  price: string;
+  stock: number;
+  isDraft: boolean;
+  featuredImageMediaId?: string;
+  imageBase64?: string;
+  imageFileName?: string;
+  sizeConfig: VeloSizeConfig;
+};
+
+type UpsertVeloProductOptions = {
+  deferCacheInvalidation?: boolean;
+};
+
 export async function upsertVeloProduct(
   userId: string,
-  data: {
-    productId?: string;
-    veloExternalId?: string;
-    name: string;
-    description: string;
-    collectionId: string;
-    tags: string[];
-    badge: string;
-    rating: string;
-    price: string;
-    stock: number;
-    isDraft: boolean;
-    featuredImageMediaId?: string;
-    imageBase64?: string;
-    imageFileName?: string;
-    sizeConfig: VeloSizeConfig;
-  }
+  data: VeloProductUpsertInput,
+  options?: UpsertVeloProductOptions
 ) {
   const integration = await getPrimaryIntegration(userId);
   const requestId = newRequestId();
@@ -406,7 +416,7 @@ export async function upsertVeloProduct(
     productId: data.productId,
     veloExternalId: data.veloExternalId,
   });
-  return requestWithRetry(integration, "upsert", requestId, {
+  const res = await requestWithRetry(integration, "upsert", requestId, {
     productId: data.productId,
     externalProductId,
     name: data.name.trim(),
@@ -428,10 +438,66 @@ export async function upsertVeloProduct(
         ? data.imageFileName || undefined
         : undefined,
     sizeConfig: normalizeSizeConfig(data.sizeConfig),
-  }).then((res) => {
-    invalidateProductsListCache(userId);
-    return res;
   });
+  if (!options?.deferCacheInvalidation) {
+    invalidateProductsListCache(userId);
+  }
+  return res;
+}
+
+/** Proactive compression + 413 retry — industry-standard reliable single upload. */
+export async function uploadProductReliable(
+  userId: string,
+  data: VeloProductUpsertInput,
+  opts?: {
+    deferCacheInvalidation?: boolean;
+    recompressImage?: (
+      base64: string,
+      fileName: string
+    ) => Promise<{ base64: string; fileName: string }>;
+  }
+) {
+  let imageBase64 = data.imageBase64;
+  let imageFileName = data.imageFileName;
+
+  const buildPayload = (): VeloProductUpsertInput => ({
+    ...data,
+    imageBase64,
+    imageFileName,
+  });
+
+  if (
+    opts?.recompressImage &&
+    imageBase64 &&
+    imageBase64 !== "[saved]" &&
+    !isBase64WithinUploadLimit(imageBase64)
+  ) {
+    const smaller = await opts.recompressImage(imageBase64, imageFileName || "product.webp");
+    imageBase64 = smaller.base64;
+    imageFileName = smaller.fileName;
+  }
+
+  try {
+    return await upsertVeloProduct(userId, buildPayload(), {
+      deferCacheInvalidation: opts?.deferCacheInvalidation,
+    });
+  } catch (firstError) {
+    const msg = (firstError as Error).message;
+    if (
+      opts?.recompressImage &&
+      imageBase64 &&
+      imageBase64 !== "[saved]" &&
+      isPayloadTooLargeMessage(msg)
+    ) {
+      const smaller = await opts.recompressImage(imageBase64, imageFileName || "product.webp");
+      imageBase64 = smaller.base64;
+      imageFileName = smaller.fileName;
+      return await upsertVeloProduct(userId, buildPayload(), {
+        deferCacheInvalidation: opts?.deferCacheInvalidation,
+      });
+    }
+    throw firstError;
+  }
 }
 
 export async function bulkUpsertVeloProducts(
@@ -486,7 +552,7 @@ export type BulkUploadProgress = {
   label: string;
 };
 
-/** Upload bulk images one-by-one to avoid HTTP 413 payload limits. */
+/** Upload bulk images one-by-one (reliable upsert per product, WebP-compressed). */
 export async function uploadBulkProductsSequential(
   userId: string,
   data: {
@@ -516,59 +582,49 @@ export async function uploadBulkProductsSequential(
 
   for (let i = 0; i < images.length; i++) {
     const current = i + 1;
-    const label = `Uploading product ${current}/${images.length}`;
+    const productName = `${shared.namePrefix.trim()} ${current}`;
     onProgress?.({
       current,
       total: images.length,
       percent: Math.round(5 + ((current - 0.5) / images.length) * 90),
-      label,
+      label: `Uploading product ${current}/${images.length}`,
     });
 
-    let imageBase64 = images[i].imageBase64;
-    let imageFileName = images[i].imageFileName;
-    const productName = `${shared.namePrefix.trim()} ${current}`;
-
-    const uploadOne = () =>
-      bulkUpsertVeloProducts(userId, {
-        ...shared,
-        itemIndexOffset: i,
-        items: [
-          {
-            imageBase64,
-            imageFileName,
-            name: productName,
-          },
-        ],
-      });
-
     try {
-      let res = await uploadOne();
-      totalCreated += res.createdCount ?? 0;
-      createdCodes.push(...formatBulkCreatedCodes(res.created));
-      if (res.warnings?.length) warnings.push(...res.warnings);
-      if (res.errors?.length) warnings.push(...res.errors);
-    } catch (firstError) {
-      const msg = (firstError as Error).message;
-
-      if (recompressImage && isPayloadTooLargeMessage(msg)) {
-        try {
-          const smaller = await recompressImage(imageBase64, imageFileName);
-          imageBase64 = smaller.base64;
-          imageFileName = smaller.fileName;
-          const res = await uploadOne();
-          totalCreated += res.createdCount ?? 0;
-          createdCodes.push(...formatBulkCreatedCodes(res.created));
-          if (res.warnings?.length) warnings.push(...res.warnings);
-          continue;
-        } catch (retryError) {
-          failures.push(`${productName}: ${(retryError as Error).message}`);
-          continue;
+      const res = await uploadProductReliable(
+        userId,
+        {
+          name: productName,
+          description: shared.description,
+          collectionId: shared.collectionId,
+          tags: shared.tags,
+          badge: shared.badge,
+          rating: shared.rating,
+          price: shared.price,
+          stock: shared.stock,
+          isDraft: shared.isDraft,
+          sizeConfig: shared.sizeConfig,
+          imageBase64: images[i].imageBase64,
+          imageFileName: images[i].imageFileName,
+        },
+        {
+          deferCacheInvalidation: true,
+          recompressImage,
         }
-      }
+      );
 
-      failures.push(`${productName}: ${msg}`);
+      if (res.product?.productId) {
+        totalCreated += 1;
+        if (res.product.productCode) createdCodes.push(res.product.productCode);
+      } else if (res.ok) {
+        totalCreated += 1;
+      }
+    } catch (e) {
+      failures.push(`${productName}: ${(e as Error).message}`);
     }
   }
+
+  invalidateProductsListCache(userId);
 
   if (totalCreated === 0 && failures.length > 0) {
     throw new VeloProductsApiError(failures[0] ?? "Bulk upload failed.");

@@ -26,9 +26,12 @@ export const SINGLE_UPLOAD_PROFILE: CompressProfile = {
 /** Bulk upload — one image per API request, smaller payload. */
 export const BULK_UPLOAD_PROFILE: CompressProfile = {
   maxEdge: 1600,
-  targetBytes: 520_000,
+  targetBytes: 450_000,
   qualitySteps: [0.82, 0.78, 0.74, 0.7, 0.66, 0.62],
 };
+
+/** ~1 MB binary in base64 — safe for Vercel/Supabase ~4.5 MB JSON body limits. */
+export const MAX_SAFE_BASE64_CHARS = 1_350_000;
 
 /** Last resort after HTTP 413. */
 export const AGGRESSIVE_UPLOAD_PROFILE: CompressProfile = {
@@ -304,9 +307,18 @@ export async function recompressBase64Image(
   }
 }
 
+export function rawBase64Length(base64: string) {
+  const raw = base64.includes(",") ? base64.split(",").pop()! : base64;
+  return raw.length;
+}
+
+export function isBase64WithinUploadLimit(base64: string) {
+  return rawBase64Length(base64) <= MAX_SAFE_BASE64_CHARS;
+}
+
 /** Rough JSON body size for one bulk item (base64 + shared fields). */
 export function estimateBulkItemPayloadBytes(base64: string) {
-  return base64.length + 2048;
+  return rawBase64Length(base64) + 2048;
 }
 
 export function chunkArray<T>(items: T[], size: number): T[][] {

@@ -103,15 +103,20 @@ Deno.serve(async (req) => {
     }
 
     if (!veloRes.ok) {
-      const message =
+      const baseMessage =
         typeof payload === "object" && payload && "message" in payload
           ? String((payload as { message: string }).message)
           : `Velo API returned ${veloRes.status}`;
+      const message =
+        veloRes.status === 413
+          ? `Request payload too large (413). ${baseMessage}`
+          : baseMessage;
       // Always HTTP 200 so supabase.functions.invoke returns the real error body.
       return new Response(
         JSON.stringify({
           ok: false,
           error: message,
+          status: veloRes.status,
           details: payload,
           requestId: body.requestId,
           action: body.action,

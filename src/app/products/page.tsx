@@ -40,7 +40,7 @@ import {
   listVeloProducts,
   peekVeloProductsList,
   prefetchVeloProductsList,
-  upsertVeloProduct,
+  uploadProductReliable,
   validateBulkForm,
   validateSingleProductForm,
   VeloProductsApiError,
@@ -566,11 +566,9 @@ function ProductSingleTab({
     setUploadProgress(42);
     const stopTicker = startUploadProgressTicker(setUploadProgress, 42, 92, 35_000);
     try {
-      let imageBase64 = form.imageBase64;
-      let imageFileName = form.imageFileName;
-
-      const tryUpsert = () =>
-        upsertVeloProduct(userId, {
+      const res = await uploadProductReliable(
+        userId,
+        {
           productId: form.productId,
           veloExternalId: form.veloExternalId,
           name: form.name,
@@ -583,25 +581,17 @@ function ProductSingleTab({
           stock: form.stock,
           isDraft: normalizeIsDraft(form.isDraft),
           featuredImageMediaId: form.featuredImageMediaId,
-          imageBase64,
-          imageFileName,
+          imageBase64: form.imageBase64,
+          imageFileName: form.imageFileName,
           sizeConfig: form.sizeConfig,
-        });
-
-      let res;
-      try {
-        res = await tryUpsert();
-      } catch (firstError) {
-        const msg = (firstError as Error).message;
-        if (/413|too large/i.test(msg) && imageBase64) {
-          const smaller = await recompressBase64Image(imageBase64, imageFileName);
-          imageBase64 = smaller.base64;
-          imageFileName = smaller.fileName;
-          res = await tryUpsert();
-        } else {
-          throw firstError;
+        },
+        {
+          recompressImage: async (base64, fileName) => {
+            const smaller = await recompressBase64Image(base64, fileName);
+            return { base64: smaller.base64, fileName: smaller.fileName };
+          },
         }
-      }
+      );
 
       clearSingleProductDraft();
       setForm({ ...EMPTY_SINGLE_FORM });
