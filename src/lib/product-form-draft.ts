@@ -5,10 +5,14 @@ const BULK_KEY = "velo_product_bulk_draft";
 
 export function saveSingleProductDraft(form: VeloSingleProductForm) {
   if (typeof window === "undefined") return;
-  const { imageBase64, ...rest } = form;
+  const { imageBase64, veloExternalId, ...rest } = form;
   localStorage.setItem(
     SINGLE_KEY,
-    JSON.stringify({ ...rest, imageBase64: imageBase64 ? "[saved]" : "" })
+    JSON.stringify({
+      ...rest,
+      veloExternalId: veloExternalId || "",
+      imageBase64: imageBase64 ? "[saved]" : "",
+    })
   );
 }
 
@@ -17,7 +21,13 @@ export function loadSingleProductDraft(): VeloSingleProductForm | null {
   try {
     const raw = localStorage.getItem(SINGLE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as VeloSingleProductForm;
+    const parsed = JSON.parse(raw) as VeloSingleProductForm & {
+      externalProductId?: string;
+    };
+    if (!parsed.veloExternalId && parsed.externalProductId) {
+      parsed.veloExternalId = parsed.externalProductId;
+    }
+    return parsed;
   } catch {
     return null;
   }

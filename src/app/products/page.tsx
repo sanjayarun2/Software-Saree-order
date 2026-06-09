@@ -27,6 +27,7 @@ import {
   bulkUpsertVeloProducts,
   deleteVeloProduct,
   fetchVeloCollections,
+  formatBulkCreatedCodes,
   listVeloProducts,
   upsertVeloProduct,
   validateBulkForm,
@@ -405,7 +406,8 @@ function ProductSingleTab({
       setForm((prev) => ({
         ...prev,
         productId: product.productId,
-        externalProductId: product.productCode || "",
+        websiteProductCode: product.productCode || "",
+        veloExternalId: product.externalProductId || "",
         name: product.name,
         collectionId: product.collectionId || "",
         price: String(product.price),
@@ -453,9 +455,9 @@ function ProductSingleTab({
 
     setSubmitting(true);
     try {
-      await upsertVeloProduct(userId, {
+      const res = await upsertVeloProduct(userId, {
         productId: form.productId,
-        externalProductId: form.externalProductId,
+        veloExternalId: form.veloExternalId,
         name: form.name,
         description: form.description,
         collectionId: form.collectionId,
@@ -472,7 +474,16 @@ function ProductSingleTab({
       });
       clearSingleProductDraft();
       setForm({ ...EMPTY_SINGLE_FORM });
-      setInfo(t("Product saved successfully."));
+      const stCode = res.product?.productCode;
+      if (stCode) {
+        setInfo(
+          res.product?.productId && form.productId
+            ? t("Product updated: {code}.").replace("{code}", stCode)
+            : t("Product created: {code}.").replace("{code}", stCode)
+        );
+      } else {
+        setInfo(t("Product saved successfully."));
+      }
       onSaved();
     } catch (e) {
       if (e instanceof VeloProductsApiError) {
@@ -488,19 +499,22 @@ function ProductSingleTab({
 
   return (
     <BentoCard className="space-y-4 p-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      {!form.productId ? (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+          {t("Website assigns the next ST product code automatically (same as shop admin).")}
+        </p>
+      ) : form.websiteProductCode ? (
         <label className="block">
-          <span className={labelCls}>{t("Product code")} *</span>
+          <span className={labelCls}>{t("Product code")}</span>
           <input
-            className={inputCls}
-            value={form.externalProductId}
-            onChange={(e) => patch({ externalProductId: e.target.value })}
+            className={`${inputCls} bg-slate-100 dark:bg-slate-900`}
+            value={form.websiteProductCode}
+            readOnly
           />
-          {fieldErrors.externalProductId && (
-            <p className="mt-1 text-xs text-red-600">{fieldErrors.externalProductId}</p>
-          )}
         </label>
-        <label className="block">
+      ) : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block sm:col-span-2">
           <span className={labelCls}>{t("Name")} *</span>
           <input className={inputCls} value={form.name} onChange={(e) => patch({ name: e.target.value })} />
           {fieldErrors.name && <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
@@ -703,6 +717,8 @@ function ProductBulkTab({
     const batches = chunkArray(images, 5);
     let totalCreated = 0;
     const warnings: string[] = [];
+    const createdCodes: string[] = [];
+    let itemOffset = 0;
 
     try {
       for (let i = 0; i < batches.length; i++) {
@@ -715,13 +731,17 @@ function ProductBulkTab({
 
         const res = await bulkUpsertVeloProducts(userId, {
           ...form,
+          itemIndexOffset: itemOffset,
           items: batches[i].map((img) => ({
             imageBase64: img.base64,
             imageFileName: img.fileName,
           })),
         });
-        totalCreated += res.createdCount ?? res.created?.length ?? 0;
+        itemOffset += batches[i].length;
+        totalCreated += res.createdCount ?? 0;
+        createdCodes.push(...formatBulkCreatedCodes(res.created));
         if (res.warnings?.length) warnings.push(...res.warnings);
+        if (res.errors?.length) warnings.push(...res.errors);
       }
 
       setPhase(t("Creating products"));
@@ -734,7 +754,15 @@ function ProductBulkTab({
         warnings.length > 0
           ? t(" {count} warning(s).").replace("{count}", String(warnings.length))
           : "";
-      setInfo(t("Created {count} product(s).").replace("{count}", String(totalCreated)) + warnText);
+      const codePreview =
+        createdCodes.length > 0
+          ? ` ${createdCodes.slice(0, 5).join(", ")}${createdCodes.length > 5 ? "…" : ""}`
+          : "";
+      setInfo(
+        t("Created {count} product(s).").replace("{count}", String(totalCreated)) +
+          codePreview +
+          warnText
+      );
       onDone();
     } catch (e) {
       setError((e as Error).message);
@@ -761,6 +789,9 @@ function ProductBulkTab({
       )}
 
       <BentoCard className="space-y-4 p-4">
+        <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+          {t("Each image gets the next website ST code in order (shared with shop admin).")}
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2">
             <span className={labelCls}>{t("Name prefix")} *</span>

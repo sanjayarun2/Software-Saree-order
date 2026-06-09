@@ -309,6 +309,12 @@ const TA: Record<string, string> = {
   "Delete product \"{name}\"?": "புராடக்ட் \"{name}\" நீக்கவா?",
   "Product deleted.": "புராடக்ட் நீக்கப்பட்டது.",
   "Product code": "புராடக்ட் கோடு",
+  "Website assigns the next ST product code automatically (same as shop admin).":
+    "வலைத்தளம் அடுத்த ST புராடக்ட் கோடை தானாக வழங்கும் (கடை அட்மின் போல).",
+  "Each image gets the next website ST code in order (shared with shop admin).":
+    "ஒவ்வொரு படத்திற்கும் அடுத்த ST கோடு வரிசையாக கிடைக்கும் (கடை அட்மினுடன் பகிர்ந்து).",
+  "Product created: {code}.": "புராடக்ட் உருவாக்கப்பட்டது: {code}.",
+  "Product updated: {code}.": "புராடக்ட் புதுப்பிக்கப்பட்டது: {code}.",
   Description: "விளக்கம்",
   Collection: "கலெக்ஷன்",
   "Select collection": "கலெக்ஷன் தேர்வு",

@@ -18,7 +18,10 @@ export type VeloCollection = {
 
 export type VeloProductListItem = {
   productId: string;
+  /** Shop-assigned ST code (e.g. ST000042). */
   productCode: string | null;
+  /** Internal Velo mapping id (hidden from staff). */
+  externalProductId?: string | null;
   name: string;
   collectionId: string | null;
   collectionName: string | null;
@@ -49,8 +52,23 @@ export type VeloProductsResponse = {
     isDraft: boolean;
   };
   collections?: VeloCollection[];
-  created?: { id: string; productCode: string; name: string; slug: string }[];
+  created?: Array<
+    | { id: string; productCode: string; name: string; slug: string }
+    | {
+        index: number;
+        externalProductId: string;
+        created: boolean;
+        product: {
+          productId: string;
+          productCode: string | null;
+          slug: string;
+          name: string;
+          isDraft: boolean;
+        };
+      }
+  >;
   createdCount?: number;
+  updatedCount?: number;
   warnings?: string[];
   page?: number;
   pageSize?: number;
@@ -60,7 +78,10 @@ export type VeloProductsResponse = {
 
 export type VeloSingleProductForm = {
   productId?: string;
-  externalProductId: string;
+  /** Read-only shop code (ST…) when editing. */
+  websiteProductCode?: string;
+  /** Internal id for API upsert; auto-generated on create. */
+  veloExternalId: string;
   name: string;
   description: string;
   collectionId: string;
@@ -98,7 +119,7 @@ export const DEFAULT_SIZE_OPTIONS: VeloSizeOption[] = [
 ];
 
 export const EMPTY_SINGLE_FORM: VeloSingleProductForm = {
-  externalProductId: "",
+  veloExternalId: "",
   name: "",
   description: "",
   collectionId: "",

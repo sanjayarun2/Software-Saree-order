@@ -43,6 +43,22 @@ function newRequestId() {
   return crypto.randomUUID();
 }
 
+/** Hidden Velo-side id for upsert mapping (not the shop ST code). */
+export function newVeloExternalId(suffix?: string) {
+  const id = crypto.randomUUID();
+  return suffix ? `velo-${suffix}-${id}` : `velo-${id}`;
+}
+
+function resolveExternalProductId(opts: {
+  productId?: string;
+  veloExternalId?: string;
+}) {
+  const trimmed = opts.veloExternalId?.trim();
+  if (trimmed) return trimmed;
+  if (opts.productId) return `velo-pid-${opts.productId}`;
+  return newVeloExternalId();
+}
+
 async function getPrimaryIntegration(userId: string): Promise<ApiIntegrationRow> {
   const rows = await getEnabledApiIntegrations(userId);
   const withKey = rows.filter((r) => r.api_key.trim().length > 0);
@@ -218,7 +234,7 @@ export async function upsertVeloProduct(
   userId: string,
   data: {
     productId?: string;
-    externalProductId: string;
+    veloExternalId?: string;
     name: string;
     description: string;
     collectionId: string;
@@ -236,9 +252,13 @@ export async function upsertVeloProduct(
 ) {
   const integration = await getPrimaryIntegration(userId);
   const requestId = newRequestId();
+  const externalProductId = resolveExternalProductId({
+    productId: data.productId,
+    veloExternalId: data.veloExternalId,
+  });
   return requestWithRetry(integration, "upsert", requestId, {
     productId: data.productId,
-    externalProductId: data.externalProductId.trim(),
+    externalProductId,
     name: data.name.trim(),
     description: data.description,
     collectionId: data.collectionId,
@@ -268,24 +288,48 @@ export async function bulkUpsertVeloProducts(
     stock: number;
     isDraft: boolean;
     sizeConfig: VeloSizeConfig;
-    items: { imageBase64: string; imageFileName: string; externalProductId?: string; name?: string }[];
+    items: { imageBase64: string; imageFileName: string; name?: string }[];
+    itemIndexOffset?: number;
   }
 ) {
   const integration = await getPrimaryIntegration(userId);
   const requestId = newRequestId();
+  const offset = data.itemIndexOffset ?? 0;
   return requestWithRetry(integration, "bulk_upsert", requestId, {
-    namePrefix: data.namePrefix.trim(),
-    description: data.description,
-    collectionId: data.collectionId,
-    tags: data.tags,
-    badge: normalizeBadge(data.badge),
-    rating: data.rating || "4",
-    price: data.price.trim(),
-    stock: Math.max(0, Math.round(data.stock)),
-    isDraft: data.isDraft,
-    sizeConfig: normalizeSizeConfig(data.sizeConfig),
-    items: data.items,
+    shared: {
+      namePrefix: data.namePrefix.trim(),
+      description: data.description,
+      collectionId: data.collectionId,
+      tags: data.tags,
+      badge: normalizeBadge(data.badge),
+      rating: data.rating || "4",
+      price: data.price.trim(),
+      stock: Math.max(0, Math.round(data.stock)),
+      isDraft: data.isDraft,
+      sizeConfig: normalizeSizeConfig(data.sizeConfig),
+    },
+    items: data.items.map((item, index) => ({
+      externalProductId: newVeloExternalId(`${requestId.slice(0, 8)}-${offset + index}`),
+      imageBase64: item.imageBase64,
+      imageFileName: item.imageFileName,
+      name: item.name,
+    })),
   });
+}
+
+export function formatBulkCreatedCodes(
+  created: VeloProductsResponse["created"]
+): string[] {
+  if (!created?.length) return [];
+  return created
+    .map((row) => {
+      const entry = row as {
+        product?: { productCode?: string | null };
+        productCode?: string | null;
+      };
+      return entry.product?.productCode ?? entry.productCode ?? null;
+    })
+    .filter((code): code is string => Boolean(code));
 }
 
 export async function deleteVeloProduct(userId: string, productId: string) {
@@ -295,7 +339,6 @@ export async function deleteVeloProduct(userId: string, productId: string) {
 }
 
 export function validateSingleProductForm(data: {
-  externalProductId: string;
   name: string;
   collectionId: string;
   price: string;
@@ -306,7 +349,6 @@ export function validateSingleProductForm(data: {
   sizeConfig: VeloSizeConfig;
 }): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!data.externalProductId.trim()) errors.externalProductId = "Product code is required.";
   if (!data.name.trim()) errors.name = "Name is required.";
   if (!data.collectionId) errors.collectionId = "Collection is required.";
   if (!data.price.trim() || Number.isNaN(Number(data.price))) errors.price = "Valid price is required.";
