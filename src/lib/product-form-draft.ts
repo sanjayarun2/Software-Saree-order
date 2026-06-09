@@ -27,6 +27,10 @@ export function loadSingleProductDraft(): VeloSingleProductForm | null {
     if (!parsed.veloExternalId && parsed.externalProductId) {
       parsed.veloExternalId = parsed.externalProductId;
     }
+    if (parsed.imageBase64 === "[saved]") {
+      parsed.imageBase64 = "";
+      parsed.imageFileName = "";
+    }
     return parsed;
   } catch {
     return null;

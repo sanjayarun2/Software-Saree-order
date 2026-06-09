@@ -107,7 +107,20 @@ Deno.serve(async (req) => {
         typeof payload === "object" && payload && "message" in payload
           ? String((payload as { message: string }).message)
           : `Velo API returned ${veloRes.status}`;
-      return json({ ok: false, error: message, details: payload }, veloRes.status);
+      // Always HTTP 200 so supabase.functions.invoke returns the real error body.
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: message,
+          details: payload,
+          requestId: body.requestId,
+          action: body.action,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     return new Response(JSON.stringify(payload), {

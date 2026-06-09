@@ -70,6 +70,57 @@ async function getPrimaryIntegration(userId: string): Promise<ApiIntegrationRow>
   return withKey[0];
 }
 
+function hasUsableProductImage(imageBase64: string, featuredImageMediaId: string) {
+  const base64 = imageBase64.trim();
+  return Boolean(
+    featuredImageMediaId.trim() ||
+      (base64 && base64 !== "[saved]" && base64.length > 64)
+  );
+}
+
+function extractInvokeErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  if ("error" in payload && payload.error) {
+    return String(payload.error);
+  }
+
+  const res = payload as VeloProductsResponse;
+  if (res.message?.trim()) return res.message.trim();
+  if (res.errors?.length) return res.errors[0];
+
+  if ("details" in payload && payload.details && typeof payload.details === "object") {
+    const details = payload.details as VeloProductsResponse;
+    if (details.message?.trim()) return details.message.trim();
+    if (details.errors?.length) return details.errors[0];
+  }
+
+  return null;
+}
+
+function throwInvokeFailure(payload: unknown, invokeError: Error | null): never {
+  const message = extractInvokeErrorMessage(payload);
+  if (message) {
+    if (/image|imageBase64|featuredImageMediaId/i.test(message)) {
+      throw new VeloProductsApiError(
+        "Product image is invalid or missing. Pick the photo again and retry."
+      );
+    }
+    throw new VeloProductsApiError(message);
+  }
+
+  if (invokeError) {
+    if (/function not found|404|not deployed/i.test(invokeError.message)) {
+      throw new VeloProductsApiError(
+        "Products API proxy not deployed. Deploy velo-website-products in Supabase."
+      );
+    }
+    throw new VeloProductsApiError(invokeError.message);
+  }
+
+  throw new VeloProductsApiError("Empty response from server.");
+}
+
 async function invokeVeloProducts(
   integration: ApiIntegrationRow,
   action: VeloProductsAction,
@@ -92,22 +143,23 @@ async function invokeVeloProducts(
       }
     );
 
-    if (error) {
-      if (/function not found|404|not deployed/i.test(error.message)) {
-        throw new VeloProductsApiError(
-          "Products API proxy not deployed. Deploy velo-website-products in Supabase."
-        );
-      }
-      throw new VeloProductsApiError(error.message);
-    }
-
     if (!payload || typeof payload !== "object") {
+      if (error) throwInvokeFailure(payload, error);
       throw new VeloProductsApiError("Empty response from server.");
     }
 
     const res = payload as VeloProductsResponse;
-    if ("error" in payload && payload.error && !res.ok) {
-      throw new VeloProductsApiError(String(payload.error));
+    const proxyFailed =
+      Boolean(error) ||
+      ("ok" in payload && payload.ok === false) ||
+      ("error" in payload && Boolean(payload.error));
+
+    if (proxyFailed) {
+      throwInvokeFailure(payload, error);
+    }
+
+    if (!res.ok) {
+      throwInvokeFailure(payload, error);
     }
 
     return res;
@@ -269,8 +321,14 @@ export async function upsertVeloProduct(
     stock: Math.max(0, Math.round(data.stock)),
     isDraft: data.isDraft,
     featuredImageMediaId: data.featuredImageMediaId?.trim() || undefined,
-    imageBase64: data.imageBase64 || undefined,
-    imageFileName: data.imageFileName || undefined,
+    imageBase64:
+      data.imageBase64 && data.imageBase64 !== "[saved]"
+        ? data.imageBase64
+        : undefined,
+    imageFileName:
+      data.imageBase64 && data.imageBase64 !== "[saved]"
+        ? data.imageFileName || undefined
+        : undefined,
     sizeConfig: normalizeSizeConfig(data.sizeConfig),
   });
 }
@@ -353,7 +411,10 @@ export function validateSingleProductForm(data: {
   if (!data.collectionId) errors.collectionId = "Collection is required.";
   if (!data.price.trim() || Number.isNaN(Number(data.price))) errors.price = "Valid price is required.";
   if (data.stock < 0) errors.stock = "Stock cannot be negative.";
-  if (!data.productId && !data.imageBase64 && !data.featuredImageMediaId.trim()) {
+  if (
+    !data.productId &&
+    !hasUsableProductImage(data.imageBase64, data.featuredImageMediaId)
+  ) {
     errors.image = "Product image is required.";
   }
   if (data.sizeConfig.enabled) {

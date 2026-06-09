@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BentoCard } from "@/components/ui/BentoCard";
+import {
+  startUploadProgressTicker,
+  UploadProgressOverlay,
+} from "@/components/products/UploadProgressOverlay";
 import { SizeConfigEditor } from "@/components/products/SizeConfigEditor";
 import { TagsInput } from "@/components/products/TagsInput";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -398,6 +402,8 @@ function ProductSingleTab({
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -431,15 +437,25 @@ function ProductSingleTab({
   const onPickImage = async (files: FileList | null) => {
     if (!files?.[0]) return;
     setError(null);
+    setUploadPhase(t("Preparing image…"));
+    setUploadProgress(8);
+    const stopTicker = startUploadProgressTicker(setUploadProgress, 8, 38, 2500);
     try {
       const compressed = await compressImageFile(files[0]);
+      stopTicker();
+      setUploadProgress(100);
       patch({
         imageBase64: compressed.base64,
         imageFileName: compressed.fileName,
         featuredImageMediaId: "",
       });
+      await new Promise((r) => setTimeout(r, 350));
     } catch (e) {
+      stopTicker();
       setError((e as Error).message);
+    } finally {
+      setUploadPhase(null);
+      setUploadProgress(0);
     }
   };
 
@@ -454,6 +470,9 @@ function ProductSingleTab({
     }
 
     setSubmitting(true);
+    setUploadPhase(t("Uploading product…"));
+    setUploadProgress(42);
+    const stopTicker = startUploadProgressTicker(setUploadProgress, 42, 92, 35_000);
     try {
       const res = await upsertVeloProduct(userId, {
         productId: form.productId,
@@ -485,7 +504,11 @@ function ProductSingleTab({
         setInfo(t("Product saved successfully."));
       }
       onSaved();
+      stopTicker();
+      setUploadProgress(100);
+      await new Promise((r) => setTimeout(r, 450));
     } catch (e) {
+      stopTicker();
       if (e instanceof VeloProductsApiError) {
         setError(e.message);
         setFieldErrors(e.fieldErrors);
@@ -494,11 +517,19 @@ function ProductSingleTab({
       }
     } finally {
       setSubmitting(false);
+      setUploadPhase(null);
+      setUploadProgress(0);
     }
   };
 
   return (
-    <BentoCard className="space-y-4 p-4">
+    <>
+      <UploadProgressOverlay
+        open={Boolean(uploadPhase)}
+        label={uploadPhase ?? ""}
+        progress={uploadProgress}
+      />
+      <BentoCard className="space-y-4 p-4">
       {!form.productId ? (
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
           {t("Website assigns the next ST product code automatically (same as shop admin).")}
@@ -639,6 +670,7 @@ function ProductSingleTab({
         {submitting ? t("Saving…") : form.productId ? t("Update product") : t("Create product")}
       </button>
     </BentoCard>
+    </>
   );
 }
 
@@ -678,20 +710,25 @@ function ProductBulkTab({
     if (!files?.length) return;
     setError(null);
     setPhase(t("Preparing images"));
+    setProgress(2);
     const next: { fileName: string; base64: string }[] = [];
     const list = Array.from(files).slice(0, 50);
     for (let i = 0; i < list.length; i++) {
-      setProgress(Math.round(((i + 1) / list.length) * 40));
+      setProgress(Math.max(2, Math.round(((i + 0.15) / list.length) * 40)));
       try {
         const c = await compressImageFile(list[i]);
         next.push({ fileName: c.fileName, base64: c.base64 });
+        setProgress(Math.round(((i + 1) / list.length) * 40));
       } catch (e) {
         setError((e as Error).message);
         setPhase(null);
+        setProgress(0);
         return;
       }
     }
     setImages((prev) => [...prev, ...next].slice(0, 50));
+    setProgress(100);
+    await new Promise((r) => setTimeout(r, 350));
     setPhase(null);
     setProgress(0);
   };
@@ -714,6 +751,8 @@ function ProductBulkTab({
     }
 
     setSubmitting(true);
+    setPhase(t("Uploading..."));
+    setProgress(5);
     const batches = chunkArray(images, 5);
     let totalCreated = 0;
     const warnings: string[] = [];
@@ -744,8 +783,9 @@ function ProductBulkTab({
         if (res.errors?.length) warnings.push(...res.errors);
       }
 
-      setPhase(t("Creating products"));
+      setPhase(t("Creating products…"));
       setProgress(100);
+      await new Promise((r) => setTimeout(r, 450));
       clearBulkProductDraft();
       setImages([]);
       setForm({ ...EMPTY_BULK_FORM });
@@ -775,18 +815,11 @@ function ProductBulkTab({
 
   return (
     <div className="space-y-4">
-      {(submitting || phase) && (
-        <BentoCard className="p-4 text-center">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{phase}</p>
-          <div className="mx-auto mt-3 h-2 w-full max-w-md overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-            <div
-              className="h-full bg-primary-500 transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-slate-500">{progress}%</p>
-        </BentoCard>
-      )}
+      <UploadProgressOverlay
+        open={Boolean(submitting || phase)}
+        label={phase ?? t("Uploading...")}
+        progress={progress}
+      />
 
       <BentoCard className="space-y-4 p-4">
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
