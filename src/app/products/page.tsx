@@ -22,7 +22,7 @@ import {
   saveSingleProductDraft,
 } from "@/lib/product-form-draft";
 import { chunkArray, compressImageFile } from "@/lib/product-image-compress";
-import { normalizeIsDraft } from "@/lib/velo-products-cache";
+import { normalizeIsDraft, peekCollectionsCache } from "@/lib/velo-products-cache";
 import {
   clearProductSyncLogs,
   listProductSyncLogs,
@@ -35,6 +35,7 @@ import {
   formatBulkCreatedCodes,
   listVeloProducts,
   peekVeloProductsList,
+  prefetchVeloProductsList,
   upsertVeloProduct,
   validateBulkForm,
   validateSingleProductForm,
@@ -73,6 +74,7 @@ export default function ProductsPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [collections, setCollections] = useState<VeloCollection[]>([]);
   const [loadingCollections, setLoadingCollections] = useState(false);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   const setTab = (id: TabId) => {
     router.replace(`/products/?tab=${id}`);
@@ -85,12 +87,14 @@ export default function ProductsPage() {
   const loadCollections = useCallback(
     async (force = false) => {
       if (!user) return;
-      setLoadingCollections(true);
+      const cached = !force ? peekCollectionsCache(user.id) : null;
+      if (cached?.length) setCollections(cached);
+      setLoadingCollections(!cached?.length);
       try {
         const rows = await fetchVeloCollections(user.id, force);
         setCollections(rows);
       } catch (e) {
-        setError((e as Error).message);
+        if (!cached?.length) setError((e as Error).message);
       } finally {
         setLoadingCollections(false);
       }
@@ -99,8 +103,10 @@ export default function ProductsPage() {
   );
 
   useEffect(() => {
+    if (!user) return;
+    prefetchVeloProductsList(user.id);
     void loadCollections();
-  }, [loadCollections]);
+  }, [user, loadCollections]);
 
   if (loading) {
     return (
@@ -164,9 +170,10 @@ export default function ProductsPage() {
           ))}
         </div>
 
-        {tab === "list" && (
+        <div className={tab === "list" ? undefined : "hidden"}>
           <ProductListTab
             userId={user.id}
+            refreshKey={listRefreshKey}
             onEdit={(product) => {
               setTab("single");
               window.dispatchEvent(
@@ -176,8 +183,8 @@ export default function ProductsPage() {
             setError={setError}
             setInfo={setInfo}
           />
-        )}
-        {tab === "single" && (
+        </div>
+        <div className={tab === "single" ? undefined : "hidden"}>
           <ProductSingleTab
             userId={user.id}
             collections={collections}
@@ -185,10 +192,13 @@ export default function ProductsPage() {
             onRefreshCollections={() => void loadCollections(true)}
             setError={setError}
             setInfo={setInfo}
-            onSaved={() => setTab("list")}
+            onSaved={() => {
+              setListRefreshKey((k) => k + 1);
+              setTab("list");
+            }}
           />
-        )}
-        {tab === "bulk" && (
+        </div>
+        <div className={tab === "bulk" ? undefined : "hidden"}>
           <ProductBulkTab
             userId={user.id}
             collections={collections}
@@ -196,10 +206,15 @@ export default function ProductsPage() {
             onRefreshCollections={() => void loadCollections(true)}
             setError={setError}
             setInfo={setInfo}
-            onDone={() => setTab("list")}
+            onDone={() => {
+              setListRefreshKey((k) => k + 1);
+              setTab("list");
+            }}
           />
-        )}
-        {tab === "logs" && <ProductSyncLogsTab setInfo={setInfo} />}
+        </div>
+        <div className={tab === "logs" ? undefined : "hidden"}>
+          <ProductSyncLogsTab setInfo={setInfo} />
+        </div>
       </div>
     </ErrorBoundary>
   );
@@ -207,57 +222,62 @@ export default function ProductsPage() {
 
 function ProductListTab({
   userId,
+  refreshKey,
   onEdit,
   setError,
   setInfo,
 }: {
   userId: string;
+  refreshKey: number;
   onEdit: (p: VeloProductListItem) => void;
   setError: (v: string | null) => void;
   setInfo: (v: string | null) => void;
 }) {
   const { t } = useLanguage();
-  const [search, setSearch] = useState("");
+  const defaultQuery = { search: "", draft: "all" as const, page: 1, pageSize: 20 };
+  const [searchInput, setSearchInput] = useState("");
   const [draftFilter, setDraftFilter] = useState<"all" | "draft" | "published">("all");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [appliedDraft, setAppliedDraft] = useState<"all" | "draft" | "published">("all");
   const [items, setItems] = useState<VeloProductListItem[]>(() => {
-    const cached = peekVeloProductsList(userId, {
-      search: "",
-      draft: "all",
-      page: 1,
-      pageSize: 20,
-    });
-    return cached?.products ?? [];
+    return peekVeloProductsList(userId, defaultQuery)?.products ?? [];
   });
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(
-    () => peekVeloProductsList(userId, { search: "", draft: "all", page: 1, pageSize: 20 })?.hasMore ?? false
+    () => peekVeloProductsList(userId, defaultQuery)?.hasMore ?? false
   );
-  const [loadingList, setLoadingList] = useState(() => {
-    const cached = peekVeloProductsList(userId, { search: "", draft: "all", page: 1, pageSize: 20 });
-    return !cached;
-  });
+  const [loadingList, setLoadingList] = useState(
+    () => !peekVeloProductsList(userId, defaultQuery)
+  );
   const [refreshingList, setRefreshingList] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+
+  const listQuery = useCallback(
+    (pageNum: number) => ({
+      search: appliedSearch,
+      draft: appliedDraft,
+      page: pageNum,
+      pageSize: 20,
+    }),
+    [appliedSearch, appliedDraft]
+  );
 
   const load = useCallback(
     async (pageNum: number, append: boolean, opts: { background?: boolean } = {}) => {
-      const query = {
-        search,
-        draft: draftFilter,
-        page: pageNum,
-        pageSize: 20,
-      };
+      const query = listQuery(pageNum);
       const cached = !append && pageNum === 1 ? peekVeloProductsList(userId, query) : null;
+      const showCached = cached && !append;
 
-      if (cached && !opts.background) {
+      if (showCached) {
         setItems(cached.products);
         setHasMore(cached.hasMore);
         setPage(pageNum);
       }
 
-      if (opts.background || cached) {
+      if (opts.background || showCached) {
         setRefreshingList(true);
-      } else {
+      } else if (!append || items.length === 0) {
         setLoadingList(true);
       }
       setError(null);
@@ -268,17 +288,32 @@ function ProductListTab({
         setHasMore(res.hasMore);
         setPage(pageNum);
       } catch (e) {
-        if (!cached) setError((e as Error).message);
+        if (!showCached && items.length === 0) setError((e as Error).message);
       } finally {
         setLoadingList(false);
         setRefreshingList(false);
       }
     },
-    [userId, search, draftFilter, setError]
+    [userId, listQuery, setError, items.length]
   );
 
   useEffect(() => {
-    void load(1, false);
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      const snap = peekVeloProductsList(userId, listQuery(1));
+      void load(1, false, { background: Boolean(snap) });
+      return;
+    }
+    void load(1, false, { background: items.length > 0 });
+  }, [appliedSearch, appliedDraft, refreshKey]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void load(1, false, { background: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load]);
 
   const handleDelete = async (productId: string, name: string) => {
@@ -304,8 +339,13 @@ function ProductListTab({
             <span className={labelCls}>{t("Search")}</span>
             <input
               className={inputCls}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setAppliedSearch(searchInput.trim());
+                }
+              }}
               placeholder={t("Name or product code")}
             />
           </label>
@@ -314,9 +354,11 @@ function ProductListTab({
             <select
               className={inputCls}
               value={draftFilter}
-              onChange={(e) =>
-                setDraftFilter(e.target.value as "all" | "draft" | "published")
-              }
+              onChange={(e) => {
+                const next = e.target.value as "all" | "draft" | "published";
+                setDraftFilter(next);
+                setAppliedDraft(next);
+              }}
             >
               <option value="all">{t("All")}</option>
               <option value="draft">{t("Draft")}</option>
@@ -327,7 +369,7 @@ function ProductListTab({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => void load(1, false)}
+            onClick={() => setAppliedSearch(searchInput.trim())}
             className="min-h-[44px] rounded-xl bg-primary-500 px-4 text-sm font-semibold text-white"
           >
             {t("Search")}

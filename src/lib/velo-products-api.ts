@@ -8,8 +8,8 @@ import {
   invalidateProductsListCache,
   normalizeIsDraft,
   normalizeProductListItem,
-  readCollectionsCache,
-  readProductsListCache,
+  peekCollectionsCache,
+  peekVeloProductsList,
   writeCollectionsCache,
   writeProductsListCache,
 } from "./velo-products-cache";
@@ -28,6 +28,28 @@ const RETRY_BASE_MS = 800;
 const COLLECTIONS_CACHE_MS = 5 * 60 * 1000;
 
 let collectionsCache: { at: number; items: VeloCollection[] } | null = null;
+const listInflight = new Map<
+  string,
+  Promise<{ products: VeloProductListItem[]; total: number; hasMore: boolean }>
+>();
+
+function listQueryKey(
+  userId: string,
+  opts: {
+    search?: string;
+    draft?: string;
+    page?: number;
+    pageSize?: number;
+  }
+) {
+  return [
+    userId,
+    opts.draft ?? "all",
+    opts.page ?? 1,
+    opts.pageSize ?? 20,
+    (opts.search ?? "").trim().toLowerCase(),
+  ].join("|");
+}
 
 export class VeloProductsApiError extends Error {
   readonly fieldErrors: Record<string, string>;
@@ -228,19 +250,9 @@ async function requestWithRetry(
   throw new VeloProductsApiError(lastError);
 }
 
-export function peekVeloProductsList(
-  userId: string,
-  opts: {
-    search?: string;
-    draft?: "all" | "draft" | "published";
-    page?: number;
-    pageSize?: number;
-  } = {}
-) {
-  return readProductsListCache(userId, opts);
-}
+export { peekCollectionsCache, peekVeloProductsList } from "./velo-products-cache";
 
-export async function listVeloProducts(
+async function fetchVeloProductsList(
   userId: string,
   opts: {
     search?: string;
@@ -266,6 +278,43 @@ export async function listVeloProducts(
   return result;
 }
 
+export async function listVeloProducts(
+  userId: string,
+  opts: {
+    search?: string;
+    draft?: "all" | "draft" | "published";
+    page?: number;
+    pageSize?: number;
+  } = {}
+): Promise<{ products: VeloProductListItem[]; total: number; hasMore: boolean }> {
+  const key = listQueryKey(userId, opts);
+  const inflight = listInflight.get(key);
+  if (inflight) return inflight;
+
+  const task = fetchVeloProductsList(userId, opts).finally(() => {
+    listInflight.delete(key);
+  });
+  listInflight.set(key, task);
+  return task;
+}
+
+/** Warm cache in background (default list). Safe to call on page enter. */
+export function prefetchVeloProductsList(
+  userId: string,
+  opts: {
+    search?: string;
+    draft?: "all" | "draft" | "published";
+    page?: number;
+    pageSize?: number;
+  } = {}
+) {
+  const snap = peekVeloProductsList(userId, opts);
+  if (snap && !snap.isStale) return;
+  void listVeloProducts(userId, opts).catch(() => {
+    /* background prefetch */
+  });
+}
+
 export async function fetchVeloCollections(
   userId: string,
   forceRefresh = false
@@ -273,11 +322,6 @@ export async function fetchVeloCollections(
   if (!forceRefresh) {
     if (collectionsCache && Date.now() - collectionsCache.at < COLLECTIONS_CACHE_MS) {
       return collectionsCache.items;
-    }
-    const stored = readCollectionsCache(userId);
-    if (stored) {
-      collectionsCache = { at: Date.now(), items: stored };
-      return stored;
     }
   }
 
