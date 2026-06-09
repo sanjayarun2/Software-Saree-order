@@ -326,6 +326,7 @@ const TA: Record<string, string> = {
   Rating: "ரேட்டிங்",
   Price: "விலை",
   "Save as draft": "டிராஃப்டாக சேமி",
+  "Draft product (hidden on website)": "டிராஃப்ட் புராடக்ட் (வலைத்தளத்தில் மறைக்கப்பட்டது)",
   Tags: "டேக்ஸ்",
   "Add tag and press Enter": "டேக் சேர்த்து Enter அழுத்தவும்",
   "Product image": "புராடக்ட் படம்",

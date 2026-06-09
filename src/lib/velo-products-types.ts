@@ -128,7 +128,7 @@ export const EMPTY_SINGLE_FORM: VeloSingleProductForm = {
   rating: "4",
   price: "",
   stock: 1,
-  isDraft: true,
+  isDraft: false,
   featuredImageMediaId: "",
   imageBase64: "",
   imageFileName: "",
@@ -144,6 +144,6 @@ export const EMPTY_BULK_FORM: VeloBulkSharedForm = {
   rating: "4",
   price: "",
   stock: 1,
-  isDraft: true,
+  isDraft: false,
   sizeConfig: { enabled: false, options: [...DEFAULT_SIZE_OPTIONS] },
 };

@@ -594,7 +594,7 @@ function ProductSingleTab({
             checked={form.isDraft}
             onChange={(e) => patch({ isDraft: e.target.checked })}
           />
-          <span className={labelCls}>{t("Save as draft")}</span>
+          <span className={labelCls}>{t("Draft product (hidden on website)")}</span>
         </label>
         <div className="sm:col-span-2">
           <span className={labelCls}>{t("Tags")}</span>
@@ -872,7 +872,7 @@ function ProductBulkTab({
               checked={form.isDraft}
               onChange={(e) => patch({ isDraft: e.target.checked })}
             />
-            <span className={labelCls}>{t("Save as draft")}</span>
+            <span className={labelCls}>{t("Draft product (hidden on website)")}</span>
           </label>
           <div className="sm:col-span-2">
             <TagsInput tags={form.tags} onChange={(tags) => patch({ tags })} disabled={submitting} />
