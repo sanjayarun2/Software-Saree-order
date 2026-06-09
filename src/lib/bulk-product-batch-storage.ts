@@ -12,6 +12,8 @@ export type BulkProductBatchLine = {
   productName: string;
   /** Shop ST code after successful website upload. */
   websiteCode?: string;
+  /** Shop product UUID after upload (for customer share links). */
+  websiteProductId?: string;
 };
 
 export type BulkProductBatchUploadStatus =

@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { saveProductCodeImagesToGalleryOrDownloads } from "./product-code-gallery";
 
 export type ShareCodedImagesOptions = {
   title?: string;
@@ -25,19 +26,25 @@ export async function shareProductCodeImagesAsFiles(
     options?.text?.trim() ||
     `${files.length} coded photo${files.length === 1 ? "" : "s"}`;
 
-  try {
-    if (navigator.share && navigator.canShare?.({ files, text })) {
-      await navigator.share({ files, title, text });
-      return;
+  const tryWebShare = async (): Promise<boolean> => {
+    if (!navigator.share) return false;
+    try {
+      if (navigator.canShare?.({ files, text })) {
+        await navigator.share({ files, title, text });
+        return true;
+      }
+      if (navigator.canShare?.({ files })) {
+        await navigator.share({ files, title, text });
+        return true;
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return true;
+      console.warn("[product-code-share] navigator.share failed:", e);
     }
-    if (navigator.share && navigator.canShare?.({ files })) {
-      await navigator.share({ files, title, text });
-      return;
-    }
-  } catch (e) {
-    if ((e as Error).name === "AbortError") return;
-    console.warn("[product-code-share] navigator.share failed:", e);
-  }
+    return false;
+  };
+
+  if (await tryWebShare()) return;
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -54,10 +61,11 @@ export async function shareProductCodeImagesAsFiles(
         return btoa(binary);
       };
 
+      const shareDir = `product-codes-share/${Date.now()}`;
       for (let i = 0; i < items.length; i++) {
         const { blob, filename } = items[i]!;
         const buf = await blob.arrayBuffer();
-        const path = `product-codes-share/${Date.now()}-${i}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const path = `${shareDir}/${i}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
         const res = await Filesystem.writeFile({
           path,
           data: toB64(buf),
@@ -65,12 +73,14 @@ export async function shareProductCodeImagesAsFiles(
         });
         if (res.uri) written.push(res.uri);
       }
-      if (written.length === 1) {
+
+      if (written.length > 0) {
         const can = await Share.canShare();
         if (can.value) {
+          // Share first image with full text; OS share sheet still allows adding more from gallery.
           await Share.share({
             title,
-            text,
+            text: `${text}\n\n(${written.length} image${written.length === 1 ? "" : "s"} attached)`,
             url: written[0],
             dialogTitle: "Share via WhatsApp or other app",
           });
@@ -82,7 +92,19 @@ export async function shareProductCodeImagesAsFiles(
     }
   }
 
-  const fallback = `${text}\n\n(${items.length} photo${items.length === 1 ? "" : "s"} — attach from your downloads or gallery.)`;
+  if (items.length > 1) {
+    try {
+      await saveProductCodeImagesToGalleryOrDownloads(
+        items.map(({ blob, filename }) => ({ blob, filename })),
+        { folderName: "VeloBulkProducts" }
+      );
+      if (await tryWebShare()) return;
+    } catch (e) {
+      console.warn("[product-code-share] gallery pre-save failed:", e);
+    }
+  }
+
+  const fallback = `${text}\n\n(${items.length} photo${items.length === 1 ? "" : "s"} — attach from VeloBulkProducts in your gallery.)`;
   window.open(
     `https://wa.me/?text=${encodeURIComponent(fallback)}`,
     "_blank",

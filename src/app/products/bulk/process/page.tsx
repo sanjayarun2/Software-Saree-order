@@ -254,7 +254,7 @@ export default function BulkProductsProcessPage() {
       setSaved(true);
       revokeBulkProductsDraftFiles(pickDraft?.files);
       flushSync(() => setPickDraft(null));
-      router.push("/products/?tab=bulk");
+      router.push("/products/?tab=list");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[products/bulk/save]", e);
@@ -280,14 +280,14 @@ export default function BulkProductsProcessPage() {
 
   const goBack = useCallback(() => {
     if (saved) {
-      router.push("/products/?tab=bulk");
+      router.push("/products/?tab=list");
       return;
     }
     if (status === "generating") {
       if (window.confirm(t("Leave? Generation is not finished."))) {
         revokeBulkProductsDraftFiles(pickDraft?.files);
         setPickDraft(null);
-        router.push("/products/?tab=bulk");
+        router.push("/products/?tab=list");
       }
       return;
     }

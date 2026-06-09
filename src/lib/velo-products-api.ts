@@ -14,6 +14,11 @@ import {
   writeCollectionsCache,
   writeProductsListCache,
 } from "./velo-products-cache";
+import {
+  getProductShopMetaMap,
+  saveProductShopMeta,
+  slugifyProductName,
+} from "./product-shop-meta-storage";
 import type {
   VeloCollection,
   VeloProductListItem,
@@ -299,8 +304,23 @@ async function fetchVeloProductsList(
     page: opts.page ?? 1,
     pageSize: opts.pageSize ?? 20,
   });
+  const metaMap = await getProductShopMetaMap(userId);
+  const collections = peekCollectionsCache(userId) ?? [];
   const result = {
-    products: (res.products ?? []).map(normalizeProductListItem),
+    products: (res.products ?? []).map((row) => {
+      const item = normalizeProductListItem(row as VeloProductListItem);
+      const meta = metaMap[item.productId];
+      const collectionSlug =
+        meta?.collectionSlug ??
+        collections.find((c) => c.id === item.collectionId)?.slug ??
+        item.collectionSlug ??
+        null;
+      const slug =
+        meta?.slug ??
+        item.slug ??
+        (item.name ? slugifyProductName(item.name) : null);
+      return { ...item, slug, collectionSlug };
+    }),
     total: res.total ?? 0,
     hasMore: res.hasMore ?? false,
   };
@@ -439,6 +459,19 @@ export async function upsertVeloProduct(
         : undefined,
     sizeConfig: normalizeSizeConfig(data.sizeConfig),
   });
+  if (res.product?.productId) {
+    const collections = peekCollectionsCache(userId) ?? [];
+    const collectionSlug =
+      collections.find((c) => c.id === data.collectionId)?.slug ?? null;
+    const apiSlug = (res.product as { slug?: string }).slug;
+    await saveProductShopMeta(userId, {
+      productId: res.product.productId,
+      slug: apiSlug || slugifyProductName(data.name.trim()),
+      collectionId: data.collectionId,
+      collectionSlug,
+      updatedAt: new Date().toISOString(),
+    });
+  }
   if (!options?.deferCacheInvalidation) {
     invalidateProductsListCache(userId);
   }

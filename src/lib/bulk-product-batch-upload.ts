@@ -9,7 +9,8 @@ import type { BulkProductBatchLine, BulkProductBatchRecord } from "./bulk-produc
 import { updateBulkProductBatch } from "./bulk-product-batch-storage";
 import { buildBulkProductName } from "./bulk-product-naming";
 import { uploadProductReliable } from "./velo-products-api";
-import { invalidateProductsListCache, normalizeIsDraft } from "./velo-products-cache";
+import { invalidateProductsListCache, normalizeIsDraft, peekCollectionsCache } from "./velo-products-cache";
+import { saveProductShopMeta, slugifyProductName } from "./product-shop-meta-storage";
 import { compressImageFile, BULK_UPLOAD_PROFILE } from "./product-image-compress";
 
 export type BulkBatchUploadProgress = {
@@ -58,6 +59,9 @@ export async function uploadBulkProductBatchToWebsite(
 ): Promise<{ uploadedCount: number; websiteCodes: string[]; failures: string[] }> {
   const form = batch.form;
   const lines = resolveLines(batch, images);
+  const collections = peekCollectionsCache(userId) ?? [];
+  const collectionSlug =
+    collections.find((c) => c.id === form.collectionId)?.slug ?? null;
 
   await updateBulkProductBatch(userId, batch.id, {
     uploadStatus: "uploading",
@@ -138,8 +142,19 @@ export async function uploadBulkProductBatchToWebsite(
       );
 
       const shopCode = res.product?.productCode;
-      if (shopCode) {
-        line.websiteCode = shopCode;
+      const productId = res.product?.productId;
+      const apiSlug = (res.product as { slug?: string } | undefined)?.slug;
+      if (shopCode) line.websiteCode = shopCode;
+      if (productId) {
+        line.websiteProductId = productId;
+        const slug = apiSlug || slugifyProductName(line.productName);
+        await saveProductShopMeta(userId, {
+          productId,
+          slug,
+          collectionId: form.collectionId,
+          collectionSlug,
+          updatedAt: new Date().toISOString(),
+        });
       }
     } catch (e) {
       failures.push(`${line.productName}: ${(e as Error).message}`);

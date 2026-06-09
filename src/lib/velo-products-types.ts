@@ -25,6 +25,9 @@ export type VeloProductListItem = {
   name: string;
   collectionId: string | null;
   collectionName: string | null;
+  /** Shop URL slug (from upload meta or list API). */
+  slug?: string | null;
+  collectionSlug?: string | null;
   price: string;
   stock: number | null;
   isDraft: boolean;
