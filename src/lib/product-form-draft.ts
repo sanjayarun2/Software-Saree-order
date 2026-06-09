@@ -1,4 +1,5 @@
 import type { VeloBulkSharedForm, VeloSingleProductForm } from "./velo-products-types";
+import { normalizeIsDraft } from "./velo-products-cache";
 
 const SINGLE_KEY = "velo_product_single_draft";
 const BULK_KEY = "velo_product_bulk_draft";
@@ -31,6 +32,7 @@ export function loadSingleProductDraft(): VeloSingleProductForm | null {
       parsed.imageBase64 = "";
       parsed.imageFileName = "";
     }
+    parsed.isDraft = normalizeIsDraft(parsed.isDraft);
     return parsed;
   } catch {
     return null;
@@ -52,7 +54,9 @@ export function loadBulkProductDraft(): VeloBulkSharedForm | null {
   try {
     const raw = localStorage.getItem(BULK_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as VeloBulkSharedForm;
+    const parsed = JSON.parse(raw) as VeloBulkSharedForm;
+    parsed.isDraft = normalizeIsDraft(parsed.isDraft);
+    return parsed;
   } catch {
     return null;
   }

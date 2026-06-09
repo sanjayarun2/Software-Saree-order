@@ -22,6 +22,7 @@ import {
   saveSingleProductDraft,
 } from "@/lib/product-form-draft";
 import { chunkArray, compressImageFile } from "@/lib/product-image-compress";
+import { normalizeIsDraft } from "@/lib/velo-products-cache";
 import {
   clearProductSyncLogs,
   listProductSyncLogs,
@@ -33,6 +34,7 @@ import {
   fetchVeloCollections,
   formatBulkCreatedCodes,
   listVeloProducts,
+  peekVeloProductsList,
   upsertVeloProduct,
   validateBulkForm,
   validateSingleProductForm,
@@ -215,32 +217,61 @@ function ProductListTab({
   setInfo: (v: string | null) => void;
 }) {
   const { t } = useLanguage();
-  const [items, setItems] = useState<VeloProductListItem[]>([]);
   const [search, setSearch] = useState("");
   const [draftFilter, setDraftFilter] = useState<"all" | "draft" | "published">("all");
+  const [items, setItems] = useState<VeloProductListItem[]>(() => {
+    const cached = peekVeloProductsList(userId, {
+      search: "",
+      draft: "all",
+      page: 1,
+      pageSize: 20,
+    });
+    return cached?.products ?? [];
+  });
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingList, setLoadingList] = useState(true);
+  const [hasMore, setHasMore] = useState(
+    () => peekVeloProductsList(userId, { search: "", draft: "all", page: 1, pageSize: 20 })?.hasMore ?? false
+  );
+  const [loadingList, setLoadingList] = useState(() => {
+    const cached = peekVeloProductsList(userId, { search: "", draft: "all", page: 1, pageSize: 20 });
+    return !cached;
+  });
+  const [refreshingList, setRefreshingList] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(
-    async (pageNum: number, append: boolean) => {
-      setLoadingList(true);
+    async (pageNum: number, append: boolean, opts: { background?: boolean } = {}) => {
+      const query = {
+        search,
+        draft: draftFilter,
+        page: pageNum,
+        pageSize: 20,
+      };
+      const cached = !append && pageNum === 1 ? peekVeloProductsList(userId, query) : null;
+
+      if (cached && !opts.background) {
+        setItems(cached.products);
+        setHasMore(cached.hasMore);
+        setPage(pageNum);
+      }
+
+      if (opts.background || cached) {
+        setRefreshingList(true);
+      } else {
+        setLoadingList(true);
+      }
       setError(null);
+
       try {
-        const res = await listVeloProducts(userId, {
-          search,
-          draft: draftFilter,
-          page: pageNum,
-          pageSize: 20,
-        });
+        const res = await listVeloProducts(userId, query);
         setItems((prev) => (append ? [...prev, ...res.products] : res.products));
         setHasMore(res.hasMore);
         setPage(pageNum);
       } catch (e) {
-        setError((e as Error).message);
+        if (!cached) setError((e as Error).message);
       } finally {
         setLoadingList(false);
+        setRefreshingList(false);
       }
     },
     [userId, search, draftFilter, setError]
@@ -293,7 +324,7 @@ function ProductListTab({
             </select>
           </label>
         </div>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => void load(1, false)}
@@ -303,11 +334,14 @@ function ProductListTab({
           </button>
           <button
             type="button"
-            onClick={() => void load(1, false)}
+            onClick={() => void load(1, false, { background: items.length > 0 })}
             className="min-h-[44px] rounded-xl border border-gray-200 px-4 text-sm font-medium dark:border-slate-600"
           >
             {t("Refresh")}
           </button>
+          {refreshingList && items.length > 0 && (
+            <span className="text-xs text-slate-500">{t("Updating…")}</span>
+          )}
         </div>
       </BentoCard>
 
@@ -334,12 +368,12 @@ function ProductListTab({
                   </p>
                   <span
                     className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      p.isDraft
+                      normalizeIsDraft(p.isDraft)
                         ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
                         : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                     }`}
                   >
-                    {p.isDraft ? t("Draft") : t("Published")}
+                    {normalizeIsDraft(p.isDraft) ? t("Draft") : t("Published")}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -418,7 +452,7 @@ function ProductSingleTab({
         collectionId: product.collectionId || "",
         price: String(product.price),
         stock: product.stock ?? 1,
-        isDraft: product.isDraft,
+        isDraft: normalizeIsDraft(product.isDraft),
         imageBase64: "",
         imageFileName: "",
       }));
@@ -485,7 +519,7 @@ function ProductSingleTab({
         rating: form.rating,
         price: form.price,
         stock: form.stock,
-        isDraft: form.isDraft,
+        isDraft: normalizeIsDraft(form.isDraft),
         featuredImageMediaId: form.featuredImageMediaId,
         imageBase64: form.imageBase64,
         imageFileName: form.imageFileName,
@@ -622,11 +656,16 @@ function ProductSingleTab({
         <label className="flex items-center gap-2 sm:col-span-2">
           <input
             type="checkbox"
-            checked={form.isDraft}
-            onChange={(e) => patch({ isDraft: e.target.checked })}
+            checked={!normalizeIsDraft(form.isDraft)}
+            onChange={(e) => patch({ isDraft: !e.target.checked })}
           />
-          <span className={labelCls}>{t("Draft product (hidden on website)")}</span>
+          <span className={labelCls}>{t("Publish on website")}</span>
         </label>
+        <p className="text-xs text-slate-500 sm:col-span-2">
+          {normalizeIsDraft(form.isDraft)
+            ? t("This product is saved as draft and hidden on the website.")
+            : t("This product will be visible on the website.")}
+        </p>
         <div className="sm:col-span-2">
           <span className={labelCls}>{t("Tags")}</span>
           <TagsInput tags={form.tags} onChange={(tags) => patch({ tags })} disabled={submitting} />
@@ -902,10 +941,10 @@ function ProductBulkTab({
           <label className="flex items-center gap-2 sm:col-span-2">
             <input
               type="checkbox"
-              checked={form.isDraft}
-              onChange={(e) => patch({ isDraft: e.target.checked })}
+              checked={!normalizeIsDraft(form.isDraft)}
+              onChange={(e) => patch({ isDraft: !e.target.checked })}
             />
-            <span className={labelCls}>{t("Draft product (hidden on website)")}</span>
+            <span className={labelCls}>{t("Publish on website")}</span>
           </label>
           <div className="sm:col-span-2">
             <TagsInput tags={form.tags} onChange={(tags) => patch({ tags })} disabled={submitting} />

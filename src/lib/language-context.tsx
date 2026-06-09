@@ -342,6 +342,12 @@ const TA: Record<string, string> = {
   "Preparing image…": "படம் தயாராகிறது…",
   "Uploading product…": "புராடக்ட் அப்லோடு செய்கிறது…",
   "Please wait…": "தயவுசெய்து காத்திருக்கவும்…",
+  "Publish on website": "வலைத்தளத்தில் வெளியிடு",
+  "This product is saved as draft and hidden on the website.":
+    "இந்த புராடக்ட் டிராஃப்டாக சேமிக்கப்பட்டு வலைத்தளத்தில் மறைக்கப்பட்டுள்ளது.",
+  "This product will be visible on the website.":
+    "இந்த புராடக்ட் வலைத்தளத்தில் தெரியும்.",
+  "Updating…": "புதுப்பிக்கிறது…",
   "Uploading batch {current}/{total}": "பேட்ச் {current}/{total} அப்லோடு",
   "Creating products": "புராடக்ட்கள் உருவாகிறது",
   "Creating products…": "புராடக்ட்கள் உருவாகிறது…",

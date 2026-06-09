@@ -4,6 +4,15 @@ import {
 } from "./api-settings-supabase";
 import { appendProductSyncLog } from "./product-sync-logs";
 import { supabase } from "./supabase";
+import {
+  invalidateProductsListCache,
+  normalizeIsDraft,
+  normalizeProductListItem,
+  readCollectionsCache,
+  readProductsListCache,
+  writeCollectionsCache,
+  writeProductsListCache,
+} from "./velo-products-cache";
 import type {
   VeloCollection,
   VeloProductListItem,
@@ -219,6 +228,18 @@ async function requestWithRetry(
   throw new VeloProductsApiError(lastError);
 }
 
+export function peekVeloProductsList(
+  userId: string,
+  opts: {
+    search?: string;
+    draft?: "all" | "draft" | "published";
+    page?: number;
+    pageSize?: number;
+  } = {}
+) {
+  return readProductsListCache(userId, opts);
+}
+
 export async function listVeloProducts(
   userId: string,
   opts: {
@@ -236,23 +257,28 @@ export async function listVeloProducts(
     page: opts.page ?? 1,
     pageSize: opts.pageSize ?? 20,
   });
-  return {
-    products: res.products ?? [],
+  const result = {
+    products: (res.products ?? []).map(normalizeProductListItem),
     total: res.total ?? 0,
     hasMore: res.hasMore ?? false,
   };
+  writeProductsListCache(userId, opts, result);
+  return result;
 }
 
 export async function fetchVeloCollections(
   userId: string,
   forceRefresh = false
 ): Promise<VeloCollection[]> {
-  if (
-    !forceRefresh &&
-    collectionsCache &&
-    Date.now() - collectionsCache.at < COLLECTIONS_CACHE_MS
-  ) {
-    return collectionsCache.items;
+  if (!forceRefresh) {
+    if (collectionsCache && Date.now() - collectionsCache.at < COLLECTIONS_CACHE_MS) {
+      return collectionsCache.items;
+    }
+    const stored = readCollectionsCache(userId);
+    if (stored) {
+      collectionsCache = { at: Date.now(), items: stored };
+      return stored;
+    }
   }
 
   const integration = await getPrimaryIntegration(userId);
@@ -262,6 +288,7 @@ export async function fetchVeloCollections(
   });
   const items = res.collections ?? [];
   collectionsCache = { at: Date.now(), items };
+  writeCollectionsCache(userId, items);
   return items;
 }
 
@@ -319,7 +346,7 @@ export async function upsertVeloProduct(
     rating: data.rating || "4",
     price: data.price.trim(),
     stock: Math.max(0, Math.round(data.stock)),
-    isDraft: data.isDraft,
+    isDraft: normalizeIsDraft(data.isDraft),
     featuredImageMediaId: data.featuredImageMediaId?.trim() || undefined,
     imageBase64:
       data.imageBase64 && data.imageBase64 !== "[saved]"
@@ -330,6 +357,9 @@ export async function upsertVeloProduct(
         ? data.imageFileName || undefined
         : undefined,
     sizeConfig: normalizeSizeConfig(data.sizeConfig),
+  }).then((res) => {
+    invalidateProductsListCache(userId);
+    return res;
   });
 }
 
@@ -363,7 +393,7 @@ export async function bulkUpsertVeloProducts(
       rating: data.rating || "4",
       price: data.price.trim(),
       stock: Math.max(0, Math.round(data.stock)),
-      isDraft: data.isDraft,
+      isDraft: normalizeIsDraft(data.isDraft),
       sizeConfig: normalizeSizeConfig(data.sizeConfig),
     },
     items: data.items.map((item, index) => ({
@@ -372,6 +402,9 @@ export async function bulkUpsertVeloProducts(
       imageFileName: item.imageFileName,
       name: item.name,
     })),
+  }).then((res) => {
+    invalidateProductsListCache(userId);
+    return res;
   });
 }
 
@@ -393,7 +426,9 @@ export function formatBulkCreatedCodes(
 export async function deleteVeloProduct(userId: string, productId: string) {
   const integration = await getPrimaryIntegration(userId);
   const requestId = newRequestId();
-  return requestWithRetry(integration, "delete", requestId, { productId });
+  const res = await requestWithRetry(integration, "delete", requestId, { productId });
+  invalidateProductsListCache(userId);
+  return res;
 }
 
 export function validateSingleProductForm(data: {
