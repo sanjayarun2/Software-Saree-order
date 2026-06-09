@@ -375,6 +375,7 @@ const TA: Record<string, string> = {
   "Uploaded {count} product(s) to website.": "வலைத்தளத்தில் {count} புராடக்ட்(கள்) அப்லோடு செய்யப்பட்டது.",
   "Saved {count} image(s) to VeloBulkProducts.": "VeloBulkProducts இல் {count} படம்(கள்) சேமிக்கப்பட்டது.",
   "Could not share.": "பகிர முடியவில்லை.",
+  "Share text copied. Paste into WhatsApp.": "பகிர்வு உரை நகலெடுக்கப்பட்டது. WhatsApp-ல் ஒட்டவும்.",
   "This batch was already downloaded. Download again?": "இந்த பேட்ச் ஏற்கனவே பதிவிறக்கப்பட்டது. மீண்டும் பதிவிறக்கவா?",
   "Bulk products": "பல புராடக்ட்கள்",
   "Bulk batches": "பல பேட்ச்கள்",

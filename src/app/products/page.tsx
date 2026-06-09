@@ -264,9 +264,16 @@ function ProductListTab({
   const [shopBaseUrl, setShopBaseUrl] = useState<string>("");
   const mountedRef = useRef(false);
 
+  const refreshShopBaseUrl = useCallback(
+    (force = false) => {
+      void getVeloShopBaseUrl(userId, { force }).then(setShopBaseUrl);
+    },
+    [userId]
+  );
+
   useEffect(() => {
-    void getVeloShopBaseUrl(userId).then(setShopBaseUrl);
-  }, [userId]);
+    refreshShopBaseUrl();
+  }, [refreshShopBaseUrl]);
 
   const listQuery = useCallback(
     (pageNum: number) => ({
@@ -325,11 +332,12 @@ function ProductListTab({
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
+      refreshShopBaseUrl(true);
       void load(1, false, { background: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [load]);
+  }, [load, refreshShopBaseUrl]);
 
   const handleShareProduct = async (product: VeloProductListItem) => {
     if (normalizeIsDraft(product.isDraft)) {
@@ -339,14 +347,18 @@ function ProductListTab({
     setShareProductId(product.productId);
     setError(null);
     try {
-      const base = shopBaseUrl || (await getVeloShopBaseUrl(userId));
+      const base = shopBaseUrl || (await getVeloShopBaseUrl(userId, { force: true }));
       if (!shopBaseUrl) setShopBaseUrl(base);
-      await shareProductShopLink({
+      const result = await shareProductShopLink({
+        userId,
         product,
         shopBaseUrl: base,
         slug: product.slug,
         collectionSlug: product.collectionSlug,
       });
+      if (result.copied) {
+        setInfo(t("Share text copied. Paste into WhatsApp."));
+      }
     } catch (e) {
       setError((e as Error).message || t("Could not share."));
     } finally {

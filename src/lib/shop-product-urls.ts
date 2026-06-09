@@ -1,4 +1,9 @@
 import { slugifyProductName } from "./product-shop-meta-storage";
+import {
+  encodeShopPathSegment,
+  isUsableShopProductId,
+  normalizeShopBaseUrl,
+} from "./shop-url-utils";
 
 export type ShopProductLinkInput = {
   shopBaseUrl: string;
@@ -14,10 +19,6 @@ export type ShopProductLinks = {
   primaryShareUrl: string;
 };
 
-function normalizeShopBase(url: string): string {
-  return (url || "").trim().replace(/\/$/, "");
-}
-
 function resolveSlug(input: ShopProductLinkInput): string | null {
   const slug = input.slug?.trim();
   if (slug) return slug;
@@ -26,22 +27,30 @@ function resolveSlug(input: ShopProductLinkInput): string | null {
 }
 
 /**
- * Cart-first storefront links. Cart uses productId (stable). Product page uses slug path.
+ * Cart-first storefront links.
+ * Cart: /cart?add={productId}&quantity=1 (shop reads on cart page mount).
+ * Product page: /products/{slug} or /collections/{collection}/products/{slug}.
  */
 export function buildShopProductLinks(input: ShopProductLinkInput): ShopProductLinks {
-  const base = normalizeShopBase(input.shopBaseUrl);
-  const productId = encodeURIComponent(input.productId);
+  const productId = input.productId.trim();
+  if (!isUsableShopProductId(productId)) {
+    throw new Error("A valid product ID is required to build shop links.");
+  }
+
+  const base = normalizeShopBaseUrl(input.shopBaseUrl);
+  const encodedId = encodeShopPathSegment(productId);
   const slug = resolveSlug(input);
   const collectionSlug = input.collectionSlug?.trim();
 
-  const cartUrl = `${base}/cart?add=${productId}&quantity=1`;
+  const cartUrl = `${base}/cart?add=${encodedId}&quantity=1`;
 
   let productUrl = cartUrl;
   if (slug) {
+    const encodedSlug = encodeShopPathSegment(slug);
     if (collectionSlug) {
-      productUrl = `${base}/collections/${encodeURIComponent(collectionSlug)}/products/${encodeURIComponent(slug)}`;
+      productUrl = `${base}/collections/${encodeShopPathSegment(collectionSlug)}/products/${encodedSlug}`;
     } else {
-      productUrl = `${base}/products/${encodeURIComponent(slug)}`;
+      productUrl = `${base}/products/${encodedSlug}`;
     }
   }
 

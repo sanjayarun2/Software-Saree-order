@@ -13,6 +13,7 @@ import {
   upsertApiIntegration,
   type ApiIntegrationRow,
 } from "@/lib/api-settings-supabase";
+import { invalidateVeloShopBaseUrlCache } from "@/lib/shop-base-url";
 import { pollVeloWebsiteOrders, testVeloWebsiteConnection } from "@/lib/velo-website-sync";
 
 function formatSyncTime(iso: string | null): string {
@@ -100,6 +101,7 @@ export default function ApiSettingsPage() {
       return;
     }
 
+    invalidateVeloShopBaseUrlCache(user.id);
     setInfo(t("API settings saved."));
     resetForm();
     await loadIntegrations();

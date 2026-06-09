@@ -10,6 +10,7 @@ import { getAllOrders } from "./local-store";
 import { createOrder, getSuggestions, updateOrder } from "./order-service";
 import { buildSuggestionsFromOrders } from "./order-suggestions";
 import { supabase } from "./supabase";
+import { normalizeShopBaseUrl } from "./shop-url-utils";
 
 const EPOCH_SINCE = new Date(0).toISOString();
 const MAX_RECIPIENT_LEN = 600;
@@ -74,7 +75,7 @@ function formatFetchError(err: unknown): string {
 }
 
 function normalizeBaseUrl(url: string): string {
-  return (url || DEFAULT_VELO_WEBSITE_BASE_URL).replace(/\/$/, "");
+  return normalizeShopBaseUrl(url || DEFAULT_VELO_WEBSITE_BASE_URL);
 }
 
 function itemName(item: VeloLineItem): string {

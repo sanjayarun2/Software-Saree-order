@@ -1,5 +1,5 @@
 import {
-  getEnabledApiIntegrations,
+  getPrimaryEnabledIntegration,
   type ApiIntegrationRow,
 } from "./api-settings-supabase";
 import { appendProductSyncLog } from "./product-sync-logs";
@@ -110,14 +110,13 @@ function resolveExternalProductId(opts: {
 }
 
 async function getPrimaryIntegration(userId: string): Promise<ApiIntegrationRow> {
-  const rows = await getEnabledApiIntegrations(userId);
-  const withKey = rows.filter((r) => r.api_key.trim().length > 0);
-  if (withKey.length === 0) {
+  const row = await getPrimaryEnabledIntegration(userId);
+  if (!row) {
     throw new VeloProductsApiError(
       "No API key configured. Add your Velo API key in Settings → API Settings."
     );
   }
-  return withKey[0];
+  return row;
 }
 
 function hasUsableProductImage(imageBase64: string, featuredImageMediaId: string) {

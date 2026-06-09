@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { normalizeShopBaseUrl } from "./shop-url-utils";
 
 export type ApiProvider = "velo_website";
 
@@ -45,6 +46,15 @@ export async function getEnabledApiIntegrations(userId: string): Promise<ApiInte
   return (data as ApiIntegrationRow[]) ?? [];
 }
 
+/** Same integration used for Velo API calls and storefront share links. */
+export async function getPrimaryEnabledIntegration(
+  userId: string
+): Promise<ApiIntegrationRow | null> {
+  const rows = await getEnabledApiIntegrations(userId);
+  const withKey = rows.filter((r) => r.api_key.trim().length > 0);
+  return withKey.find((i) => i.provider === "velo_website") ?? withKey[0] ?? null;
+}
+
 export async function upsertApiIntegration(
   userId: string,
   row: {
@@ -64,7 +74,9 @@ export async function upsertApiIntegration(
     provider: row.provider ?? "velo_website",
     label: row.label.trim() || "Velo Website",
     api_key: row.api_key.trim(),
-    api_base_url: (row.api_base_url?.trim() || DEFAULT_VELO_WEBSITE_BASE_URL).replace(/\/$/, ""),
+    api_base_url: normalizeShopBaseUrl(
+      row.api_base_url?.trim() || DEFAULT_VELO_WEBSITE_BASE_URL
+    ),
     enabled: row.enabled ?? true,
     last_since: row.last_since ?? null,
     last_sync_at: row.last_sync_at ?? null,
