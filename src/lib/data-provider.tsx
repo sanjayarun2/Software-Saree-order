@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef } from "react";
 import { useAuth } from "./auth-context";
+import { initOrderAlertService, teardownOrderAlertService } from "./order-alert-service";
 import { initSyncManager, teardownSyncManager } from "./sync-manager";
 import { fullSync } from "./order-service";
 
@@ -30,6 +31,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) {
       teardownSyncManager();
+      void teardownOrderAlertService();
       syncedRef.current = null;
       setReady(false);
       return;
@@ -38,6 +40,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (syncedRef.current === user.id) return;
     syncedRef.current = user.id;
 
+    initOrderAlertService();
     initSyncManager(user.id);
 
     fullSyncWithRetry(user.id).finally(() => setReady(true));

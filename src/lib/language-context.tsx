@@ -304,6 +304,11 @@ const TA: Record<string, string> = {
     "இந்த சாதனத்தில் சமீபத்திய புராடக்ட் API அழைப்புகள். அப்லோடு சிக்கல்களுக்கு மட்டும்.",
   "Show successful calls": "வெற்றிகரமான அழைப்புகளைக் காட்டு",
   "No failed product syncs.": "தோல்வியடைந்த புராடக்ட் சின்க் இல்லை.",
+  "Website order alerts": "வலைத்தள ஆர்டர் எச்சரிக்கைகள்",
+  "Sound and notification when a new customer order syncs from your website.":
+    "வலைத்தளத்திலிருந்து புதிய ஆர்டர் வரும்போது ஒலி மற்றும் அறிவிப்பு.",
+  "Enable order alerts": "ஆர்டர் எச்சரிக்கைகளை இயக்கு",
+  "Test alert sound": "எச்சரிக்கை ஒலியை சோதி",
   'Enable "Show successful calls" to see recent activity.':
     "சமீபத்திய செயல்பாட்டைக் காண \"வெற்றிகரமான அழைப்புகளைக் காட்டு\" ஐ இயக்கவும்.",
   "Manage website products using your Velo API key.": "Velo API விசை மூலம் வலைத்தள புராடக்ட்களை நிர்வகிக்கவும்.",

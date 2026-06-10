@@ -8,6 +8,11 @@ import { useLanguage } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
 import { syncDashboardOrders } from "@/lib/order-service";
+import {
+  readOrderAlertsEnabled,
+  writeOrderAlertsEnabled,
+} from "@/lib/order-alert-preferences";
+import { requestOrderAlertPermission, testOrderAlert } from "@/lib/order-alert-service";
 
 function PdfIconOutlined({ className }: { className?: string }) {
   return (
@@ -61,10 +66,16 @@ export default function SettingsPage() {
   const [isListedWorker, setIsListedWorker] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [orderAlertsEnabled, setOrderAlertsEnabled] = useState(true);
+  const [testingAlert, setTestingAlert] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
   }, [user, loading, router]);
+
+  useEffect(() => {
+    setOrderAlertsEnabled(readOrderAlertsEnabled());
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -123,6 +134,46 @@ export default function SettingsPage() {
             {t("Account")}
           </p>
           <p className="mt-1 truncate text-base text-slate-900 dark:text-slate-100">{user.email}</p>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            {t("Website order alerts")}
+          </h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {t("Sound and notification when a new customer order syncs from your website.")}
+          </p>
+          <label className="mt-4 flex cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={orderAlertsEnabled}
+              onChange={async (e) => {
+                const enabled = e.target.checked;
+                setOrderAlertsEnabled(enabled);
+                writeOrderAlertsEnabled(enabled);
+                if (enabled) await requestOrderAlertPermission();
+              }}
+              className="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-sm text-slate-700 dark:text-slate-300">
+              {t("Enable order alerts")}
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={testingAlert || !orderAlertsEnabled}
+            onClick={async () => {
+              setTestingAlert(true);
+              try {
+                await testOrderAlert();
+              } finally {
+                setTestingAlert(false);
+              }
+            }}
+            className="mt-3 min-h-[40px] rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+          >
+            {testingAlert ? t("Working…") : t("Test alert sound")}
+          </button>
         </div>
 
         <div className="flex items-center justify-between overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">

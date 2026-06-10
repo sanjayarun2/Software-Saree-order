@@ -13,6 +13,7 @@ let websitePollTimer: ReturnType<typeof setInterval> | null = null;
 const WEBSITE_POLL_INTERVAL_MS = 15_000;
 let realtimeChannel: RealtimeChannel | null = null;
 let syncInFlight = false;
+let appInForeground = true;
 
 const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
@@ -21,10 +22,15 @@ function isNetworkError(err: unknown): boolean {
   return false;
 }
 
+function canRunWebsitePoll(): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+  if (typeof document !== "undefined" && document.visibilityState === "visible") return true;
+  return appInForeground;
+}
+
 async function safeWebsitePoll() {
   if (!userId) return;
-  if (typeof navigator !== "undefined" && !navigator.onLine) return;
-  if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+  if (!canRunWebsitePoll()) return;
   try {
     await pollVeloWebsiteOrders(userId);
   } catch (err) {
@@ -74,9 +80,11 @@ async function handleAppStateChange() {
   try {
     const { App } = await import("@capacitor/app");
     App.addListener("appStateChange", ({ isActive }) => {
+      appInForeground = isActive;
       if (isActive && userId) {
         console.log("[SyncManager] Capacitor appStateChange – syncing");
         safeSync();
+        void safeWebsitePoll();
       }
     });
   } catch {
@@ -94,7 +102,7 @@ function startPolling() {
 
   websitePollTimer = setInterval(() => {
     if (!userId) return;
-    if (document.visibilityState !== "visible") return;
+    if (!canRunWebsitePoll()) return;
     safeWebsitePoll();
   }, WEBSITE_POLL_INTERVAL_MS);
 }

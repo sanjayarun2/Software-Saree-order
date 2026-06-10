@@ -10,6 +10,7 @@ import { DataProvider } from "@/lib/data-provider";
 import { LanguageProvider } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppShell } from "@/components/AppShell";
+import { OrderAlertToast } from "@/components/OrderAlertToast";
 import { SplashController } from "@/lib/SplashController";
 
 const inter = Inter({
@@ -50,7 +51,10 @@ export default function RootLayout({
                   <ToastProvider>
                     <DataProvider>
                       <SearchProvider>
-                        <AppShell>{children}</AppShell>
+                        <AppShell>
+                          <OrderAlertToast />
+                          {children}
+                        </AppShell>
                       </SearchProvider>
                     </DataProvider>
                   </ToastProvider>

@@ -11,16 +11,23 @@ import { createOrder, getSuggestions, updateOrder } from "./order-service";
 import { buildSuggestionsFromOrders } from "./order-suggestions";
 import { supabase } from "./supabase";
 import { normalizeShopBaseUrl } from "./shop-url-utils";
+import {
+  notifyNewWebsiteOrders,
+  type ImportedWebsiteOrderSummary,
+} from "./order-alert-service";
 
 const EPOCH_SINCE = new Date(0).toISOString();
 const MAX_RECIPIENT_LEN = 600;
 const POLL_LIMIT = 50;
+
+export type { ImportedWebsiteOrderSummary } from "./order-alert-service";
 
 export type VeloWebsitePollResult = {
   imported: number;
   updated: number;
   skipped: number;
   errors: string[];
+  newOrders: ImportedWebsiteOrderSummary[];
 };
 
 type VeloLineItem = {
@@ -384,12 +391,14 @@ async function importOrdersForIntegration(
   skipped: number;
   nextSince: string | null;
   error: string | null;
+  newOrders: ImportedWebsiteOrderSummary[];
 }> {
   const data = await fetchVeloOrders(integration);
   const orders = Array.isArray(data.orders) ? data.orders : [];
   let imported = 0;
   let updated = 0;
   let skipped = 0;
+  const newOrders: ImportedWebsiteOrderSummary[] = [];
 
   for (const raw of orders) {
     const externalId = resolveExternalOrderId(raw);
@@ -416,6 +425,11 @@ async function importOrdersForIntegration(
     try {
       await createOrder(userId, insert);
       imported++;
+      newOrders.push({
+        externalOrderId: externalId,
+        customerName: insert.booked_by?.trim() || "Customer",
+        quantity: insert.quantity ?? 1,
+      });
     } catch (e) {
       const msg = (e as Error).message ?? "";
       if (/duplicate|unique|23505/i.test(msg)) {
@@ -427,13 +441,15 @@ async function importOrdersForIntegration(
   }
 
   const nextSince = data.nextSince?.trim() || null;
-  return { imported, updated, skipped, nextSince, error: null };
+  return { imported, updated, skipped, nextSince, error: null, newOrders };
 }
 
 export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsitePollResult> {
-  if (pollInFlight) return { imported: 0, updated: 0, skipped: 0, errors: [] };
+  if (pollInFlight) {
+    return { imported: 0, updated: 0, skipped: 0, errors: [], newOrders: [] };
+  }
   if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return { imported: 0, updated: 0, skipped: 0, errors: ["Offline"] };
+    return { imported: 0, updated: 0, skipped: 0, errors: ["Offline"], newOrders: [] };
   }
 
   pollInFlight = true;
@@ -442,6 +458,7 @@ export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsite
     updated: 0,
     skipped: 0,
     errors: [],
+    newOrders: [],
   };
 
   try {
@@ -457,6 +474,7 @@ export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsite
         result.imported += batch.imported;
         result.updated += batch.updated;
         result.skipped += batch.skipped;
+        result.newOrders.push(...batch.newOrders);
 
         await updateApiIntegrationSyncState(integration.id, {
           last_since: batch.nextSince ?? integration.last_since,
@@ -478,6 +496,10 @@ export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsite
 
   if ((result.imported > 0 || result.updated > 0) && typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("velo-website-orders-imported", { detail: result }));
+  }
+
+  if (result.newOrders.length > 0) {
+    void notifyNewWebsiteOrders(result.newOrders);
   }
 
   return result;
