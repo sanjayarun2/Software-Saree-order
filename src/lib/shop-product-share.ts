@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
-import { getProductShopMeta } from "./product-shop-meta-storage";
-import { buildCustomerWhatsAppShareText, buildShopProductLinks } from "./shop-product-urls";
+import { buildCustomerCartShareText, buildShopCartUrl } from "./shop-product-urls";
+import type { ShareCartLine } from "./share-cart-types";
 import type { VeloProductListItem } from "./velo-products-types";
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -13,47 +13,19 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export async function shareProductShopLink(opts: {
-  userId?: string;
-  product: VeloProductListItem;
-  shopBaseUrl: string;
-  collectionSlug?: string | null;
-  slug?: string | null;
-  description?: string;
+async function openShareSheet(opts: {
+  title: string;
+  text: string;
+  url: string;
 }): Promise<{ copied?: boolean }> {
-  if (typeof window === "undefined") return {};
-
-  let slug = opts.slug ?? opts.product.slug ?? null;
-  let collectionSlug = opts.collectionSlug ?? opts.product.collectionSlug ?? null;
-
-  if (opts.userId) {
-    const meta = await getProductShopMeta(opts.userId, opts.product.productId);
-    slug = meta?.slug ?? slug;
-    collectionSlug = meta?.collectionSlug ?? collectionSlug;
-  }
-
-  const links = buildShopProductLinks({
-    shopBaseUrl: opts.shopBaseUrl,
-    productId: opts.product.productId,
-    slug,
-    productName: opts.product.name,
-    collectionSlug,
-  });
-
-  const text = buildCustomerWhatsAppShareText({
-    name: opts.product.name,
-    description: opts.description,
-    price: opts.product.price,
-    productCode: opts.product.productCode,
-    links,
-  });
-
-  const title = opts.product.name;
-
   const tryNativeShare = async (): Promise<boolean> => {
     if (!navigator.share) return false;
     try {
-      await navigator.share({ title, text, url: links.primaryShareUrl });
+      await navigator.share({
+        title: opts.title,
+        text: opts.text,
+        url: opts.url,
+      });
       return true;
     } catch (e) {
       if ((e as Error).name === "AbortError") return true;
@@ -68,7 +40,12 @@ export async function shareProductShopLink(opts: {
       const { Share } = await import("@capacitor/share");
       const can = await Share.canShare();
       if (can.value) {
-        await Share.share({ title, text, url: links.primaryShareUrl, dialogTitle: title });
+        await Share.share({
+          title: opts.title,
+          text: opts.text,
+          url: opts.url,
+          dialogTitle: opts.title,
+        });
         return {};
       }
     } catch (e) {
@@ -76,12 +53,65 @@ export async function shareProductShopLink(opts: {
     }
   }
 
-  const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(opts.text)}`;
   const opened = window.open(waUrl, "_blank", "noopener,noreferrer");
   if (opened) return {};
 
-  const copied = await copyTextToClipboard(text);
+  const copied = await copyTextToClipboard(opts.text);
   if (copied) return { copied: true };
 
-  throw new Error("Could not open share. Copy the link manually from product settings.");
+  throw new Error("Could not open share. Copy the link manually.");
+}
+
+export async function shareCustomerShopCart(opts: {
+  lines: ShareCartLine[];
+  shopBaseUrl: string;
+  orderHeading?: string;
+  courierNote?: string;
+  cartLinkLabel?: string;
+}): Promise<{ copied?: boolean }> {
+  if (typeof window === "undefined") return {};
+  if (!opts.lines.length) {
+    throw new Error("Add at least one product to the order cart.");
+  }
+
+  const cartUrl = buildShopCartUrl(
+    opts.shopBaseUrl,
+    opts.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }))
+  );
+
+  const text = buildCustomerCartShareText({
+    lines: opts.lines,
+    cartUrl,
+    orderHeading: opts.orderHeading,
+    courierNote: opts.courierNote,
+    cartLinkLabel: opts.cartLinkLabel,
+  });
+
+  const title =
+    opts.lines.length === 1
+      ? opts.lines[0]!.name
+      : `Order (${opts.lines.reduce((n, l) => n + l.quantity, 0)} items)`;
+
+  return openShareSheet({ title, text, url: cartUrl });
+}
+
+export async function shareProductShopLink(opts: {
+  userId?: string;
+  product: VeloProductListItem;
+  shopBaseUrl: string;
+}): Promise<{ copied?: boolean }> {
+  if (typeof window === "undefined") return {};
+
+  return shareCustomerShopCart({
+    shopBaseUrl: opts.shopBaseUrl,
+    lines: [
+      {
+        productId: opts.product.productId,
+        name: opts.product.name,
+        productCode: opts.product.productCode,
+        quantity: 1,
+      },
+    ],
+  });
 }

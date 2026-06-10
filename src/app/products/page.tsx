@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { IconWhatsApp } from "@/components/ui/OrderIcons";
 import { BulkBatchList } from "@/components/products/BulkBatchList";
+import { ShareCartPanel } from "@/components/products/ShareCartPanel";
 import {
   startUploadProgressTicker,
   UploadProgressOverlay,
@@ -26,7 +27,7 @@ import {
 } from "@/lib/product-form-draft";
 import { compressImageFile, recompressBase64Image, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
 import { getVeloShopBaseUrl } from "@/lib/shop-base-url";
-import { shareProductShopLink } from "@/lib/shop-product-share";
+import { useShareCart } from "@/lib/use-share-cart";
 import { normalizeIsDraft, peekCollectionsCache } from "@/lib/velo-products-cache";
 import {
   clearProductSyncLogs,
@@ -260,9 +261,10 @@ function ProductListTab({
   );
   const [refreshingList, setRefreshingList] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [shareProductId, setShareProductId] = useState<string | null>(null);
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const [shopBaseUrl, setShopBaseUrl] = useState<string>("");
   const mountedRef = useRef(false);
+  const shareCart = useShareCart(userId);
 
   const refreshShopBaseUrl = useCallback(
     (force = false) => {
@@ -339,31 +341,20 @@ function ProductListTab({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load, refreshShopBaseUrl]);
 
-  const handleShareProduct = async (product: VeloProductListItem) => {
+  const handleAddToShareCart = (product: VeloProductListItem) => {
     if (normalizeIsDraft(product.isDraft)) {
-      setError(t("Publish the product before sharing shop link."));
+      setError(t("Publish the product before adding to order cart."));
       return;
     }
-    setShareProductId(product.productId);
+    setAddingProductId(product.productId);
     setError(null);
-    try {
-      const base = shopBaseUrl || (await getVeloShopBaseUrl(userId, { force: true }));
-      if (!shopBaseUrl) setShopBaseUrl(base);
-      const result = await shareProductShopLink({
-        userId,
-        product,
-        shopBaseUrl: base,
-        slug: product.slug,
-        collectionSlug: product.collectionSlug,
-      });
-      if (result.copied) {
-        setInfo(t("Share text copied. Paste into WhatsApp."));
-      }
-    } catch (e) {
-      setError((e as Error).message || t("Could not share."));
-    } finally {
-      setShareProductId(null);
+    const result = shareCart.addProduct(product, 1);
+    setAddingProductId(null);
+    if (!result.ok) {
+      setError(t("Order cart is full. Share or clear it first."));
+      return;
     }
+    setInfo(t("Added to order cart. Set quantity below and share on WhatsApp."));
   };
 
   const handleDelete = async (productId: string, name: string) => {
@@ -481,13 +472,13 @@ function ProductListTab({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={shareProductId === p.productId || normalizeIsDraft(p.isDraft)}
-                    onClick={() => void handleShareProduct(p)}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 disabled:opacity-50 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    title={t("Share shop link")}
-                    aria-label={t("Share shop link")}
+                    disabled={addingProductId === p.productId || normalizeIsDraft(p.isDraft)}
+                    onClick={() => handleAddToShareCart(p)}
+                    className="flex h-10 min-w-[2.5rem] items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-2 text-emerald-700 disabled:opacity-50 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    title={t("Add to order cart")}
+                    aria-label={t("Add to order cart")}
                   >
-                    <IconWhatsApp className="h-5 w-5" />
+                    <span className="text-lg font-bold leading-none">+</span>
                   </button>
                   <button
                     type="button"
@@ -521,6 +512,19 @@ function ProductListTab({
           {loadingList ? `${t("Loading")}…` : t("Load more")}
         </button>
       )}
+
+      {shareCart.lines.length > 0 ? <div className="h-44 shrink-0" aria-hidden /> : null}
+
+      <ShareCartPanel
+        lines={shareCart.lines}
+        shopBaseUrl={shopBaseUrl}
+        totalUnits={shareCart.totalUnits}
+        onSetQuantity={shareCart.setQuantity}
+        onRemoveLine={shareCart.removeLine}
+        onClear={shareCart.clearCart}
+        setError={setError}
+        setInfo={setInfo}
+      />
     </div>
   );
 }
