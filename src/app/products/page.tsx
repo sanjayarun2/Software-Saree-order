@@ -144,10 +144,6 @@ export default function ProductsPage() {
           </Link>
         </div>
 
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          {t("Manage website products using your Velo API key.")}
-        </p>
-
         {(error || info) && (
           <div
             className={`rounded-xl border px-4 py-3 text-sm ${
@@ -436,7 +432,6 @@ function ProductListTab({
       setError(t("Order cart is full. Share or clear it first."));
       return;
     }
-    setInfo(t("Added to order cart. Set quantity below and share on WhatsApp."));
   };
 
   const handleDelete = async (productId: string, name: string) => {
