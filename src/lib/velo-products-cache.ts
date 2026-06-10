@@ -1,13 +1,18 @@
 import type { VeloProductListItem } from "./velo-products-types";
 
 const CACHE_VERSION = 1;
-const LIST_STALE_MS = 60 * 1000;
-const LIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** Serve from cache instantly; revalidate after this (stale-while-revalidate). */
+export const LIST_STALE_MS = 60 * 1000;
+/** Discard cache entries older than this (gc). */
+export const LIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const COLLECTIONS_STALE_MS = 5 * 60 * 1000;
 const COLLECTIONS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const LIST_PREFIX = "velo_products_list_v1";
 const LIST_DEFAULT_KEY = "velo_products_default_v1";
+const LIST_LRU_PREFIX = "velo_products_list_lru_v1";
 const COLLECTIONS_PREFIX = "velo_products_collections_v1";
+/** Max persisted search/list keys per user (LRU eviction). */
+const MAX_PERSISTED_LIST_KEYS = 48;
 
 type ListCachePayload = {
   v: number;
@@ -31,6 +36,13 @@ export type ProductsListSnapshot = {
   isStale: boolean;
 };
 
+export type ProductsListQueryOpts = {
+  search?: string;
+  draft?: "all" | "draft" | "published" | string;
+  page?: number;
+  pageSize?: number;
+};
+
 const memoryListCache = new Map<string, ListCachePayload>();
 const memoryCollectionsCache = new Map<string, CollectionsCachePayload>();
 
@@ -47,23 +59,24 @@ export function normalizeProductListItem(item: VeloProductListItem): VeloProduct
   };
 }
 
-function listCacheKey(
-  userId: string,
-  search: string,
-  draft: string,
-  page: number,
-  pageSize: number
-) {
-  return `${LIST_PREFIX}:${userId}:${draft}:${page}:${pageSize}:${search.trim().toLowerCase()}`;
+export function listCacheKey(userId: string, opts: ProductsListQueryOpts): string {
+  const search = (opts.search ?? "").trim().toLowerCase();
+  const draft = opts.draft ?? "all";
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 20;
+  return `${LIST_PREFIX}:${userId}:${draft}:${page}:${pageSize}:${search}`;
 }
 
-function isDefaultListQuery(
-  search: string,
-  draft: string,
-  page: number,
-  pageSize: number
-) {
-  return page === 1 && pageSize === 20 && !search.trim() && draft === "all";
+function listLruIndexKey(userId: string) {
+  return `${LIST_LRU_PREFIX}:${userId}`;
+}
+
+function isDefaultListQuery(opts: ProductsListQueryOpts) {
+  const search = (opts.search ?? "").trim();
+  const draft = opts.draft ?? "all";
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 20;
+  return page === 1 && pageSize === 20 && !search && draft === "all";
 }
 
 function collectionsCacheKey(userId: string) {
@@ -107,19 +120,10 @@ function payloadToSnapshot(
 
 function readListEntry(
   userId: string,
-  opts: {
-    search?: string;
-    draft?: string;
-    page?: number;
-    pageSize?: number;
-  },
+  opts: ProductsListQueryOpts,
   allowStale: boolean
 ): ProductsListSnapshot | null {
-  const search = opts.search ?? "";
-  const draft = opts.draft ?? "all";
-  const page = opts.page ?? 1;
-  const pageSize = opts.pageSize ?? 20;
-  const key = listCacheKey(userId, search, draft, page, pageSize);
+  const key = listCacheKey(userId, opts);
 
   const memory = memoryListCache.get(key);
   if (memory) {
@@ -127,73 +131,80 @@ function readListEntry(
     if (snap) return snap;
   }
 
-  if (typeof window !== "undefined") {
-    const sessionEntry = readJson<ListCachePayload>(key, sessionStorage);
-    if (sessionEntry) {
-      const snap = payloadToSnapshot(sessionEntry, allowStale);
-      if (snap) {
-        memoryListCache.set(key, sessionEntry);
-        return snap;
-      }
-    }
+  if (typeof window === "undefined") return null;
 
-    if (isDefaultListQuery(search, draft, page, pageSize)) {
-      const localEntry = readJson<ListCachePayload>(
-        `${LIST_DEFAULT_KEY}:${userId}`,
-        localStorage
-      );
-      if (localEntry) {
-        const snap = payloadToSnapshot(localEntry, allowStale);
-        if (snap) {
-          memoryListCache.set(key, localEntry);
-          return snap;
-        }
-      }
+  const sessionEntry = readJson<ListCachePayload>(key, sessionStorage);
+  if (sessionEntry) {
+    const snap = payloadToSnapshot(sessionEntry, allowStale);
+    if (snap) {
+      memoryListCache.set(key, sessionEntry);
+      return snap;
+    }
+  }
+
+  const localEntry =
+    readJson<ListCachePayload>(key, localStorage) ??
+    (isDefaultListQuery(opts)
+      ? readJson<ListCachePayload>(`${LIST_DEFAULT_KEY}:${userId}`, localStorage)
+      : null);
+  if (localEntry) {
+    const snap = payloadToSnapshot(localEntry, allowStale);
+    if (snap) {
+      memoryListCache.set(key, localEntry);
+      return snap;
     }
   }
 
   return null;
 }
 
+function touchListLru(userId: string, cacheKey: string) {
+  if (typeof window === "undefined") return;
+  const indexKey = listLruIndexKey(userId);
+  const prev = readJson<string[]>(indexKey, localStorage) ?? [];
+  const next = [cacheKey, ...prev.filter((k) => k !== cacheKey)].slice(0, MAX_PERSISTED_LIST_KEYS);
+  writeJson(indexKey, next, localStorage);
+
+  const keep = new Set(next);
+  keep.add(`${LIST_DEFAULT_KEY}:${userId}`);
+  for (const oldKey of prev) {
+    if (!keep.has(oldKey) && oldKey.startsWith(`${LIST_PREFIX}:${userId}:`)) {
+      try {
+        localStorage.removeItem(oldKey);
+        sessionStorage.removeItem(oldKey);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 export function peekVeloProductsList(
   userId: string,
-  opts: {
-    search?: string;
-    draft?: "all" | "draft" | "published";
-    page?: number;
-    pageSize?: number;
-  } = {}
+  opts: ProductsListQueryOpts = {}
 ): ProductsListSnapshot | null {
   return readListEntry(userId, opts, true);
 }
 
+/** Fresh cache only (within LIST_STALE_MS). */
 export function readProductsListCache(
   userId: string,
-  opts: {
-    search?: string;
-    draft?: string;
-    page?: number;
-    pageSize?: number;
-  }
+  opts: ProductsListQueryOpts
 ): ProductsListSnapshot | null {
   return readListEntry(userId, opts, false);
 }
 
+export function shouldRevalidateProductsList(snapshot: ProductsListSnapshot | null): boolean {
+  if (!snapshot) return true;
+  return snapshot.isStale;
+}
+
 export function writeProductsListCache(
   userId: string,
-  opts: {
-    search?: string;
-    draft?: string;
-    page?: number;
-    pageSize?: number;
-  },
+  opts: ProductsListQueryOpts,
   data: { products: VeloProductListItem[]; total: number; hasMore: boolean }
 ) {
-  const search = opts.search ?? "";
-  const draft = opts.draft ?? "all";
-  const page = opts.page ?? 1;
-  const pageSize = opts.pageSize ?? 20;
-  const key = listCacheKey(userId, search, draft, page, pageSize);
+  const key = listCacheKey(userId, opts);
   const entry: ListCachePayload = {
     v: CACHE_VERSION,
     at: Date.now(),
@@ -207,8 +218,13 @@ export function writeProductsListCache(
   if (typeof window === "undefined") return;
 
   writeJson(key, entry, sessionStorage);
-  if (isDefaultListQuery(search, draft, page, pageSize)) {
-    writeJson(`${LIST_DEFAULT_KEY}:${userId}`, entry, localStorage);
+  const page = opts.page ?? 1;
+  if (page === 1) {
+    writeJson(key, entry, localStorage);
+    touchListLru(userId, key);
+    if (isDefaultListQuery(opts)) {
+      writeJson(`${LIST_DEFAULT_KEY}:${userId}`, entry, localStorage);
+    }
   }
 }
 
@@ -237,9 +253,21 @@ export function invalidateProductsListCache(userId?: string) {
     }
     keys.forEach((key) => sessionStorage.removeItem(key));
 
-    if (userId) {
-      localStorage.removeItem(`${LIST_DEFAULT_KEY}:${userId}`);
+    const localKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (
+        !key.startsWith(LIST_PREFIX) &&
+        !key.startsWith(`${LIST_DEFAULT_KEY}:`) &&
+        !key.startsWith(LIST_LRU_PREFIX)
+      ) {
+        continue;
+      }
+      if (userId && !key.includes(`:${userId}`)) continue;
+      localKeys.push(key);
     }
+    localKeys.forEach((key) => localStorage.removeItem(key));
   } catch {
     /* ignore */
   }

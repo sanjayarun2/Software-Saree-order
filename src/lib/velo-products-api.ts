@@ -11,6 +11,7 @@ import {
   normalizeProductListItem,
   peekCollectionsCache,
   peekVeloProductsList,
+  readProductsListCache,
   writeCollectionsCache,
   writeProductsListCache,
 } from "./velo-products-cache";
@@ -334,8 +335,26 @@ export async function listVeloProducts(
     draft?: "all" | "draft" | "published";
     page?: number;
     pageSize?: number;
-  } = {}
-): Promise<{ products: VeloProductListItem[]; total: number; hasMore: boolean }> {
+  } = {},
+  fetchOpts: { forceRefresh?: boolean } = {}
+): Promise<{
+  products: VeloProductListItem[];
+  total: number;
+  hasMore: boolean;
+  fromCache?: boolean;
+}> {
+  if (!fetchOpts.forceRefresh) {
+    const fresh = readProductsListCache(userId, opts);
+    if (fresh) {
+      return {
+        products: fresh.products,
+        total: fresh.total,
+        hasMore: fresh.hasMore,
+        fromCache: true,
+      };
+    }
+  }
+
   const key = listQueryKey(userId, opts);
   const inflight = listInflight.get(key);
   if (inflight) return inflight;

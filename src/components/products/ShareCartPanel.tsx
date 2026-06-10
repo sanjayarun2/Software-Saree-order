@@ -16,6 +16,8 @@ type ShareCartPanelProps = {
   lines: ShareCartLine[];
   shopBaseUrl: string;
   totalUnits: number;
+  /** When true (search keyboard open), collapse to a slim bar so search stays visible. */
+  compact?: boolean;
   onSetQuantity: (productId: string, quantity: number) => void;
   onRemoveLine: (productId: string) => void;
   onClear: () => void;
@@ -28,6 +30,7 @@ export function ShareCartPanel({
   lines,
   shopBaseUrl,
   totalUnits,
+  compact = false,
   onSetQuantity,
   onRemoveLine,
   onClear,
@@ -35,10 +38,14 @@ export function ShareCartPanel({
   setInfo,
 }: ShareCartPanelProps) {
   const { t } = useLanguage();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const prevCountRef = useRef(lines.length);
+
+  useEffect(() => {
+    if (compact) setExpanded(false);
+  }, [compact]);
 
   useEffect(() => {
     if (lines.length > prevCountRef.current) {
@@ -79,65 +86,94 @@ export function ShareCartPanel({
     }
   };
 
-  const shareBtn = (
+  const shareBtnCompact = (
     <button
       type="button"
       disabled={sharing}
       onClick={() => void handleShare()}
-      className="flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-4 text-base font-semibold text-white shadow-md disabled:opacity-50"
+      className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#25D366] px-3 text-xs font-semibold text-white disabled:opacity-50"
+      aria-label={t("Share on WhatsApp")}
     >
-      <IconWhatsApp className="h-6 w-6 shrink-0" />
+      <IconWhatsApp className="h-4 w-4" />
+      <span>{sharing ? "…" : "WhatsApp"}</span>
+    </button>
+  );
+
+  const shareBtnFull = (
+    <button
+      type="button"
+      disabled={sharing}
+      onClick={() => void handleShare()}
+      className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] text-sm font-semibold text-white disabled:opacity-50"
+    >
+      <IconWhatsApp className="h-5 w-5 shrink-0" />
       <span>{sharing ? t("Working…") : t("Share on WhatsApp")}</span>
     </button>
   );
 
+  if (compact) {
+    return (
+      <div
+        className="fixed inset-x-0 z-[55] border-t border-emerald-200 bg-white/95 backdrop-blur dark:border-emerald-900 dark:bg-slate-900/95 max-lg:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-0"
+        style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
+      >
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 py-1.5">
+          <p className="min-w-0 truncate text-xs font-medium text-emerald-900 dark:text-emerald-100">
+            {t("Order cart")} · {lines.length} · {totalUnits} {t("qty total")}
+          </p>
+          {shareBtnCompact}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="fixed inset-x-0 z-[55] border-t border-emerald-200 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.12)] dark:border-emerald-900 dark:bg-slate-900 max-lg:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-0"
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      className="fixed inset-x-0 z-[55] border-t border-emerald-200 bg-white shadow-[0_-8px_24px_rgba(0,0,0,0.1)] dark:border-emerald-900 dark:bg-slate-900 max-lg:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-0"
+      style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="mx-auto max-w-3xl px-3 pt-2">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 py-1 text-left text-sm font-semibold text-emerald-900 dark:text-emerald-100"
-        >
-          <span>
-            {t("Order cart")} · {lines.length} {t("products")} · {totalUnits}{" "}
-            {t("qty total")}
-          </span>
-          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            {expanded ? t("Hide") : t("Show")}
-          </span>
-        </button>
+      <div className="mx-auto max-w-3xl px-2 pt-1.5">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex min-w-0 flex-1 items-center justify-between gap-1 py-0.5 text-left text-xs font-semibold text-emerald-900 dark:text-emerald-100"
+          >
+            <span className="truncate">
+              {t("Order cart")} · {lines.length} · {totalUnits} {t("qty total")}
+            </span>
+            <span className="shrink-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              {expanded ? t("Hide") : t("Show")}
+            </span>
+          </button>
+          {!expanded ? shareBtnCompact : null}
+        </div>
 
         {expanded ? (
           <>
             <ul
               ref={listRef}
-              className="mt-1 max-h-[min(42vh,280px)] space-y-2 overflow-y-auto overscroll-contain scroll-pb-2 scroll-pt-1 pr-0.5"
+              className="mt-1 max-h-[140px] space-y-1 overflow-y-auto overscroll-contain"
             >
               {lines.map((line, index) => (
                 <li
                   key={line.productId}
-                  className="flex flex-col gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm dark:border-emerald-900/60 dark:bg-emerald-950/20 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/50 px-2 py-1.5 dark:border-emerald-900/50 dark:bg-emerald-950/20"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
-                      #{index + 1}
-                    </p>
-                    <p className="break-words font-medium text-slate-900 dark:text-slate-100">
+                    <p className="truncate text-xs font-medium text-slate-900 dark:text-slate-100">
+                      <span className="text-emerald-700 dark:text-emerald-400">#{index + 1}</span>{" "}
                       {line.name}
+                      {line.productCode ? (
+                        <span className="font-normal text-slate-500"> · {line.productCode}</span>
+                      ) : null}
                     </p>
-                    {line.productCode ? (
-                      <p className="text-xs text-slate-500">{line.productCode}</p>
-                    ) : null}
                   </div>
-                  <div className="flex shrink-0 items-center justify-end gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       type="button"
                       aria-label={t("Decrease quantity")}
-                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-lg dark:border-slate-600 dark:bg-slate-800"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-sm dark:border-slate-600 dark:bg-slate-800"
                       onClick={() => handleQtyDown(line)}
                     >
                       −
@@ -154,13 +190,13 @@ export function ShareCartPanel({
                           clampShareCartQty(Number(e.target.value))
                         )
                       }
-                      className="h-11 w-14 rounded-xl border border-gray-200 bg-white text-center text-base font-semibold dark:border-slate-600 dark:bg-slate-800"
+                      className="h-7 w-9 rounded-md border border-gray-200 bg-white text-center text-xs font-semibold dark:border-slate-600 dark:bg-slate-800"
                       aria-label={t("Quantity")}
                     />
                     <button
                       type="button"
                       aria-label={t("Increase quantity")}
-                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-lg dark:border-slate-600 dark:bg-slate-800"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-sm dark:border-slate-600 dark:bg-slate-800"
                       onClick={() =>
                         onSetQuantity(
                           line.productId,
@@ -173,7 +209,7 @@ export function ShareCartPanel({
                     <button
                       type="button"
                       aria-label={t("Remove")}
-                      className="ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-red-600"
+                      className="flex h-7 w-7 items-center justify-center text-red-600"
                       onClick={() => onRemoveLine(line.productId)}
                     >
                       ×
@@ -183,21 +219,30 @@ export function ShareCartPanel({
               ))}
             </ul>
 
-            <div className="mt-3 space-y-2 border-t border-emerald-100 pt-3 pb-1 dark:border-emerald-900/50">
-              {shareBtn}
+            <div className="mt-1.5 space-y-1 border-t border-emerald-100 pt-1.5 pb-0.5 dark:border-emerald-900/50">
+              {shareBtnFull}
               <button
                 type="button"
                 onClick={onClear}
-                className="min-h-[40px] w-full rounded-xl border border-gray-200 text-sm font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
+                className="h-8 w-full rounded-lg border border-gray-200 text-xs text-slate-600 dark:border-slate-600 dark:text-slate-300"
               >
                 {t("Clear cart")}
               </button>
             </div>
           </>
-        ) : (
-          <div className="mt-2 space-y-2 pb-1">{shareBtn}</div>
-        )}
+        ) : null}
       </div>
     </div>
   );
+}
+
+/** Bottom spacer height so list content is not hidden behind the fixed panel. */
+export function shareCartSpacerHeight(
+  lineCount: number,
+  opts: { compact?: boolean; expanded?: boolean }
+): string {
+  if (lineCount === 0) return "0px";
+  if (opts.compact) return "calc(2.75rem + env(safe-area-inset-bottom))";
+  if (opts.expanded) return "calc(11rem + 4.75rem + env(safe-area-inset-bottom))";
+  return "calc(3.5rem + 4.75rem + env(safe-area-inset-bottom))";
 }

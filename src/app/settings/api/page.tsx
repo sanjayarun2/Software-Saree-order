@@ -15,6 +15,7 @@ import {
 } from "@/lib/api-settings-supabase";
 import { invalidateVeloShopBaseUrlCache } from "@/lib/shop-base-url";
 import { pollVeloWebsiteOrders, testVeloWebsiteConnection } from "@/lib/velo-website-sync";
+import { ProductSyncLogsPanel } from "@/components/settings/ProductSyncLogsPanel";
 
 function formatSyncTime(iso: string | null): string {
   if (!iso) return "—";
@@ -366,6 +367,8 @@ export default function ApiSettingsPage() {
             </ul>
           )}
         </div>
+
+        <ProductSyncLogsPanel onInfo={setInfo} />
       </div>
     </ErrorBoundary>
   );

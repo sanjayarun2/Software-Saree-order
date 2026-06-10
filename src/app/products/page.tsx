@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { IconWhatsApp } from "@/components/ui/OrderIcons";
 import { BulkBatchList } from "@/components/products/BulkBatchList";
-import { ShareCartPanel } from "@/components/products/ShareCartPanel";
+import { ShareCartPanel, shareCartSpacerHeight } from "@/components/products/ShareCartPanel";
 import {
   startUploadProgressTicker,
   UploadProgressOverlay,
@@ -29,17 +29,16 @@ import { compressImageFile, recompressBase64Image, SINGLE_UPLOAD_PROFILE } from 
 import { getVeloShopBaseUrl } from "@/lib/shop-base-url";
 import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useShareCart } from "@/lib/use-share-cart";
-import { normalizeIsDraft, peekCollectionsCache } from "@/lib/velo-products-cache";
 import {
-  clearProductSyncLogs,
-  listProductSyncLogs,
-  type ProductSyncLogEntry,
-} from "@/lib/product-sync-logs";
+  normalizeIsDraft,
+  peekCollectionsCache,
+  peekVeloProductsList,
+  shouldRevalidateProductsList,
+} from "@/lib/velo-products-cache";
 import {
   deleteVeloProduct,
   fetchVeloCollections,
   listVeloProducts,
-  peekVeloProductsList,
   prefetchVeloProductsList,
   uploadProductReliable,
   validateBulkForm,
@@ -59,7 +58,7 @@ import {
   useBulkProductsDraft,
 } from "./bulk-products-context";
 
-type TabId = "list" | "single" | "bulk" | "logs";
+type TabId = "list" | "single" | "bulk";
 
 const MAX_BULK_FILES = 50;
 
@@ -67,7 +66,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "list", label: "Product List" },
   { id: "single", label: "Add Single Product" },
   { id: "bulk", label: "Add Bulk Products" },
-  { id: "logs", label: "Sync Logs" },
 ];
 
 const inputCls =
@@ -79,7 +77,9 @@ export default function ProductsPage() {
   const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = (searchParams.get("tab") as TabId) || "list";
+  const rawTab = searchParams.get("tab");
+  const tab: TabId =
+    rawTab === "single" || rawTab === "bulk" || rawTab === "list" ? rawTab : "list";
 
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -223,9 +223,6 @@ export default function ProductsPage() {
             }}
           />
         </div>
-        <div className={tab === "logs" ? undefined : "hidden"}>
-          <ProductSyncLogsTab setInfo={setInfo} />
-        </div>
       </div>
     </ErrorBoundary>
   );
@@ -271,6 +268,12 @@ function ProductListTab({
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const [shopBaseUrl, setShopBaseUrl] = useState<string>("");
   const mountedRef = useRef(false);
+  const listGenerationRef = useRef(0);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchBlockRef = useRef<HTMLDivElement>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchPending =
+    searchInput.trim() !== appliedSearch.trim();
   const shareCart = useShareCart(userId);
 
   const refreshShopBaseUrl = useCallback(
@@ -294,51 +297,99 @@ function ProductListTab({
     [appliedSearch, appliedDraft]
   );
 
+  const applySearchNow = useCallback((value = searchInput) => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+    setAppliedSearch(value.trim());
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setAppliedSearch(searchInput.trim());
+      searchDebounceRef.current = null;
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = null;
+      }
+    };
+  }, [searchInput]);
+
   const load = useCallback(
-    async (pageNum: number, append: boolean, opts: { background?: boolean } = {}) => {
-      if (loadInFlightRef.current && append) return;
-      if (append) loadInFlightRef.current = true;
-
+    async (
+      pageNum: number,
+      append: boolean,
+      opts: { forceRefresh?: boolean } = {}
+    ) => {
+      const generationAtStart = listGenerationRef.current;
       const query = listQuery(pageNum);
-      const cached = !append && pageNum === 1 ? peekVeloProductsList(userId, query) : null;
-      const showCached = cached && !append;
 
-      if (showCached) {
-        setItems(cached.products);
-        setHasMore(cached.hasMore);
-        setPage(pageNum);
-        pageRef.current = pageNum;
-        hasMoreRef.current = cached.hasMore;
-      }
-
-      if (opts.background || showCached) {
-        setRefreshingList(true);
-      } else if (append) {
+      if (append) {
+        if (loadInFlightRef.current) return;
+        loadInFlightRef.current = true;
         setLoadingMore(true);
+        setError(null);
       } else {
-        setLoadingList(true);
+        const cached = peekVeloProductsList(userId, query);
+        if (cached) {
+          setItems(cached.products);
+          setHasMore(cached.hasMore);
+          setPage(pageNum);
+          pageRef.current = pageNum;
+          hasMoreRef.current = cached.hasMore;
+        } else {
+          setItems([]);
+          setHasMore(false);
+          setPage(pageNum);
+          pageRef.current = pageNum;
+          hasMoreRef.current = false;
+        }
+
+        const needsFetch =
+          Boolean(opts.forceRefresh) || shouldRevalidateProductsList(cached ?? null);
+        if (!needsFetch) {
+          setLoadingList(false);
+          setRefreshingList(false);
+          return;
+        }
+
+        if (cached) setRefreshingList(true);
+        else setLoadingList(true);
+        setError(null);
       }
-      if (!append || !opts.background) setError(null);
 
       try {
-        const res = await listVeloProducts(userId, query);
+        const res = await listVeloProducts(userId, query, {
+          forceRefresh: Boolean(opts.forceRefresh),
+        });
+
+        if (generationAtStart !== listGenerationRef.current) return;
+
         setItems((prev) => (append ? [...prev, ...res.products] : res.products));
         setHasMore(res.hasMore);
         setPage(pageNum);
         pageRef.current = pageNum;
         hasMoreRef.current = res.hasMore;
       } catch (e) {
+        if (generationAtStart !== listGenerationRef.current) return;
         if (append) {
           setInfo(null);
           setError((e as Error).message || t("Could not load more products."));
-        } else if (!showCached) {
-          setError((e as Error).message);
+        } else {
+          const cached = peekVeloProductsList(userId, query);
+          if (!cached) setError((e as Error).message);
         }
       } finally {
         if (append) loadInFlightRef.current = false;
-        setLoadingList(false);
-        setLoadingMore(false);
-        setRefreshingList(false);
+        if (generationAtStart === listGenerationRef.current) {
+          setLoadingList(false);
+          setLoadingMore(false);
+          setRefreshingList(false);
+        }
       }
     },
     [userId, listQuery, setError, setInfo, t]
@@ -357,20 +408,16 @@ function ProductListTab({
   });
 
   useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      const snap = peekVeloProductsList(userId, listQuery(1));
-      void load(1, false, { background: Boolean(snap) });
-      return;
-    }
-    void load(1, false, { background: items.length > 0 });
+    if (!mountedRef.current) mountedRef.current = true;
+    listGenerationRef.current += 1;
+    void load(1, false);
   }, [appliedSearch, appliedDraft, refreshKey]);
 
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       refreshShopBaseUrl(true);
-      void load(1, false, { background: true });
+      void load(1, false);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -399,7 +446,7 @@ function ProductListTab({
     try {
       await deleteVeloProduct(userId, productId);
       setInfo(t("Product deleted."));
-      await load(1, false);
+      await load(1, false, { forceRefresh: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -409,7 +456,13 @@ function ProductListTab({
 
   return (
     <div className="space-y-4">
-      <BentoCard className="p-4">
+      <div
+        ref={searchBlockRef}
+        className={searchFocused ? "sticky top-0 z-40" : undefined}
+      >
+      <BentoCard
+        className={`p-4 ${searchFocused ? "shadow-md ring-1 ring-primary-200/60 dark:ring-primary-800/40" : ""}`}
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className={labelCls}>{t("Search")}</span>
@@ -417,12 +470,20 @@ function ProductListTab({
               className={inputCls}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
+              onFocus={() => {
+                setSearchFocused(true);
+                requestAnimationFrame(() => {
+                  searchBlockRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+                });
+              }}
+              onBlur={() => {
+                window.setTimeout(() => setSearchFocused(false), 250);
+              }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setAppliedSearch(searchInput.trim());
-                }
+                if (e.key === "Enter") applySearchNow();
               }}
               placeholder={t("Name or product code")}
+              autoComplete="off"
             />
           </label>
           <label className="block">
@@ -445,30 +506,37 @@ function ProductListTab({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setAppliedSearch(searchInput.trim())}
+            onClick={() => applySearchNow()}
             className="min-h-[44px] rounded-xl bg-primary-500 px-4 text-sm font-semibold text-white"
           >
             {t("Search")}
           </button>
           <button
             type="button"
-            onClick={() => void load(1, false, { background: items.length > 0 })}
+            onClick={() => void load(1, false, { forceRefresh: true })}
             className="min-h-[44px] rounded-xl border border-gray-200 px-4 text-sm font-medium dark:border-slate-600"
           >
             {t("Refresh")}
           </button>
-          {refreshingList && items.length > 0 && (
+          {searchPending && (
+            <span className="text-xs text-slate-500">{t("Searching…")}</span>
+          )}
+          {refreshingList && items.length > 0 && !searchPending && (
             <span className="text-xs text-slate-500">{t("Updating…")}</span>
+          )}
+          {loadingList && items.length > 0 && appliedSearch.trim() && !searchPending && (
+            <span className="text-xs text-slate-500">{t("Loading…")}</span>
           )}
         </div>
       </BentoCard>
+      </div>
 
       {!appliedSearch.trim() ? (
         <BulkBatchList
           userId={userId}
           setError={setError}
           setInfo={setInfo}
-          onUploaded={() => void load(1, false, { background: false })}
+          onUploaded={() => void load(1, false, { forceRefresh: true })}
           refreshKey={refreshKey}
         />
       ) : null}
@@ -561,7 +629,8 @@ function ProductListTab({
 
       {shareCart.lines.length > 0 ? (
         <div
-          className="shrink-0 max-lg:h-[calc(min(52vh,360px)+5.5rem)] lg:h-[min(52vh,360px)]"
+          className="shrink-0 max-lg:mb-0"
+          style={{ height: shareCartSpacerHeight(shareCart.lines.length, { compact: searchFocused }) }}
           aria-hidden
         />
       ) : null}
@@ -570,6 +639,7 @@ function ProductListTab({
         userId={userId}
         lines={shareCart.lines}
         shopBaseUrl={shopBaseUrl}
+        compact={searchFocused}
         totalUnits={shareCart.totalUnits}
         onSetQuantity={shareCart.setQuantity}
         onRemoveLine={shareCart.removeLine}
@@ -1115,57 +1185,6 @@ function ProductBulkTab({
           {t("Generate batch")}
         </button>
       </BentoCard>
-    </div>
-  );
-}
-function ProductSyncLogsTab({ setInfo }: { setInfo: (v: string | null) => void }) {
-  const { t } = useLanguage();
-  const [logs, setLogs] = useState<ProductSyncLogEntry[]>([]);
-
-  useEffect(() => {
-    setLogs(listProductSyncLogs());
-  }, []);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            clearProductSyncLogs();
-            setLogs([]);
-            setInfo(t("Sync logs cleared."));
-          }}
-          className="rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-600"
-        >
-          {t("Clear logs")}
-        </button>
-      </div>
-      {logs.length === 0 ? (
-        <BentoCard className="p-6 text-center text-sm text-slate-500">{t("No sync logs yet.")}</BentoCard>
-      ) : (
-        logs.map((log) => (
-          <BentoCard key={log.id} className="p-4 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-semibold">{log.action}</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs ${
-                  log.ok
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40"
-                    : "bg-red-100 text-red-800 dark:bg-red-900/40"
-                }`}
-              >
-                {log.ok ? t("OK") : t("Failed")}
-              </span>
-            </div>
-            <p className="mt-1 text-slate-600 dark:text-slate-300">{log.message}</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {new Date(log.at).toLocaleString()} · {log.requestId.slice(0, 8)}
-            </p>
-            {log.details && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{log.details}</p>}
-          </BentoCard>
-        ))
-      )}
     </div>
   );
 }

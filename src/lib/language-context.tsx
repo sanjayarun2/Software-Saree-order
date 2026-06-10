@@ -299,6 +299,13 @@ const TA: Record<string, string> = {
   "Add Single Product": "ஒரு புராடக்ட் சேர்",
   "Add Bulk Products": "பல புராடக்ட் சேர்",
   "Sync Logs": "சின்க் லாக்கள்",
+  "Product sync activity": "புராடக்ட் சின்க் செயல்பாடு",
+  "Recent product API calls on this device. For troubleshooting uploads only.":
+    "இந்த சாதனத்தில் சமீபத்திய புராடக்ட் API அழைப்புகள். அப்லோடு சிக்கல்களுக்கு மட்டும்.",
+  "Show successful calls": "வெற்றிகரமான அழைப்புகளைக் காட்டு",
+  "No failed product syncs.": "தோல்வியடைந்த புராடக்ட் சின்க் இல்லை.",
+  'Enable "Show successful calls" to see recent activity.':
+    "சமீபத்திய செயல்பாட்டைக் காண \"வெற்றிகரமான அழைப்புகளைக் காட்டு\" ஐ இயக்கவும்.",
   "Manage website products using your Velo API key.": "Velo API விசை மூலம் வலைத்தள புராடக்ட்களை நிர்வகிக்கவும்.",
   "Name or product code": "பெயர் அல்லது புராடக்ட் கோடு",
   "No products found.": "புராடக்ட்கள் இல்லை.",
@@ -310,6 +317,7 @@ const TA: Record<string, string> = {
   "Could not load more products.": "மேலும் புராடக்ட்களை ஏற்ற முடியவில்லை.",
   "Scroll down for more products": "மேலும் புராடக்ட்களுக்கு கீழே ஸ்க்ரோல் செய்யவும்",
   "All products loaded": "அனைத்து புராடக்ட்களும் ஏற்றப்பட்டன",
+  "Searching…": "தேடுகிறது…",
   "Delete product \"{name}\"?": "புராடக்ட் \"{name}\" நீக்கவா?",
   "Product deleted.": "புராடக்ட் நீக்கப்பட்டது.",
   "Product code": "புராடக்ட் கோடு",
