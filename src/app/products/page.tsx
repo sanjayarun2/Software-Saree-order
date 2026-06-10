@@ -27,6 +27,7 @@ import {
 } from "@/lib/product-form-draft";
 import { compressImageFile, recompressBase64Image, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
 import { getVeloShopBaseUrl } from "@/lib/shop-base-url";
+import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useShareCart } from "@/lib/use-share-cart";
 import { normalizeIsDraft, peekCollectionsCache } from "@/lib/velo-products-cache";
 import {
@@ -259,7 +260,13 @@ function ProductListTab({
   const [loadingList, setLoadingList] = useState(
     () => !peekVeloProductsList(userId, defaultQuery)
   );
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshingList, setRefreshingList] = useState(false);
+  const loadInFlightRef = useRef(false);
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(
+    peekVeloProductsList(userId, defaultQuery)?.hasMore ?? false
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const [shopBaseUrl, setShopBaseUrl] = useState<string>("");
@@ -289,6 +296,9 @@ function ProductListTab({
 
   const load = useCallback(
     async (pageNum: number, append: boolean, opts: { background?: boolean } = {}) => {
+      if (loadInFlightRef.current && append) return;
+      if (append) loadInFlightRef.current = true;
+
       const query = listQuery(pageNum);
       const cached = !append && pageNum === 1 ? peekVeloProductsList(userId, query) : null;
       const showCached = cached && !append;
@@ -297,29 +307,54 @@ function ProductListTab({
         setItems(cached.products);
         setHasMore(cached.hasMore);
         setPage(pageNum);
+        pageRef.current = pageNum;
+        hasMoreRef.current = cached.hasMore;
       }
 
       if (opts.background || showCached) {
         setRefreshingList(true);
-      } else if (!append || items.length === 0) {
+      } else if (append) {
+        setLoadingMore(true);
+      } else {
         setLoadingList(true);
       }
-      setError(null);
+      if (!append || !opts.background) setError(null);
 
       try {
         const res = await listVeloProducts(userId, query);
         setItems((prev) => (append ? [...prev, ...res.products] : res.products));
         setHasMore(res.hasMore);
         setPage(pageNum);
+        pageRef.current = pageNum;
+        hasMoreRef.current = res.hasMore;
       } catch (e) {
-        if (!showCached && items.length === 0) setError((e as Error).message);
+        if (append) {
+          setInfo(null);
+          setError((e as Error).message || t("Could not load more products."));
+        } else if (!showCached) {
+          setError((e as Error).message);
+        }
       } finally {
+        if (append) loadInFlightRef.current = false;
         setLoadingList(false);
+        setLoadingMore(false);
         setRefreshingList(false);
       }
     },
-    [userId, listQuery, setError, items.length]
+    [userId, listQuery, setError, setInfo, t]
   );
+
+  const loadNextPage = useCallback(() => {
+    if (!hasMoreRef.current || loadInFlightRef.current || loadingList || loadingMore) {
+      return;
+    }
+    void load(pageRef.current + 1, true);
+  }, [load, loadingList, loadingMore]);
+
+  const loadMoreSentinelRef = useInfiniteScroll({
+    enabled: hasMore && items.length > 0 && !loadingList,
+    onLoadMore: loadNextPage,
+  });
 
   useEffect(() => {
     if (!mountedRef.current) {
@@ -499,29 +534,40 @@ function ProductListTab({
               </div>
             </BentoCard>
           ))}
-        </div>
-      )}
 
-      {hasMore && (
-        <button
-          type="button"
-          disabled={loadingList}
-          onClick={() => void load(page + 1, true)}
-          className="w-full min-h-[44px] rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold dark:border-slate-600 dark:bg-slate-800"
-        >
-          {loadingList ? `${t("Loading")}…` : t("Load more")}
-        </button>
+          <div
+            ref={loadMoreSentinelRef}
+            className="flex min-h-[56px] flex-col items-center justify-center gap-2 py-4"
+            aria-live="polite"
+          >
+            {loadingMore ? (
+              <>
+                <div
+                  className="h-7 w-7 animate-spin rounded-full border-[3px] border-primary-500 border-t-transparent"
+                  aria-hidden
+                />
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                  {t("Loading more products…")}
+                </p>
+              </>
+            ) : hasMore ? (
+              <p className="text-xs text-slate-500">{t("Scroll down for more products")}</p>
+            ) : items.length > 0 ? (
+              <p className="text-xs text-slate-500">{t("All products loaded")}</p>
+            ) : null}
+          </div>
+        </div>
       )}
 
       {shareCart.lines.length > 0 ? (
         <div
-          className="shrink-0"
-          style={{ height: "min(52vh, 360px)" }}
+          className="shrink-0 max-lg:h-[calc(min(52vh,360px)+5.5rem)] lg:h-[min(52vh,360px)]"
           aria-hidden
         />
       ) : null}
 
       <ShareCartPanel
+        userId={userId}
         lines={shareCart.lines}
         shopBaseUrl={shopBaseUrl}
         totalUnits={shareCart.totalUnits}

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { IconWhatsApp } from "@/components/ui/OrderIcons";
 import { useLanguage } from "@/lib/language-context";
+import { getVeloShopBaseUrl } from "@/lib/shop-base-url";
 import { shareCustomerShopCart } from "@/lib/shop-product-share";
 import {
   clampShareCartQty,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/share-cart-types";
 
 type ShareCartPanelProps = {
+  userId: string;
   lines: ShareCartLine[];
   shopBaseUrl: string;
   totalUnits: number;
@@ -22,6 +24,7 @@ type ShareCartPanelProps = {
 };
 
 export function ShareCartPanel({
+  userId,
   lines,
   shopBaseUrl,
   totalUnits,
@@ -58,9 +61,10 @@ export function ShareCartPanel({
     setSharing(true);
     setError(null);
     try {
+      const base = shopBaseUrl || (await getVeloShopBaseUrl(userId, { force: true }));
       const result = await shareCustomerShopCart({
         lines,
-        shopBaseUrl,
+        shopBaseUrl: base,
         orderHeading: t("Your order:"),
         courierNote: t("Courier charges are included in the final price shown at checkout."),
         cartLinkLabel: t("Open cart:"),
@@ -75,10 +79,22 @@ export function ShareCartPanel({
     }
   };
 
+  const shareBtn = (
+    <button
+      type="button"
+      disabled={sharing}
+      onClick={() => void handleShare()}
+      className="flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-4 text-base font-semibold text-white shadow-md disabled:opacity-50"
+    >
+      <IconWhatsApp className="h-6 w-6 shrink-0" />
+      <span>{sharing ? t("Working…") : t("Share on WhatsApp")}</span>
+    </button>
+  );
+
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-emerald-200 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.12)] dark:border-emerald-900 dark:bg-slate-900"
-      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      className="fixed inset-x-0 z-[55] border-t border-emerald-200 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.12)] dark:border-emerald-900 dark:bg-slate-900 max-lg:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-0"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
     >
       <div className="mx-auto max-w-3xl px-3 pt-2">
         <button
@@ -167,39 +183,19 @@ export function ShareCartPanel({
               ))}
             </ul>
 
-            <div className="mt-3 flex gap-2 pb-1">
+            <div className="mt-3 space-y-2 border-t border-emerald-100 pt-3 pb-1 dark:border-emerald-900/50">
+              {shareBtn}
               <button
                 type="button"
                 onClick={onClear}
-                className="min-h-[48px] flex-1 rounded-xl border border-gray-200 text-sm font-medium dark:border-slate-600"
+                className="min-h-[40px] w-full rounded-xl border border-gray-200 text-sm font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
               >
-                {t("Clear")}
-              </button>
-              <button
-                type="button"
-                disabled={sharing || !shopBaseUrl}
-                onClick={() => void handleShare()}
-                className="flex min-h-[48px] flex-[2] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                <IconWhatsApp className="h-5 w-5 shrink-0" />
-                <span className="truncate">
-                  {sharing ? t("Working…") : t("Share cart on WhatsApp")}
-                </span>
+                {t("Clear cart")}
               </button>
             </div>
           </>
         ) : (
-          <div className="mt-2 pb-1">
-            <button
-              type="button"
-              disabled={sharing || !shopBaseUrl}
-              onClick={() => void handleShare()}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              <IconWhatsApp className="h-5 w-5" />
-              {sharing ? t("Working…") : t("Share cart on WhatsApp")}
-            </button>
-          </div>
+          <div className="mt-2 space-y-2 pb-1">{shareBtn}</div>
         )}
       </div>
     </div>
