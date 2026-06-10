@@ -513,7 +513,13 @@ function ProductListTab({
         </button>
       )}
 
-      {shareCart.lines.length > 0 ? <div className="h-44 shrink-0" aria-hidden /> : null}
+      {shareCart.lines.length > 0 ? (
+        <div
+          className="shrink-0"
+          style={{ height: "min(52vh, 360px)" }}
+          aria-hidden
+        />
+      ) : null}
 
       <ShareCartPanel
         lines={shareCart.lines}
