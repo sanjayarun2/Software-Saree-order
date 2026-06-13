@@ -16,15 +16,15 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 async function openShareSheet(opts: {
   title: string;
   text: string;
-  url: string;
 }): Promise<{ copied?: boolean }> {
   const tryNativeShare = async (): Promise<boolean> => {
     if (!navigator.share) return false;
     try {
+      // Link is already in `text` (Open cart: …). Do not pass `url` separately —
+      // WhatsApp and other apps would show the same link twice.
       await navigator.share({
         title: opts.title,
         text: opts.text,
-        url: opts.url,
       });
       return true;
     } catch (e) {
@@ -43,7 +43,6 @@ async function openShareSheet(opts: {
         await Share.share({
           title: opts.title,
           text: opts.text,
-          url: opts.url,
           dialogTitle: opts.title,
         });
         return {};
@@ -93,7 +92,7 @@ export async function shareCustomerShopCart(opts: {
       ? opts.lines[0]!.name
       : `Order (${opts.lines.reduce((n, l) => n + l.quantity, 0)} items)`;
 
-  return openShareSheet({ title, text, url: cartUrl });
+  return openShareSheet({ title, text });
 }
 
 export async function shareProductShopLink(opts: {
