@@ -13,6 +13,7 @@ import {
   AUTH_ERROR_DEVICE_LIMIT,
   type ResolveDeviceResult,
 } from "./user-devices-supabase";
+import { getAuthCallbackUrl, getAuthSiteUrl } from "./auth-site-url";
 
 function notifyDeviceSlotEvicted(r: ResolveDeviceResult): void {
   if (r.ok && r.evicted && r.maxDevices != null) {
@@ -25,6 +26,7 @@ type AuthContextType = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, metadata?: { mobile?: string }) => Promise<{ error: Error | null; user?: User }>;
   signOut: () => Promise<void>;
 };
@@ -169,11 +171,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null };
   };
 
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: getAuthCallbackUrl(),
+      },
+    });
+    return { error: error ? new Error(error.message) : null };
+  };
+
   const signUp = async (email: string, password: string, metadata?: { mobile?: string }) => {
-    const siteUrl = typeof window !== "undefined"
-      ? (window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
-      : (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000");
-    const redirectTo = `${siteUrl}/verify-success/`;
+    const redirectTo = `${getAuthSiteUrl()}/verify-success/`;
     const userMetadata: Record<string, string> = {};
     if (metadata?.mobile?.trim()) {
       userMetadata.mobile = metadata.mobile.trim();
@@ -197,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signInWithGoogle, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

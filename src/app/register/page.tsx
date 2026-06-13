@@ -10,6 +10,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
 import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
 import { useToast } from "@/lib/toast-context";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 const OPEN_GMAIL_DEBOUNCE_MS = 600;
 
@@ -21,10 +22,11 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const openGmailLastAt = useRef(0);
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
   const { t } = useLanguage();
   const { toast } = useToast();
 
@@ -68,6 +70,22 @@ export default function RegisterPage() {
     }
     if (typeof window !== "undefined") localStorage.setItem("saree_app_returning", "1");
     setSuccess(true);
+  };
+
+  const handleGoogleSignUp = async () => {
+    setError(null);
+    setGoogleLoading(true);
+    const trimmedMobile = mobile.trim();
+    if (trimmedMobile && typeof window !== "undefined") {
+      saveMobile(trimmedMobile);
+      localStorage.setItem("saree_pending_mobile", trimmedMobile);
+      localStorage.setItem("saree_app_returning", "1");
+    }
+    const { error: err } = await signInWithGoogle();
+    if (err) {
+      setGoogleLoading(false);
+      setError(err.message || t("Google sign-in failed."));
+    }
   };
 
   const handleOpenGmail = () => {
@@ -224,11 +242,25 @@ export default function RegisterPage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || googleLoading}
                   className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
                 >
                   {loading ? t("Creating account…") : t("Register")}
                 </button>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t("or")}
+                  </span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                </div>
+
+                <GoogleSignInButton
+                  onClick={handleGoogleSignUp}
+                  disabled={loading}
+                  loading={googleLoading}
+                />
               </form>
             )}
           </BentoCard>

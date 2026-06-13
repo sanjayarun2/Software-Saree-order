@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 import { AUTH_ERROR_DEVICE_LIMIT, consumeDeviceLimitRedirectFlag } from "@/lib/user-devices-supabase";
 import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -20,7 +21,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [deviceLimit, setDeviceLimit] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signIn, user, loading: authLoading } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { signIn, signInWithGoogle, user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
 
@@ -29,8 +31,10 @@ export default function LoginPage() {
   }, [user, authLoading, router]);
 
   React.useEffect(() => {
-    if (consumeDeviceLimitRedirectFlag()) setDeviceLimit(true);
-  }, []);
+    if (consumeDeviceLimitRedirectFlag() || searchParams.get("device_limit") === "1") {
+      setDeviceLimit(true);
+    }
+  }, [searchParams]);
 
   const openWhatsAppSupport = () => {
     if (typeof window !== "undefined") {
@@ -55,6 +59,17 @@ export default function LoginPage() {
     }
     setLoading(false);
     router.replace("/dashboard/");
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setDeviceLimit(false);
+    setGoogleLoading(true);
+    const { error: err } = await signInWithGoogle();
+    if (err) {
+      setGoogleLoading(false);
+      setError(err.message || t("Google sign-in failed."));
+    }
   };
 
   if (authLoading) {
@@ -160,11 +175,25 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || googleLoading}
                 className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
               >
                 {loading ? t("Signing in…") : t("Login")}
               </button>
+
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t("or")}
+                </span>
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+              </div>
+
+              <GoogleSignInButton
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                loading={googleLoading}
+              />
             </form>
           </BentoCard>
 
