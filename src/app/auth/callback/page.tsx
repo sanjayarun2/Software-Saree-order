@@ -12,6 +12,10 @@ import {
 } from "@/lib/user-devices-supabase";
 import { clearSession } from "@/lib/capacitor-storage";
 import { clearLastSyncTimestamp } from "@/lib/local-store";
+import {
+  ensureGoogleUserHasMobile,
+  markMobileRequiredRedirect,
+} from "@/lib/google-auth-mobile";
 
 function readAuthError(): string | null {
   const query = new URLSearchParams(window.location.search);
@@ -57,6 +61,15 @@ export default function AuthCallbackPage() {
     };
 
     const finish = async (user: User) => {
+      const mobileOk = await ensureGoogleUserHasMobile(user.id, user.email);
+      if (!mobileOk.ok) {
+        markMobileRequiredRedirect();
+        await supabase.auth.signOut();
+        await clearSession();
+        if (!cancelled) router.replace("/login/?mobile_required=1");
+        return;
+      }
+
       const deviceId = getOrCreateDeviceId();
       if (deviceId) {
         const r = await resolveDeviceForSession(user.id, deviceId);

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -11,20 +11,31 @@ import { AppLogo } from "@/components/AppLogo";
 import { AUTH_ERROR_DEVICE_LIMIT, consumeDeviceLimitRedirectFlag } from "@/lib/user-devices-supabase";
 import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { MobileNumberField } from "@/components/MobileNumberField";
+import { getRecentMobiles } from "@/lib/mobile-storage";
+import { consumeMobileRequiredRedirectFlag } from "@/lib/google-auth-mobile";
+import { useGoogleSignIn } from "@/lib/use-google-sign-in";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const resetSuccess = searchParams.get("reset") === "success";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deviceLimit, setDeviceLimit] = useState(false);
+  const [mobileRequired, setMobileRequired] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const { signIn, signInWithGoogle, user, loading: authLoading } = useAuth();
+  const { signIn, user, loading: authLoading } = useAuth();
+  const { googleLoading, startGoogleSignIn } = useGoogleSignIn();
   const { t } = useLanguage();
   const router = useRouter();
+
+  useEffect(() => {
+    setRecentMobiles(getRecentMobiles());
+  }, []);
 
   React.useEffect(() => {
     if (!authLoading && user) router.replace("/dashboard/");
@@ -33,6 +44,9 @@ export default function LoginPage() {
   React.useEffect(() => {
     if (consumeDeviceLimitRedirectFlag() || searchParams.get("device_limit") === "1") {
       setDeviceLimit(true);
+    }
+    if (consumeMobileRequiredRedirectFlag() || searchParams.get("mobile_required") === "1") {
+      setMobileRequired(true);
     }
   }, [searchParams]);
 
@@ -46,6 +60,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setDeviceLimit(false);
+    setMobileRequired(false);
     setLoading(true);
     const { error: err } = await signIn(email, password);
     if (err) {
@@ -64,12 +79,9 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setError(null);
     setDeviceLimit(false);
-    setGoogleLoading(true);
-    const { error: err } = await signInWithGoogle();
-    if (err) {
-      setGoogleLoading(false);
-      setError(err.message || t("Google sign-in failed."));
-    }
+    setMobileRequired(false);
+    const { error: err } = await startGoogleSignIn(mobile);
+    if (err) setError(err);
   };
 
   if (authLoading) {
@@ -111,6 +123,14 @@ export default function LoginPage() {
                   >
                     WhatsApp
                   </button>
+                </div>
+              )}
+              {mobileRequired && (
+                <div className="rounded-bento bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                  <p className="font-medium">{t("Mobile number is required for Google sign-in.")}</p>
+                  <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">
+                    {t("Add your mobile number below, then try Google sign-in again.")}
+                  </p>
                 </div>
               )}
               {error && (
@@ -188,6 +208,15 @@ export default function LoginPage() {
                 </span>
                 <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
               </div>
+
+              <MobileNumberField
+                id="google-mobile"
+                value={mobile}
+                onChange={setMobile}
+                recentMobiles={recentMobiles}
+                requiredForGoogle
+                disabled={loading || googleLoading}
+              />
 
               <GoogleSignInButton
                 onClick={handleGoogleSignIn}

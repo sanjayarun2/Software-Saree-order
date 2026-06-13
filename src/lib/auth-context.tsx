@@ -14,6 +14,10 @@ import {
   type ResolveDeviceResult,
 } from "./user-devices-supabase";
 import { getAuthCallbackUrl, getAuthSiteUrl } from "./auth-site-url";
+import {
+  clearPendingMobileForGoogleAuth,
+  getPendingMobileForGoogleAuth,
+} from "./google-auth-mobile";
 
 function notifyDeviceSlotEvicted(r: ResolveDeviceResult): void {
   if (r.ok && r.evicted && r.maxDevices != null) {
@@ -124,19 +128,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session.user);
 
         localStorage.setItem("saree_app_returning", "1");
-        const pendingMobile = localStorage.getItem("saree_pending_mobile");
+        const pendingMobile = getPendingMobileForGoogleAuth();
         const payload: { user_id: string; mobile?: string; email?: string; updated_at: string } = {
           user_id: session.user.id,
           updated_at: new Date().toISOString(),
         };
-        if (pendingMobile?.trim()) payload.mobile = pendingMobile.trim();
+        if (pendingMobile) payload.mobile = pendingMobile;
         if (session.user.email) payload.email = session.user.email;
         if (payload.mobile || payload.email) {
           supabase
             .from("user_profiles")
             .upsert(payload, { onConflict: "user_id" })
             .then(() => {
-              localStorage.removeItem("saree_pending_mobile");
+              clearPendingMobileForGoogleAuth();
             })
             .then(undefined, () => {});
         }

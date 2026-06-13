@@ -11,6 +11,8 @@ import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
 import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
 import { useToast } from "@/lib/toast-context";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { MobileNumberField } from "@/components/MobileNumberField";
+import { useGoogleSignIn } from "@/lib/use-google-sign-in";
 
 const OPEN_GMAIL_DEBOUNCE_MS = 600;
 
@@ -22,11 +24,11 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const openGmailLastAt = useRef(0);
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp } = useAuth();
+  const { googleLoading: googleAuthLoading, startGoogleSignIn } = useGoogleSignIn();
   const { t } = useLanguage();
   const { toast } = useToast();
 
@@ -74,18 +76,8 @@ export default function RegisterPage() {
 
   const handleGoogleSignUp = async () => {
     setError(null);
-    setGoogleLoading(true);
-    const trimmedMobile = mobile.trim();
-    if (trimmedMobile && typeof window !== "undefined") {
-      saveMobile(trimmedMobile);
-      localStorage.setItem("saree_pending_mobile", trimmedMobile);
-      localStorage.setItem("saree_app_returning", "1");
-    }
-    const { error: err } = await signInWithGoogle();
-    if (err) {
-      setGoogleLoading(false);
-      setError(err.message || t("Google sign-in failed."));
-    }
+    const { error: err } = await startGoogleSignIn(mobile);
+    if (err) setError(err);
   };
 
   const handleOpenGmail = () => {
@@ -217,32 +209,18 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label htmlFor="mobile" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {t("Mobile Number")}
-                  </label>
-                  <input
-                    id="mobile"
-                    name="mobile"
-                    type="tel"
-                    list="mobile-suggestions"
-                    placeholder={t("Mobile number")}
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value)}
-                    inputMode="tel"
-                    autoComplete="tel"
-                    className="w-full rounded-bento border border-slate-300 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  />
-                  <datalist id="mobile-suggestions">
-                    {recentMobiles.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
-                </div>
+                <MobileNumberField
+                  id="mobile"
+                  value={mobile}
+                  onChange={setMobile}
+                  recentMobiles={recentMobiles}
+                  requiredForGoogle
+                  disabled={loading || googleAuthLoading}
+                />
 
                 <button
                   type="submit"
-                  disabled={loading || googleLoading}
+                  disabled={loading || googleAuthLoading}
                   className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
                 >
                   {loading ? t("Creating account…") : t("Register")}
@@ -259,7 +237,7 @@ export default function RegisterPage() {
                 <GoogleSignInButton
                   onClick={handleGoogleSignUp}
                   disabled={loading}
-                  loading={googleLoading}
+                  loading={googleAuthLoading}
                 />
               </form>
             )}
