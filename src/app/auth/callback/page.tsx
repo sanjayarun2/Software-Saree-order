@@ -2,16 +2,47 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/language-context";
 import { getOrCreateDeviceId } from "@/lib/device-id";
 import {
   resolveDeviceForSession,
   markSessionEndedForDeviceLimit,
-  AUTH_ERROR_DEVICE_LIMIT,
 } from "@/lib/user-devices-supabase";
 import { clearSession } from "@/lib/capacitor-storage";
 import { clearLastSyncTimestamp } from "@/lib/local-store";
+
+function readAuthError(): string | null {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const raw =
+    query.get("error_description") ||
+    query.get("error") ||
+    hash.get("error_description") ||
+    hash.get("error");
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, " "));
+  } catch {
+    return raw;
+  }
+}
+
+async function resolveOAuthSession(): Promise<{ session: Session | null; error: string | null }> {
+  const code = new URLSearchParams(window.location.search).get("code");
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) return { session: null, error: error.message };
+    return { session: data.session, error: null };
+  }
+
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) return { session: null, error: error.message };
+  if (session) return { session, error: null };
+
+  return { session: null, error: null };
+}
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -21,37 +52,11 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const finish = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const authError = params.get("error_description") || params.get("error");
-      if (authError) {
-        if (!cancelled) setError(authError);
-        return;
-      }
+    const fail = (message: string) => {
+      if (!cancelled) setError(message);
+    };
 
-      let { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        if (!cancelled) setError(sessionError.message);
-        return;
-      }
-
-      if (!session?.user && window.location.search.includes("code=")) {
-        const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-          window.location.href
-        );
-        if (exchangeError) {
-          if (!cancelled) setError(exchangeError.message || t("Google sign-in failed."));
-          return;
-        }
-        session = exchangeData.session;
-      }
-
-      const user = session?.user;
-      if (!user) {
-        if (!cancelled) setError(t("Google sign-in failed."));
-        return;
-      }
-
+    const finish = async (user: User) => {
       const deviceId = getOrCreateDeviceId();
       if (deviceId) {
         const r = await resolveDeviceForSession(user.id, deviceId);
@@ -68,7 +73,28 @@ export default function AuthCallbackPage() {
       if (!cancelled) router.replace("/dashboard/");
     };
 
-    void finish();
+    const run = async () => {
+      const authError = readAuthError();
+      if (authError) {
+        fail(authError);
+        return;
+      }
+
+      const { session, error: sessionError } = await resolveOAuthSession();
+      if (sessionError) {
+        fail(sessionError);
+        return;
+      }
+
+      if (session?.user) {
+        await finish(session.user);
+        return;
+      }
+
+      fail(t("Google sign-in failed. Please try again."));
+    };
+
+    void run();
 
     return () => {
       cancelled = true;
@@ -79,9 +105,7 @@ export default function AuthCallbackPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
         <p className="max-w-md rounded-bento bg-red-50 p-4 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-          {error === AUTH_ERROR_DEVICE_LIMIT
-            ? t("This account is already signed in on the maximum number of devices.")
-            : error}
+          {error}
         </p>
         <a href="/login/" className="mt-4 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400">
           {t("Back to Login")}

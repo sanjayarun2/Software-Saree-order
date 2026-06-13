@@ -14,11 +14,17 @@ function isCapacitorNative(): boolean {
 // Use Capacitor Preferences when in native app for persistent session
 const storage = isCapacitorNative() ? capacitorStorage : undefined;
 
+function shouldDetectSessionInUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  return !window.location.pathname.includes("/auth/callback");
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: shouldDetectSessionInUrl(),
+    flowType: "pkce",
   },
 });

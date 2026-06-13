@@ -209,6 +209,7 @@ const TA: Record<string, string> = {
   "Continue with Google": "Google மூலம் தொடரவும்",
   "Signing in with Google…": "Google மூலம் உள்நுழைகிறது…",
   "Google sign-in failed.": "Google உள்நுழைவு தோல்வியடைந்தது.",
+  "Google sign-in failed. Please try again.": "Google உள்நுழைவு தோல்வியடைந்தது. மீண்டும் முயற்சிக்கவும்.",
   "Completing sign-in…": "உள்நுழைவு முடிக்கப்படுகிறது…",
   "or": "அல்லது",
   "Don't have an account?": "கணக்கு இல்லையா?",
