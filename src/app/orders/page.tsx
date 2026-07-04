@@ -25,7 +25,6 @@ import {
   shouldShowPaymentBadge,
 } from "@/lib/order-payment-status";
 import {
-  describeDateFilters,
   isOrderFilterActive,
   orderFiltersFromTabParam,
   type OrderFilterState,
@@ -233,10 +232,6 @@ export default function OrdersPage() {
     [fetchOrders, router]
   );
 
-  const filterSummary = describeDateFilters(appliedFilters, {
-    allOrders: t("All Orders"),
-  });
-
   const filterActive = isOrderFilterActive(appliedFilters);
 
   useEffect(() => {
@@ -388,8 +383,7 @@ export default function OrdersPage() {
           {t("Orders")}
         </h1>
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 md:gap-3 md:px-4 md:py-3">
+        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 md:gap-3 md:px-4 md:py-3">
             <svg className="h-4 w-4 shrink-0 text-gray-400 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -419,17 +413,6 @@ export default function OrdersPage() {
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary-500 ring-2 ring-white dark:ring-slate-900" aria-hidden />
               ) : null}
             </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => setFilterOpen(true)}
-            className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <span className="truncate">{filterSummary}</span>
-            <span className="ml-2 shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400">
-              {t("Filter")}
-            </span>
-          </button>
         </div>
 
         <div className="flex gap-2">
