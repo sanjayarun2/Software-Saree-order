@@ -21,7 +21,8 @@ import {
 } from "@/lib/order-service";
 import type { Order, OrderStatus } from "@/lib/db-types";
 import {
-  isPaidOrderPayment,
+  isPaidWebsiteOrder,
+  isVisibleInOrdersList,
   shouldShowPaymentBadge,
 } from "@/lib/order-payment-status";
 import {
@@ -259,7 +260,7 @@ export default function OrdersPage() {
   }, [tabParam, user, fetchOrders]);
 
   const filteredOrders = React.useMemo(() => {
-    let list = orders.filter((o) => o.status === status);
+    let list = orders.filter((o) => o.status === status && isVisibleInOrdersList(o));
     const raw = query.trim();
     if (!raw) return list;
     const q = raw.toLowerCase();
@@ -471,12 +472,13 @@ export default function OrdersPage() {
             ) : (
               filteredOrders.map((order, i) => {
                 const isWebsiteOrder = order.order_source === "website";
+                const isPaidWeb = isPaidWebsiteOrder(order);
                 return (
                 <BentoCard
                   key={order.id}
                   className={`flex items-center justify-between gap-4 py-4 ${
-                    isWebsiteOrder
-                      ? "border-sky-300/80 bg-sky-50/70 dark:border-sky-700/60 dark:bg-sky-950/40"
+                    isPaidWeb
+                      ? "border-emerald-300/80 bg-emerald-50/80 dark:border-emerald-700/60 dark:bg-emerald-950/45"
                       : ""
                   }`}
                 >
@@ -541,19 +543,13 @@ export default function OrdersPage() {
                           <span>{t("Qty")}: {Number(order.quantity)}</span>
                         )}
                         {isWebsiteOrder && (
-                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
                             {t("Web")}
                           </span>
                         )}
                         {shouldShowPaymentBadge(order.order_source, order.payment_status) && (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                              isPaidOrderPayment(order.payment_status)
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                            }`}
-                          >
-                            {isPaidOrderPayment(order.payment_status) ? t("Paid") : t("Unpaid")}
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            {t("Paid")}
                           </span>
                         )}
                         {order.status === "DESPATCHED" && (
