@@ -24,6 +24,16 @@ import {
   isPaidOrderPayment,
   shouldShowPaymentBadge,
 } from "@/lib/order-payment-status";
+import {
+  describeOrderFilters,
+  isOrderFilterActive,
+  orderFiltersFromTabParam,
+  type OrderFilterState,
+} from "@/lib/order-filter-utils";
+import {
+  OrdersFilterModal,
+  ordersFilterModalLabels,
+} from "@/components/orders/OrdersFilterModal";
 
 function getAddressSummary(text: string, maxLen = 45): string {
   const first = (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "";
@@ -41,18 +51,17 @@ export default function OrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [status, setStatus] = useState<OrderStatus>(() =>
-    tabParam === "dispatched" ? "DESPATCHED" : "PENDING"
+  const [appliedFilters, setAppliedFilters] = useState<OrderFilterState>(() =>
+    orderFiltersFromTabParam(tabParam)
   );
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterGenerating, setFilterGenerating] = useState(false);
 
-  // Sync active tab from URL (e.g. when returning from edit-order or back button)
-  useEffect(() => {
-    if (tabParam === "dispatched") setStatus("DESPATCHED");
-    else if (tabParam === "pending") setStatus("PENDING");
-  }, [tabParam]);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [allOrders, setAllOrders] = useState(true);
+  const status = appliedFilters.status;
+
+  const appliedFiltersRef = useRef(appliedFilters);
+  appliedFiltersRef.current = appliedFilters;
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,30 +181,79 @@ export default function OrdersPage() {
     if (!authLoading && !user) router.replace("/login/");
   }, [user, authLoading, router]);
 
-  const fetchOrders = React.useCallback(async () => {
-    if (!user) return;
-    setError(null);
-    setLoading(true);
-    try {
-      const filters = { status, fromDate, toDate, allOrders };
-      const cached = await svcGetOrders(user.id, filters, (fresh) => {
-        setOrders(fresh);
-      });
-      setOrders(cached);
-    } catch (e) {
-      setError((e as Error).message || "Failed to load orders");
-    } finally {
-      setLoading(false);
-    }
-  }, [user, status, allOrders, fromDate, toDate]);
+  const fetchOrders = React.useCallback(
+    async (filters: OrderFilterState) => {
+      if (!user) return;
+      setError(null);
+      setLoading(true);
+      try {
+        const { status: st, fromDate, toDate, allOrders } = filters;
+        const cached = await svcGetOrders(
+          user.id,
+          { status: st, fromDate, toDate, allOrders },
+          (fresh) => {
+            setOrders(fresh);
+          }
+        );
+        setOrders(cached);
+      } catch (e) {
+        setError((e as Error).message || "Failed to load orders");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user]
+  );
+
+  const handleApplyFilters = React.useCallback(
+    async (filters: OrderFilterState) => {
+      setFilterGenerating(true);
+      try {
+        setAppliedFilters(filters);
+        await fetchOrders(filters);
+        setFilterOpen(false);
+        const tab = filters.status === "DESPATCHED" ? "dispatched" : "pending";
+        router.replace(`/orders/?tab=${tab}`, { scroll: false });
+      } finally {
+        setFilterGenerating(false);
+      }
+    },
+    [fetchOrders, router]
+  );
+
+  const filterSummary = describeOrderFilters(appliedFilters, {
+    pending: t("Pending"),
+    dispatched: t("Dispatched"),
+    allOrders: t("All Orders"),
+    from: t("From"),
+    to: t("To"),
+  });
+
+  const filterActive = isOrderFilterActive(appliedFilters);
 
   useEffect(() => {
     const onImported = () => {
-      void fetchOrders();
+      void fetchOrders(appliedFiltersRef.current);
     };
     window.addEventListener("velo-website-orders-imported", onImported);
     return () => window.removeEventListener("velo-website-orders-imported", onImported);
   }, [fetchOrders]);
+
+  useEffect(() => {
+    if (user) void fetchOrders(appliedFiltersRef.current);
+  }, [user, fetchOrders]);
+
+  // Sync status from URL when returning from edit-order or browser back; refetch list
+  useEffect(() => {
+    const urlStatus: OrderStatus = tabParam === "dispatched" ? "DESPATCHED" : "PENDING";
+    setAppliedFilters((prev) => {
+      if (prev.status === urlStatus) return prev;
+      const next = { ...prev, status: urlStatus };
+      appliedFiltersRef.current = next;
+      if (user) void fetchOrders(next);
+      return next;
+    });
+  }, [tabParam, user, fetchOrders]);
 
   const filteredOrders = React.useMemo(() => {
     let list = orders.filter((o) => o.status === status);
@@ -262,10 +320,6 @@ export default function OrdersPage() {
     }
   }, [status]);
 
-  useEffect(() => {
-    if (user) fetchOrders();
-  }, [user, fetchOrders]);
-
   const handleDelete = async (id: string) => {
     if (!user) return;
     if (!confirm("Delete this order?")) return;
@@ -326,84 +380,60 @@ export default function OrdersPage() {
           {t("Orders")}
         </h1>
 
-        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 md:gap-3 md:px-4 md:py-3">
-          <svg className="h-4 w-4 shrink-0 text-gray-400 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="search"
-            placeholder={t("Search by mobile, name or consignment...")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-h-[44px] flex-1 rounded-xl border-0 bg-transparent px-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder-slate-400 md:min-h-[48px] md:text-base"
-            aria-label={t("Search orders by mobile, name or consignment")}
-          />
-        </div>
-
-        <BentoCard>
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setStatus("PENDING")}
-                className={`min-h-touch flex-1 rounded-bento px-4 font-medium ${
-                  status === "PENDING" ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-                }`}
-              >
-                {t("Pending")}
-              </button>
-              <button
-                onClick={() => setStatus("DESPATCHED")}
-                className={`min-h-touch flex-1 rounded-bento px-4 font-medium ${
-                  status === "DESPATCHED" ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-                }`}
-              >
-                {t("Dispatched")}
-              </button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {status === "PENDING" ? t("Booking From date") : t("Dispatch From date")}
-                </label>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full rounded-bento border border-gray-300 px-4 py-2 text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {status === "PENDING" ? t("Booking To date") : t("Dispatch To date")}
-                </label>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="w-full rounded-bento border border-gray-300 px-4 py-2 text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </div>
-            </div>
-
-            <label className="flex min-h-touch items-center gap-2 text-gray-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={allOrders}
-                onChange={(e) => setAllOrders(e.target.checked)}
-                className="h-5 w-5 rounded"
-              />
-              <span>{t("All Orders")}</span>
-            </label>
-
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 md:gap-3 md:px-4 md:py-3">
+            <svg className="h-4 w-4 shrink-0 text-gray-400 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="search"
+              placeholder={t("Search by mobile, name or consignment...")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="min-h-[44px] flex-1 rounded-xl border-0 bg-transparent px-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder-slate-400 md:min-h-[48px] md:text-base"
+              aria-label={t("Search orders by mobile, name or consignment")}
+            />
             <button
-              onClick={fetchOrders}
-              className="w-full min-h-touch rounded-bento bg-primary-500 font-semibold text-white hover:bg-primary-600"
+              type="button"
+              onClick={() => setFilterOpen(true)}
+              className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
+                filterActive
+                  ? "border-primary-500 bg-primary-50 text-primary-600 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-300"
+                  : "border-gray-200 bg-gray-50 text-slate-600 hover:bg-gray-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+              aria-label={t("Filter orders")}
+              aria-expanded={filterOpen}
             >
-              {t("Generate")}
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+              </svg>
+              {filterActive ? (
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary-500 ring-2 ring-white dark:ring-slate-900" aria-hidden />
+              ) : null}
             </button>
           </div>
-        </BentoCard>
+          <button
+            type="button"
+            onClick={() => setFilterOpen(true)}
+            className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <span className="truncate">{filterSummary}</span>
+            <span className="ml-2 shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400">
+              {t("Filter")}
+            </span>
+          </button>
+        </div>
+
+        <OrdersFilterModal
+          open={filterOpen}
+          initialFilters={appliedFilters}
+          onClose={() => {
+            if (!filterGenerating) setFilterOpen(false);
+          }}
+          onApply={(filters) => void handleApplyFilters(filters)}
+          generating={filterGenerating || loading}
+          labels={ordersFilterModalLabels(t)}
+        />
 
         {error && (
           <p className="rounded-bento bg-red-50 p-3 text-red-700 dark:bg-red-900/30 dark:text-red-300">

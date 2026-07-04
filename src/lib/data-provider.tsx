@@ -3,6 +3,10 @@
 import React, { createContext, useContext, useEffect, useRef } from "react";
 import { useAuth } from "./auth-context";
 import { initOrderAlertService, teardownOrderAlertService } from "./order-alert-service";
+import {
+  initPushRegistration,
+  teardownPushRegistration,
+} from "./push-registration-service";
 import { initSyncManager, teardownSyncManager } from "./sync-manager";
 import { fullSync } from "./order-service";
 
@@ -32,6 +36,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       teardownSyncManager();
       void teardownOrderAlertService();
+      void teardownPushRegistration();
       syncedRef.current = null;
       setReady(false);
       return;
@@ -41,6 +46,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     syncedRef.current = user.id;
 
     initOrderAlertService();
+    void initPushRegistration(user.id);
     initSyncManager(user.id);
 
     fullSyncWithRetry(user.id).finally(() => setReady(true));

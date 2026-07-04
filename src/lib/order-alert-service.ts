@@ -6,7 +6,12 @@ export type ImportedWebsiteOrderSummary = {
   externalOrderId: string;
   customerName: string;
   quantity: number;
+  /** ISO timestamp from shop; used to skip stale alerts on sync. */
+  createdAt?: string;
 };
+
+/** Only alert on orders paid within this window during in-app poll sync. */
+const SYNC_ALERT_MAX_AGE_MS = 5 * 60 * 1000;
 
 const DEDUPE_KEY = "velo_order_alert_notified_v1";
 const DEDUPE_MAX = 400;
@@ -186,11 +191,27 @@ function formatBatchBody(orders: ImportedWebsiteOrderSummary[]): string {
   return `${first} +${orders.length - 1} more`;
 }
 
-export async function notifyNewWebsiteOrders(orders: ImportedWebsiteOrderSummary[]): Promise<void> {
+function isRecentEnoughForSyncAlert(order: ImportedWebsiteOrderSummary): boolean {
+  if (!order.createdAt) return false;
+  const ts = new Date(order.createdAt).getTime();
+  if (Number.isNaN(ts)) return false;
+  return Date.now() - ts <= SYNC_ALERT_MAX_AGE_MS;
+}
+
+export async function notifyNewWebsiteOrders(
+  orders: ImportedWebsiteOrderSummary[],
+  options?: { fromPush?: boolean }
+): Promise<void> {
   if (!readOrderAlertsEnabled()) return;
   if (!orders.length) return;
 
-  const fresh = orders.filter((o) => o.externalOrderId && !wasRecentlyNotified(o.externalOrderId));
+  const candidates = options?.fromPush
+    ? orders
+    : orders.filter(isRecentEnoughForSyncAlert);
+
+  const fresh = candidates.filter(
+    (o) => o.externalOrderId && !wasRecentlyNotified(o.externalOrderId)
+  );
   if (!fresh.length) return;
 
   fresh.forEach((o) => markNotified(o.externalOrderId));

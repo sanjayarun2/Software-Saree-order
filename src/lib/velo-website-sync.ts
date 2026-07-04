@@ -429,6 +429,12 @@ async function importOrdersForIntegration(
         externalOrderId: externalId,
         customerName: insert.booked_by?.trim() || "Customer",
         quantity: insert.quantity ?? 1,
+        createdAt:
+          raw.paidAt?.trim() ||
+          raw.createdAt?.trim() ||
+          raw.orderDate?.trim() ||
+          raw.bookedAt?.trim() ||
+          undefined,
       });
     } catch (e) {
       const msg = (e as Error).message ?? "";
