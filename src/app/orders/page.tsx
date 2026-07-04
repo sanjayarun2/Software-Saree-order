@@ -25,7 +25,7 @@ import {
   shouldShowPaymentBadge,
 } from "@/lib/order-payment-status";
 import {
-  describeOrderFilters,
+  describeDateFilters,
   isOrderFilterActive,
   orderFiltersFromTabParam,
   type OrderFilterState,
@@ -210,23 +210,31 @@ export default function OrdersPage() {
       setFilterGenerating(true);
       try {
         setAppliedFilters(filters);
+        appliedFiltersRef.current = filters;
         await fetchOrders(filters);
         setFilterOpen(false);
-        const tab = filters.status === "DESPATCHED" ? "dispatched" : "pending";
-        router.replace(`/orders/?tab=${tab}`, { scroll: false });
       } finally {
         setFilterGenerating(false);
       }
     },
+    [fetchOrders]
+  );
+
+  const handleStatusChange = React.useCallback(
+    (nextStatus: OrderStatus) => {
+      if (nextStatus === appliedFiltersRef.current.status) return;
+      const next: OrderFilterState = { ...appliedFiltersRef.current, status: nextStatus };
+      setAppliedFilters(next);
+      appliedFiltersRef.current = next;
+      void fetchOrders(next);
+      const tab = nextStatus === "DESPATCHED" ? "dispatched" : "pending";
+      router.replace(`/orders/?tab=${tab}`, { scroll: false });
+    },
     [fetchOrders, router]
   );
 
-  const filterSummary = describeOrderFilters(appliedFilters, {
-    pending: t("Pending"),
-    dispatched: t("Dispatched"),
+  const filterSummary = describeDateFilters(appliedFilters, {
     allOrders: t("All Orders"),
-    from: t("From"),
-    to: t("To"),
   });
 
   const filterActive = isOrderFilterActive(appliedFilters);
@@ -424,8 +432,34 @@ export default function OrdersPage() {
           </button>
         </div>
 
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleStatusChange("PENDING")}
+            className={`min-h-touch flex-1 rounded-bento px-4 font-medium transition ${
+              status === "PENDING"
+                ? "bg-primary-500 text-white"
+                : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+            }`}
+          >
+            {t("Pending")}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStatusChange("DESPATCHED")}
+            className={`min-h-touch flex-1 rounded-bento px-4 font-medium transition ${
+              status === "DESPATCHED"
+                ? "bg-primary-500 text-white"
+                : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+            }`}
+          >
+            {t("Dispatched")}
+          </button>
+        </div>
+
         <OrdersFilterModal
           open={filterOpen}
+          status={status}
           initialFilters={appliedFilters}
           onClose={() => {
             if (!filterGenerating) setFilterOpen(false);

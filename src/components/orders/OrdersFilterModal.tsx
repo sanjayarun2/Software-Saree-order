@@ -1,24 +1,27 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { OrderStatus } from "@/lib/db-types";
 import {
-  DEFAULT_ORDER_FILTERS,
   type OrderFilterState,
   validateOrderFilters,
 } from "@/lib/order-filter-utils";
 import { DdMmYyyyDateInput } from "./DdMmYyyyDateInput";
 
+export type OrderDateFilterDraft = Pick<
+  OrderFilterState,
+  "fromDate" | "toDate" | "allOrders"
+>;
+
 export type OrdersFilterModalProps = {
   open: boolean;
+  status: OrderStatus;
   initialFilters: OrderFilterState;
   onClose: () => void;
   onApply: (filters: OrderFilterState) => void;
   generating?: boolean;
   labels: {
     title: string;
-    pending: string;
-    dispatched: string;
     bookingFrom: string;
     bookingTo: string;
     dispatchFrom: string;
@@ -32,20 +35,29 @@ export type OrdersFilterModalProps = {
 
 export function OrdersFilterModal({
   open,
+  status,
   initialFilters,
   onClose,
   onApply,
   generating = false,
   labels,
 }: OrdersFilterModalProps) {
-  const [draft, setDraft] = useState<OrderFilterState>(initialFilters);
+  const [draft, setDraft] = useState<OrderDateFilterDraft>({
+    fromDate: initialFilters.fromDate,
+    toDate: initialFilters.toDate,
+    allOrders: initialFilters.allOrders,
+  });
   const [formError, setFormError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const generateRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (open) {
-      setDraft(initialFilters);
+      setDraft({
+        fromDate: initialFilters.fromDate,
+        toDate: initialFilters.toDate,
+        allOrders: initialFilters.allOrders,
+      });
       setFormError(null);
     }
   }, [open, initialFilters]);
@@ -70,38 +82,27 @@ export function OrdersFilterModal({
     };
   }, [open, generating, onClose]);
 
-  const setStatus = useCallback((status: OrderStatus) => {
-    setDraft((prev) => ({ ...prev, status }));
-    setFormError(null);
-  }, []);
-
   const handleGenerate = () => {
-    const err = validateOrderFilters(draft);
+    const merged: OrderFilterState = { status, ...draft };
+    const err = validateOrderFilters(merged);
     if (err) {
       setFormError(err);
       return;
     }
     setFormError(null);
-    onApply(draft);
+    onApply(merged);
   };
 
   const handleResetDates = () => {
-    setDraft((prev) => ({
-      ...prev,
-      fromDate: "",
-      toDate: "",
-      allOrders: true,
-    }));
+    setDraft({ fromDate: "", toDate: "", allOrders: true });
     setFormError(null);
   };
 
   if (!open) return null;
 
   const dateFieldsDisabled = draft.allOrders;
-  const fromLabel =
-    draft.status === "PENDING" ? labels.bookingFrom : labels.dispatchFrom;
-  const toLabel =
-    draft.status === "PENDING" ? labels.bookingTo : labels.dispatchTo;
+  const fromLabel = status === "PENDING" ? labels.bookingFrom : labels.dispatchFrom;
+  const toLabel = status === "PENDING" ? labels.bookingTo : labels.dispatchTo;
 
   return (
     <div
@@ -140,35 +141,6 @@ export function OrdersFilterModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="space-y-4">
-            <div className="flex gap-2" role="tablist" aria-label={labels.title}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={draft.status === "PENDING"}
-                onClick={() => setStatus("PENDING")}
-                className={`min-h-touch flex-1 rounded-bento px-4 font-medium transition ${
-                  draft.status === "PENDING"
-                    ? "bg-primary-500 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-                }`}
-              >
-                {labels.pending}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={draft.status === "DESPATCHED"}
-                onClick={() => setStatus("DESPATCHED")}
-                className={`min-h-touch flex-1 rounded-bento px-4 font-medium transition ${
-                  draft.status === "DESPATCHED"
-                    ? "bg-primary-500 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-                }`}
-              >
-                {labels.dispatched}
-              </button>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <DdMmYyyyDateInput
                 label={fromLabel}
@@ -253,8 +225,6 @@ export function OrdersFilterModal({
 export function ordersFilterModalLabels(t: (key: string) => string) {
   return {
     title: t("Filter orders"),
-    pending: t("Pending"),
-    dispatched: t("Dispatched"),
     bookingFrom: t("Booking From date"),
     bookingTo: t("Booking To date"),
     dispatchFrom: t("Dispatch From date"),
@@ -265,5 +235,3 @@ export function ordersFilterModalLabels(t: (key: string) => string) {
     clearDates: t("Clear dates"),
   };
 }
-
-export { DEFAULT_ORDER_FILTERS };

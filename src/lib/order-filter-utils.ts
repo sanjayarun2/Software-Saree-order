@@ -76,34 +76,23 @@ export function validateOrderFilters(filters: OrderFilterState): string | null {
 }
 
 export function isOrderFilterActive(filters: OrderFilterState): boolean {
-  if (filters.status !== DEFAULT_ORDER_FILTERS.status) return true;
-  if (!filters.allOrders && filters.fromDate && filters.toDate) return true;
-  return false;
+  return !filters.allOrders && Boolean(filters.fromDate && filters.toDate);
 }
 
-export function describeOrderFilters(
+export function describeDateFilters(
   filters: OrderFilterState,
-  labels: {
-    pending: string;
-    dispatched: string;
-    allOrders: string;
-    from: string;
-    to: string;
-  }
+  labels: { allOrders: string }
 ): string {
-  const statusLabel =
-    filters.status === "PENDING" ? labels.pending : labels.dispatched;
-
   if (filters.allOrders) {
-    return `${statusLabel} · ${labels.allOrders}`;
+    return labels.allOrders;
   }
 
   const from = formatIsoToDdMmYyyy(filters.fromDate);
   const to = formatIsoToDdMmYyyy(filters.toDate);
   if (from && to) {
-    return `${statusLabel} · ${from} – ${to}`;
+    return `${from} – ${to}`;
   }
-  return statusLabel;
+  return labels.allOrders;
 }
 
 export function orderFiltersEqual(a: OrderFilterState, b: OrderFilterState): boolean {
