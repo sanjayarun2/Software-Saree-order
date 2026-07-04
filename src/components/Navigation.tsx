@@ -93,6 +93,64 @@ export function RailNav({
 
   const showLabels = !isWeb || !webCollapsed;
 
+  const collapseToggleButton = isWeb && onWebToggle ? (
+    <button
+      type="button"
+      onClick={onWebToggle}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-800"
+      aria-label={webCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+    >
+      <svg
+        className={`h-4 w-4 transition-transform duration-200 ${webCollapsed ? "rotate-180" : ""}`}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+      </svg>
+    </button>
+  ) : null;
+
+  const sidebarUserHeader = (isMobile: boolean) => (
+    <div
+      className={`shrink-0 border-b border-gray-200 pb-3 dark:border-gray-600 ${
+        isMobile ? "mb-4" : "mb-0"
+      } ${!showLabels ? "flex flex-col items-center gap-2 pt-1" : ""}`}
+    >
+      <div
+        className={`flex items-center gap-2 ${
+          !showLabels ? "flex-col" : "min-w-0"
+        }`}
+      >
+        {userInitials && (
+          <div
+            className={`flex shrink-0 items-center justify-center rounded-full bg-primary-100 font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300 ${
+              showLabels
+                ? isMobile
+                  ? "h-14 w-14 text-xl"
+                  : "h-11 w-11 text-base"
+                : "h-10 w-10 text-base"
+            }`}
+          >
+            {userInitials}
+          </div>
+        )}
+        {showLabels ? (
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold leading-tight text-gray-900 dark:text-white">
+              {t("Hello,")}
+            </p>
+            <p className="truncate text-sm font-normal text-gray-600 dark:text-gray-400">
+              {userEmail || "User"}
+            </p>
+          </div>
+        ) : null}
+        {collapseToggleButton}
+      </div>
+    </div>
+  );
+
   const sidebarContent = (isMobile: boolean) => {
     const sectionSpacing = isMobile ? "mb-4 pb-3" : "mb-6 pb-4";
     const sectionTopMargin = isMobile ? "mt-3" : "mt-4";
@@ -130,25 +188,6 @@ export function RailNav({
 
     return (
       <>
-      {/* User greeting */}
-      <div className={`${sectionSpacing} border-b border-gray-200 dark:border-gray-600 ${!showLabels ? "flex justify-center" : ""}`}>
-        <div className={`flex items-center gap-3 ${!showLabels ? "justify-center" : ""}`}>
-          {userInitials && (
-            <div className={`flex shrink-0 items-center justify-center rounded-full bg-primary-100 text-xl font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300 ${showLabels ? "h-14 w-14" : "h-10 w-10 text-base"}`}>
-              {userInitials}
-            </div>
-          )}
-          {showLabels && (
-            <div className="min-w-0">
-              <p className="text-lg font-bold text-gray-900 dark:text-white">{t("Hello,")}</p>
-              <p className="truncate text-sm font-normal text-gray-600 dark:text-gray-400">
-                {userEmail || "User"}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Theme toggle */}
       {showLabels && (
       <div className={`${sectionSpacing} border-b border-gray-200 dark:border-gray-600`}>
@@ -320,44 +359,45 @@ export function RailNav({
       )}
       {/* Mobile sidebar: flush left, rounded right, wider, floating shadow */}
       <aside
-        className={`fixed left-0 top-0 z-[60] flex h-full w-[min(288px,85%)] flex-col overflow-y-auto rounded-r-3xl bg-white py-5 pl-4 pr-4 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:bg-slate-900 ${
+        className={`sidebar-scroll fixed left-0 top-0 z-[60] flex h-full w-[min(288px,85%)] flex-col overflow-y-auto overflow-x-hidden rounded-r-3xl bg-white py-5 pl-4 pr-3 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:bg-slate-900 ${
           mobileOpen ? "flex lg:hidden" : "hidden"
         }`}
         role="navigation"
         aria-label="Side navigation"
       >
+        {sidebarUserHeader(true)}
         {sidebarContent(true)}
       </aside>
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar (web: collapsible) */}
       {isWeb ? (
         <aside
-          className="fixed left-0 top-0 z-40 hidden h-full flex-col overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white py-6 shadow-none transition-[width,padding] duration-200 ease-in-out dark:border-slate-700 dark:bg-slate-900 lg:flex"
-          style={{ width: webCollapsed ? 72 : 280, paddingLeft: webCollapsed ? 10 : 18, paddingRight: webCollapsed ? 10 : 18 }}
+          className="fixed left-0 top-0 z-40 hidden h-full flex-col overflow-hidden border-r border-gray-200 bg-white shadow-none transition-[width,padding] duration-200 ease-in-out dark:border-slate-700 dark:bg-slate-900 lg:flex"
+          style={{
+            width: webCollapsed ? 72 : 280,
+            paddingLeft: webCollapsed ? 10 : 16,
+            paddingRight: webCollapsed ? 10 : 12,
+          }}
           role="navigation"
           aria-label="Side navigation"
           onMouseEnter={onWebMouseEnter}
           onMouseLeave={onWebMouseLeave}
         >
-          <button
-            type="button"
-            onClick={onWebToggle}
-            className="mb-4 flex h-9 w-9 shrink-0 items-center justify-center self-end rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-800"
-            aria-label={webCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <svg className={`h-5 w-5 transition-transform duration-200 ${webCollapsed ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
-          </button>
-          {sidebarContent(false)}
+          <div className="shrink-0 pt-4">{sidebarUserHeader(false)}</div>
+          <div className="sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden py-2 pr-0.5">
+            {sidebarContent(false)}
+          </div>
         </aside>
       ) : (
         <aside
-          className="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col overflow-y-auto rounded-none border-r border-gray-200 bg-white py-6 pl-4 pr-4 shadow-none dark:border-slate-700 dark:bg-slate-900 lg:flex"
+          className="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col overflow-hidden border-r border-gray-200 bg-white shadow-none dark:border-slate-700 dark:bg-slate-900 lg:flex"
           role="navigation"
           aria-label="Side navigation"
         >
-          {sidebarContent(false)}
+          <div className="shrink-0 px-4 pt-6">{sidebarUserHeader(false)}</div>
+          <div className="sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 py-2">
+            {sidebarContent(false)}
+          </div>
         </aside>
       )}
     </>
