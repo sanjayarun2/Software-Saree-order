@@ -93,15 +93,16 @@ export function RailNav({
 
   const showLabels = !isWeb || !webCollapsed;
 
-  const collapseToggleButton = isWeb && onWebToggle ? (
+  const collapseToggleButton =
+    isWeb && onWebToggle && !webCollapsed ? (
     <button
       type="button"
       onClick={onWebToggle}
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-800"
-      aria-label={webCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      aria-label="Collapse sidebar"
     >
       <svg
-        className={`h-4 w-4 transition-transform duration-200 ${webCollapsed ? "rotate-180" : ""}`}
+        className="h-4 w-4"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -112,18 +113,32 @@ export function RailNav({
     </button>
   ) : null;
 
-  const sidebarUserHeader = (isMobile: boolean) => (
+  const sidebarUserHeader = (isMobile: boolean) => {
+    const collapsedRail = isWeb && webCollapsed && !isMobile;
+
+    return (
     <div
-      className={`shrink-0 border-b border-gray-200 pb-3 dark:border-gray-600 ${
-        isMobile ? "mb-4" : "mb-0"
-      } ${!showLabels ? "flex flex-col items-center gap-2 pt-1" : ""}`}
+      className={`shrink-0 border-b border-gray-200 dark:border-gray-600 ${
+        collapsedRail ? "pb-2 pt-1" : isMobile ? "mb-4 pb-3" : "pb-3 pt-0"
+      }`}
     >
       <div
         className={`flex items-center gap-2 ${
-          !showLabels ? "flex-col" : "min-w-0"
+          collapsedRail ? "justify-center" : "min-w-0"
         }`}
       >
         {userInitials && (
+          collapsedRail ? (
+            <button
+              type="button"
+              onClick={onWebToggle}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 text-base font-bold text-primary-600 transition-opacity hover:opacity-90 dark:bg-primary-900 dark:text-primary-300"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+            >
+              {userInitials}
+            </button>
+          ) : (
           <div
             className={`flex shrink-0 items-center justify-center rounded-full bg-primary-100 font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-300 ${
               showLabels
@@ -135,6 +150,7 @@ export function RailNav({
           >
             {userInitials}
           </div>
+          )
         )}
         {showLabels ? (
           <div className="min-w-0 flex-1">
@@ -150,6 +166,7 @@ export function RailNav({
       </div>
     </div>
   );
+  };
 
   const sidebarContent = (isMobile: boolean) => {
     const sectionSpacing = isMobile ? "mb-4 pb-3" : "mb-6 pb-4";
