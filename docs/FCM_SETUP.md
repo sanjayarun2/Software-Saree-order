@@ -21,6 +21,8 @@ Industry-standard push notifications so the Velo app alerts you when a customer 
 
 Without this file, the Android build skips the Google Services plugin and push will not work (the app still runs; in-app polling alerts remain).
 
+Also keep **`NEXT_PUBLIC_ENABLE_FCM_PUSH` unset** (or not `true`) until `google-services.json` is in the APK. Otherwise older builds could call `PushNotifications.register()` and crash Android on login.
+
 ## 2. Firebase service account (server)
 
 1. Firebase Console → Project settings → **Service accounts**
@@ -56,6 +58,12 @@ Add environment variables on **sakthi-textiles-shop**:
 Redeploy the shop after adding these.
 
 ## 5. Build new APK
+
+After adding `google-services.json`, enable FCM in the web build (GitHub Actions → repository secret or workflow env):
+
+```
+NEXT_PUBLIC_ENABLE_FCM_PUSH=true
+```
 
 ```bash
 git pull

@@ -16,6 +16,8 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue>({ ready: false });
 
+const NATIVE_SERVICES_DEFER_MS = 2000;
+
 async function fullSyncWithRetry(uid: string): Promise<void> {
   try {
     await fullSync(uid);
@@ -30,10 +32,15 @@ async function fullSyncWithRetry(uid: string): Promise<void> {
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const syncedRef = useRef<string | null>(null);
+  const nativeServicesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ready, setReady] = React.useState(false);
 
   useEffect(() => {
     if (!user) {
+      if (nativeServicesTimerRef.current != null) {
+        clearTimeout(nativeServicesTimerRef.current);
+        nativeServicesTimerRef.current = null;
+      }
       teardownSyncManager();
       void teardownOrderAlertService();
       void teardownPushRegistration();
@@ -45,11 +52,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (syncedRef.current === user.id) return;
     syncedRef.current = user.id;
 
-    initOrderAlertService();
-    void initPushRegistration(user.id);
     initSyncManager(user.id);
-
     fullSyncWithRetry(user.id).finally(() => setReady(true));
+
+    // Defer native notification/FCM setup until after first screen paint + sync start.
+    nativeServicesTimerRef.current = setTimeout(() => {
+      nativeServicesTimerRef.current = null;
+      try {
+        initOrderAlertService();
+      } catch (e) {
+        console.warn("[DataProvider] order alerts init failed:", e);
+      }
+      void initPushRegistration(user.id).catch((e) => {
+        console.warn("[DataProvider] push init failed:", e);
+      });
+    }, NATIVE_SERVICES_DEFER_MS);
+
+    return () => {
+      if (nativeServicesTimerRef.current != null) {
+        clearTimeout(nativeServicesTimerRef.current);
+        nativeServicesTimerRef.current = null;
+      }
+    };
   }, [user]);
 
   return (

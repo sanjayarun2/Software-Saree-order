@@ -274,9 +274,7 @@ export function initOrderAlertService(): void {
 
   initPromise = (async () => {
     await ensureNativeChannel();
-    if (readOrderAlertsEnabled()) {
-      await requestOrderAlertPermission();
-    }
+    // Do not prompt for notification permission on login — request from Settings / test alert.
     if (!Capacitor.isNativePlatform()) return;
 
     try {

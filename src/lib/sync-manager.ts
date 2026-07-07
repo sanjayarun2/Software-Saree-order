@@ -5,6 +5,7 @@ import { evictStaleEntries } from "./local-store";
 import { supabase } from "./supabase";
 import type { Order } from "./db-types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { PluginListenerHandle } from "@capacitor/core";
 
 let initialized = false;
 let userId: string | null = null;
@@ -12,6 +13,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let websitePollTimer: ReturnType<typeof setInterval> | null = null;
 const WEBSITE_POLL_INTERVAL_MS = 15_000;
 let realtimeChannel: RealtimeChannel | null = null;
+let appStateListenerHandle: PluginListenerHandle | null = null;
 let syncInFlight = false;
 let appInForeground = true;
 
@@ -76,10 +78,10 @@ function handleVisibilityChange() {
 }
 
 async function handleAppStateChange() {
-  if (!userId) return;
+  if (!userId || appStateListenerHandle) return;
   try {
     const { App } = await import("@capacitor/app");
-    App.addListener("appStateChange", ({ isActive }) => {
+    appStateListenerHandle = await App.addListener("appStateChange", ({ isActive }) => {
       appInForeground = isActive;
       if (isActive && userId) {
         console.log("[SyncManager] Capacitor appStateChange – syncing");
@@ -182,6 +184,8 @@ export function teardownSyncManager(): void {
   if (typeof window === "undefined") return;
   window.removeEventListener("online", handleOnline);
   window.removeEventListener("visibilitychange", handleVisibilityChange);
+  void appStateListenerHandle?.remove().catch(() => {});
+  appStateListenerHandle = null;
   stopPolling();
   stopRealtime();
   initialized = false;

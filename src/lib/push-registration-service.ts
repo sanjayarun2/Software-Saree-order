@@ -11,6 +11,7 @@ import {
   type ImportedWebsiteOrderSummary,
 } from "./order-alert-service";
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
+import { shouldInitNativePush } from "./fcm-push-config";
 
 const ORDERS_PATH = "/orders/";
 let initialized = false;
@@ -48,13 +49,20 @@ async function persistToken(userId: string, token: string): Promise<void> {
 }
 
 export async function initPushRegistration(userId: string): Promise<void> {
-  if (!Capacitor.isNativePlatform() || initialized) {
-    currentUserId = userId;
+  currentUserId = userId;
+
+  if (!shouldInitNativePush()) {
+    if (Capacitor.isNativePlatform()) {
+      console.info(
+        "[Push] skipped on native — add google-services.json and set NEXT_PUBLIC_ENABLE_FCM_PUSH=true to enable FCM."
+      );
+    }
     return;
   }
 
+  if (initialized) return;
+
   initialized = true;
-  currentUserId = userId;
 
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
