@@ -8,6 +8,7 @@ import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
 import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
+import { isValidMobile, normalizeMobileInput } from "@/lib/google-auth-mobile";
 import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
 import { useToast } from "@/lib/toast-context";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
@@ -43,9 +44,13 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const trimmedMobile = normalizeMobileInput(mobile);
+    if (!isValidMobile(trimmedMobile)) {
+      setError(t("Enter a valid mobile number (at least 10 digits)."));
+      return;
+    }
     setLoading(true);
-    const trimmedMobile = mobile.trim();
-    const { error: err, user: newUser } = await signUp(email, password, trimmedMobile ? { mobile: trimmedMobile } : undefined);
+    const { error: err, user: newUser } = await signUp(email, password, { mobile: trimmedMobile });
     setLoading(false);
     if (err) {
       const msg = err.message || "";
@@ -76,7 +81,7 @@ export default function RegisterPage() {
 
   const handleGoogleSignUp = async () => {
     setError(null);
-    const { error: err } = await startGoogleSignIn(mobile);
+    const { error: err } = await startGoogleSignIn("signup");
     if (err) setError(err);
   };
 
@@ -142,7 +147,7 @@ export default function RegisterPage() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-4">
                 {error && (
                   <div className="rounded-bento bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
                     {error === "EMAIL_EXISTS" ? (
@@ -161,6 +166,21 @@ export default function RegisterPage() {
                   </div>
                 )}
 
+                <GoogleSignInButton
+                  onClick={handleGoogleSignUp}
+                  disabled={loading}
+                  loading={googleAuthLoading}
+                />
+
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t("or sign up with email")}
+                  </span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
                     {t("Email")}
@@ -214,32 +234,20 @@ export default function RegisterPage() {
                   value={mobile}
                   onChange={setMobile}
                   recentMobiles={recentMobiles}
-                  requiredForGoogle
+                  required
                   disabled={loading || googleAuthLoading}
+                  helperText={t("Required for email signup.")}
                 />
 
                 <button
                   type="submit"
                   disabled={loading || googleAuthLoading}
-                  className="w-full min-h-touch rounded-bento bg-primary-500 px-4 py-3 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
+                  className="w-full min-h-touch rounded-bento border border-primary-500 bg-white px-4 py-3 font-semibold text-primary-600 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
                 >
-                  {loading ? t("Creating account…") : t("Register")}
+                  {loading ? t("Creating account…") : t("Register with email")}
                 </button>
-
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {t("or")}
-                  </span>
-                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-                </div>
-
-                <GoogleSignInButton
-                  onClick={handleGoogleSignUp}
-                  disabled={loading}
-                  loading={googleAuthLoading}
-                />
-              </form>
+                </form>
+              </div>
             )}
           </BentoCard>
 

@@ -14,7 +14,7 @@ import {
   AUTH_ERROR_DEVICE_LIMIT,
   type ResolveDeviceResult,
 } from "./user-devices-supabase";
-import { getAuthCallbackUrl, getAuthSiteUrl } from "./auth-site-url";
+import { getAuthSiteUrl } from "./auth-site-url";
 import {
   clearPendingMobileForGoogleAuth,
   getPendingMobileForGoogleAuth,
@@ -31,7 +31,7 @@ type AuthContextType = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: (intent?: import("./google-auth-intent").GoogleAuthIntent) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, metadata?: { mobile?: string }) => Promise<{ error: Error | null; user?: User }>;
   signOut: () => Promise<void>;
 };
@@ -176,14 +176,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null };
   };
 
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: getAuthCallbackUrl(),
-      },
-    });
-    return { error: error ? new Error(error.message) : null };
+  const signInWithGoogle = async (intent: import("./google-auth-intent").GoogleAuthIntent = "login") => {
+    const { stageGoogleAuthIntent } = await import("./google-auth-intent");
+    const { getGoogleOAuthRedirectUrl, startGoogleOAuth } = await import("./google-oauth-flow");
+    stageGoogleAuthIntent(intent);
+    const redirectTo = getGoogleOAuthRedirectUrl();
+    const { error } = await startGoogleOAuth(redirectTo);
+    return { error: error ?? null };
   };
 
   const signUp = async (email: string, password: string, metadata?: { mobile?: string }) => {

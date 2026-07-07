@@ -1,15 +1,25 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { useIsWeb } from "@/lib/useIsWeb";
+import { hasPendingMobileCompletion } from "@/lib/mobile-completion-gate";
 import { BottomNav, RailNav } from "./Navigation";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { DeviceSlotEvictionModal } from "./DeviceSlotEvictionModal";
 
-const NO_NAV_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/update-password", "/verify-success"];
+const NO_NAV_ROUTES = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/update-password",
+  "/verify-success",
+  "/complete-mobile",
+  "/auth/callback",
+];
 
 const AUTO_COLLAPSE_MS = 5000;
 
@@ -36,6 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { t } = useLanguage();
   const pathname = usePathname();
+  const router = useRouter();
   const isWeb = useIsWeb();
   const hideNav = NO_NAV_ROUTES.some((r) => pathname?.startsWith(r));
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? "U";
@@ -78,6 +89,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [startCollapseTimer]);
 
   useEffect(() => clearCollapseTimer, [clearCollapseTimer]);
+
+  useEffect(() => {
+    if (!user || !hasPendingMobileCompletion()) return;
+    if (pathname?.startsWith("/complete-mobile")) return;
+    router.replace("/complete-mobile/");
+  }, [user, pathname, router]);
 
   // --- Web body class + sidebar width CSS variable ---
   useEffect(() => {

@@ -1,0 +1,25 @@
+# Google Sign-In (mobile APK)
+
+## Supabase redirect URLs
+
+In **Supabase Dashboard → Authentication → URL configuration → Redirect URLs**, add:
+
+```
+https://software-saree-order.vercel.app/auth/callback/
+sareeorder://auth/callback
+```
+
+The custom scheme `sareeorder://` is registered in `AndroidManifest.xml` so Google OAuth returns to the app after in-app browser sign-in.
+
+## Flow
+
+| Screen | Google | Mobile |
+|--------|--------|--------|
+| **Login** | Primary; no mobile asked | — |
+| **Register (email)** | Primary for Google signup | Required on email form only |
+| **Register (Google)** | After OAuth → `/complete-mobile/` if new user | Mandatory gate; back blocked |
+| **Login (Google)** | Existing users → dashboard | Never asked |
+
+## Native OAuth
+
+On Capacitor Android/iOS the app uses `@capacitor/browser` + `appUrlOpen` deep link (industry standard for Supabase PKCE in hybrid apps).

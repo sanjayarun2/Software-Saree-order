@@ -1,41 +1,61 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
+import type { GoogleAuthIntent } from "@/lib/google-auth-intent";
+import { stageGoogleAuthIntent } from "@/lib/google-auth-intent";
+import { getGoogleOAuthRedirectUrl, startGoogleOAuth } from "@/lib/google-oauth-flow";
+import { finishGoogleAuthSession } from "@/lib/google-auth-finish";
+import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/language-context";
-import { stageMobileForGoogleAuth } from "@/lib/google-auth-mobile";
 
 export function useGoogleSignIn() {
-  const { signInWithGoogle } = useAuth();
   const { t } = useLanguage();
+  const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const resolveStageError = useCallback(
-    (code: string): string => {
-      if (code === "MOBILE_INVALID") {
-        return t("Enter a valid mobile number (at least 10 digits).");
-      }
-      return t("Please add your mobile number before continuing with Google.");
-    },
-    [t]
-  );
-
   const startGoogleSignIn = useCallback(
-    async (mobile: string): Promise<{ error: string | null }> => {
-      const staged = stageMobileForGoogleAuth(mobile);
-      if (!staged.ok) {
-        return { error: resolveStageError(staged.message) };
+    async (intent: GoogleAuthIntent): Promise<{ error: string | null }> => {
+      stageGoogleAuthIntent(intent);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("saree_app_returning", "1");
       }
 
       setGoogleLoading(true);
-      const { error } = await signInWithGoogle();
-      if (error) {
+      try {
+        const redirectTo = getGoogleOAuthRedirectUrl();
+        const { error: oauthError } = await startGoogleOAuth(redirectTo);
+        if (oauthError) {
+          return { error: oauthError.message || t("Google sign-in failed.") };
+        }
+
+        if (!Capacitor.isNativePlatform()) {
+          return { error: null };
+        }
+
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          return { error: sessionError.message };
+        }
+
+        if (session?.user) {
+          const route = await finishGoogleAuthSession(session.user);
+          if (!route.ok) {
+            const q = route.query ? `?${route.query}` : "";
+            router.replace(`${route.path}${q}`);
+            return { error: null };
+          }
+          router.replace(route.path);
+          return { error: null };
+        }
+
+        return { error: null };
+      } finally {
         setGoogleLoading(false);
-        return { error: error.message || t("Google sign-in failed.") };
       }
-      return { error: null };
     },
-    [resolveStageError, signInWithGoogle, t]
+    [router, t]
   );
 
   return { googleLoading, startGoogleSignIn };

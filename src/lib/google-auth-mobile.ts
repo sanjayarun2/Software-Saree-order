@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { saveMobile } from "./mobile-storage";
 
 export const PENDING_MOBILE_STORAGE_KEY = "saree_pending_mobile";
+/** @deprecated Login no longer requires pre-staged mobile for Google. */
 export const MOBILE_REQUIRED_SESSION_KEY = "saree_google_mobile_required";
 
 const MIN_MOBILE_DIGITS = 10;
@@ -15,32 +16,58 @@ export function isValidMobile(mobile: string): boolean {
   return digits.length >= MIN_MOBILE_DIGITS;
 }
 
-export type StageMobileResult =
-  | { ok: true; mobile: string }
-  | { ok: false; message: string };
+export async function userProfileHasMobile(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("mobile")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-/** Persist mobile for the upcoming Google OAuth round-trip (web + Capacitor). */
-export function stageMobileForGoogleAuth(mobile: string): StageMobileResult {
-  if (typeof window === "undefined") {
-    return { ok: false, message: "MOBILE_REQUIRED" };
-  }
+  if (error) return false;
+  return Boolean(data?.mobile?.trim());
+}
 
+export async function saveMobileToUserProfile(
+  userId: string,
+  mobile: string,
+  email?: string | null
+): Promise<{ ok: true } | { ok: false; message: string }> {
   const normalized = normalizeMobileInput(mobile);
-  if (!normalized) {
-    return { ok: false, message: "MOBILE_REQUIRED" };
-  }
   if (!isValidMobile(normalized)) {
     return { ok: false, message: "MOBILE_INVALID" };
   }
 
-  saveMobile(normalized);
-  try {
-    localStorage.setItem(PENDING_MOBILE_STORAGE_KEY, normalized);
-    localStorage.setItem("saree_app_returning", "1");
-  } catch {
-    return { ok: false, message: "MOBILE_REQUIRED" };
+  const payload: { user_id: string; mobile: string; email?: string; updated_at: string } = {
+    user_id: userId,
+    mobile: normalized,
+    updated_at: new Date().toISOString(),
+  };
+  if (email?.trim()) payload.email = email.trim();
+
+  const { error } = await supabase.from("user_profiles").upsert(payload, { onConflict: "user_id" });
+  if (error) {
+    return { ok: false, message: error.message };
   }
 
+  saveMobile(normalized);
+  return { ok: true };
+}
+
+/** @deprecated Use saveMobileToUserProfile after signup. */
+export function stageMobileForGoogleAuth(mobile: string): { ok: true; mobile: string } | { ok: false; message: string } {
+  const normalized = normalizeMobileInput(mobile);
+  if (!normalized || !isValidMobile(normalized)) {
+    return { ok: false, message: "MOBILE_INVALID" };
+  }
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(PENDING_MOBILE_STORAGE_KEY, normalized);
+      localStorage.setItem("saree_app_returning", "1");
+    } catch {
+      return { ok: false, message: "MOBILE_REQUIRED" };
+    }
+  }
+  saveMobile(normalized);
   return { ok: true, mobile: normalized };
 }
 
@@ -62,6 +89,7 @@ export function clearPendingMobileForGoogleAuth(): void {
   }
 }
 
+/** @deprecated Login flow no longer redirects for missing mobile. */
 export function markMobileRequiredRedirect(): void {
   if (typeof window === "undefined") return;
   try {
@@ -71,6 +99,7 @@ export function markMobileRequiredRedirect(): void {
   }
 }
 
+/** @deprecated */
 export function consumeMobileRequiredRedirectFlag(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -80,44 +109,4 @@ export function consumeMobileRequiredRedirectFlag(): boolean {
   } catch {
     return false;
   }
-}
-
-/** After Google OAuth, ensure user_profiles has a mobile (existing or newly staged). */
-export async function ensureGoogleUserHasMobile(
-  userId: string,
-  email?: string | null
-): Promise<{ ok: true } | { ok: false }> {
-  const pending = getPendingMobileForGoogleAuth();
-
-  const { data: prof, error: readErr } = await supabase
-    .from("user_profiles")
-    .select("mobile")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (readErr) return { ok: false };
-
-  const existingMobile = prof?.mobile?.trim() ?? "";
-  if (existingMobile) {
-    clearPendingMobileForGoogleAuth();
-    return { ok: true };
-  }
-
-  if (!pending) return { ok: false };
-
-  const payload: { user_id: string; mobile: string; email?: string; updated_at: string } = {
-    user_id: userId,
-    mobile: pending,
-    updated_at: new Date().toISOString(),
-  };
-  if (email?.trim()) payload.email = email.trim();
-
-  const { error: upsertErr } = await supabase
-    .from("user_profiles")
-    .upsert(payload, { onConflict: "user_id" });
-
-  if (upsertErr) return { ok: false };
-
-  clearPendingMobileForGoogleAuth();
-  return { ok: true };
 }
