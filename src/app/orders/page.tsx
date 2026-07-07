@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconEdit, IconDispatch, IconUndo, IconPdf, IconPrint, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
 import FormatSelectionModal from "@/components/ui/FormatSelectionModal";
+import { deferModalOpen } from "@/lib/use-backdrop-dismiss-guard";
 import { downloadOrdersPdf, PdfAddressTooLongError } from "@/lib/pdf-utils";
 import { downloadOrdersPosPdf, printOrdersPosPdf } from "@/lib/pos-pdf-utils";
 import { useSearch } from "@/lib/search-context";
@@ -88,7 +89,17 @@ export default function OrdersPage() {
   /** True while a `history.pushState` dummy entry exists for pending multi-select (so Back exits selection, not the app). */
   const pendingSelectionHistoryPushedRef = useRef(false);
   const pendingSelectionActiveRef = useRef(false);
+  const detailOrderOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   pendingSelectionActiveRef.current = pendingSelectionActive;
+
+  const clearDetailOrderOpenTimer = () => {
+    if (detailOrderOpenTimerRef.current != null) {
+      clearTimeout(detailOrderOpenTimerRef.current);
+      detailOrderOpenTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => () => clearDetailOrderOpenTimer(), []);
 
   const clearPendingLongPressTimer = () => {
     if (pendingLongPressTimerRef.current != null) {
@@ -130,8 +141,11 @@ export default function OrdersPage() {
       pendingIgnoreNextRowClickRef.current = false;
       return;
     }
-    // Defer open so mobile ghost-click does not hit the new backdrop overlay.
-    window.setTimeout(() => setDetailOrder(order), 50);
+    clearDetailOrderOpenTimer();
+    detailOrderOpenTimerRef.current = setTimeout(() => {
+      detailOrderOpenTimerRef.current = null;
+      setDetailOrder(order);
+    }, 50);
   };
 
   const handleDetailOrderUpdated = React.useCallback((updated: Order) => {
@@ -421,7 +435,7 @@ export default function OrdersPage() {
             />
             <button
               type="button"
-              onClick={() => setFilterOpen(true)}
+              onClick={() => deferModalOpen(() => setFilterOpen(true))}
               className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
                 filterActive
                   ? "border-primary-500 bg-primary-50 text-primary-600 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-300"
@@ -656,7 +670,7 @@ export default function OrdersPage() {
               type="button"
               onClick={() => {
                 if (filteredOrders.length === 0) return;
-                setShowFormatModal("print");
+                deferModalOpen(() => setShowFormatModal("print"));
               }}
               disabled={filteredOrders.length === 0 || printing}
               className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl border border-primary-500 bg-white px-4 py-3 text-primary-600 shadow-lg transition active:bg-primary-50 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
@@ -672,7 +686,7 @@ export default function OrdersPage() {
               onClick={() => {
                 if (filteredOrders.length === 0 || downloadingPdf) return;
                 if (pendingSelectionActive && ordersForPdfAndPrint.length === 0) return;
-                setShowFormatModal("pdf");
+                deferModalOpen(() => setShowFormatModal("pdf"));
               }}
               disabled={
                 filteredOrders.length === 0 ||

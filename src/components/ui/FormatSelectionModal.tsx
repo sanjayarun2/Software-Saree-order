@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useBackdropDismissGuard } from "@/lib/use-backdrop-dismiss-guard";
 
 interface FormatSelectionModalProps {
   title: string;
@@ -15,14 +16,23 @@ export default function FormatSelectionModal({
   onSelectPOS,
   onClose,
 }: FormatSelectionModalProps) {
+  const shouldDismissBackdrop = useBackdropDismissGuard(true);
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4"
+      role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (shouldDismissBackdrop(e.target, e.currentTarget)) onClose();
       }}
     >
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-800">
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-800"
+      >
         <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
           {title}
         </h2>
