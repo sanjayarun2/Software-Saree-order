@@ -171,3 +171,19 @@ export async function removeUserDevice(deviceRowId: string): Promise<{ error: Er
   const { error } = await supabase.from("user_devices").delete().eq("id", deviceRowId);
   return { error: error ? new Error(error.message) : null };
 }
+
+/** Free this install's device slot on logout so another device can sign in. */
+export async function unregisterDeviceForSession(
+  userId: string,
+  deviceId: string
+): Promise<void> {
+  if (!userId || !deviceId) return;
+  const { error } = await supabase
+    .from("user_devices")
+    .delete()
+    .eq("user_id", userId)
+    .eq("device_id", deviceId);
+  if (error) {
+    console.warn("[Devices] unregister on logout failed:", error.message);
+  }
+}

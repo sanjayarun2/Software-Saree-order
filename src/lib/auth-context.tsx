@@ -8,6 +8,7 @@ import { clearLastSyncTimestamp } from "./local-store";
 import { getOrCreateDeviceId } from "./device-id";
 import {
   resolveDeviceForSession,
+  unregisterDeviceForSession,
   markSessionEndedForDeviceLimit,
   markDeviceSlotEvicted,
   AUTH_ERROR_DEVICE_LIMIT,
@@ -205,8 +206,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    const uid =
+      user?.id ??
+      (await supabase.auth.getSession()).data.session?.user?.id ??
+      null;
+    const deviceId = getOrCreateDeviceId();
+    if (uid && deviceId) {
+      await unregisterDeviceForSession(uid, deviceId);
+    }
     await supabase.auth.signOut();
     await clearSession();
+    setSession(null);
+    setUser(null);
   };
 
   return (
