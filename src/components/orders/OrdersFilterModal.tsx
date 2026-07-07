@@ -7,6 +7,7 @@ import {
   validateOrderFilters,
 } from "@/lib/order-filter-utils";
 import { DdMmYyyyDateInput } from "./DdMmYyyyDateInput";
+import { useBackdropDismissGuard } from "@/lib/use-backdrop-dismiss-guard";
 
 export type OrderDateFilterDraft = Pick<
   OrderFilterState,
@@ -50,6 +51,7 @@ export function OrdersFilterModal({
   const [formError, setFormError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const generateRef = useRef<HTMLButtonElement>(null);
+  const shouldDismissBackdrop = useBackdropDismissGuard(open);
 
   useEffect(() => {
     if (open) {
@@ -109,7 +111,7 @@ export function OrdersFilterModal({
       className="fixed inset-0 z-[100] flex items-end justify-center bg-black/45 p-0 md:items-center md:px-4"
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !generating) onClose();
+        if (shouldDismissBackdrop(e.target, e.currentTarget) && !generating) onClose();
       }}
     >
       <div
@@ -117,6 +119,8 @@ export function OrdersFilterModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="orders-filter-title"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         className="flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl dark:border-slate-600 dark:bg-slate-800 md:max-w-md md:rounded-2xl"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-slate-700">

@@ -15,6 +15,7 @@ import {
   fetchWebsiteOrderDetailSnapshot,
 } from "@/lib/website-order-detail-fetch";
 import { updateOrder } from "@/lib/order-service";
+import { useBackdropDismissGuard } from "@/lib/use-backdrop-dismiss-guard";
 
 export type OrderDetailSheetProps = {
   open: boolean;
@@ -109,6 +110,9 @@ export function OrderDetailSheet({
   labels,
 }: OrderDetailSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onOrderUpdatedRef = useRef(onOrderUpdated);
+  onOrderUpdatedRef.current = onOrderUpdated;
+  const shouldDismissBackdrop = useBackdropDismissGuard(open);
   const [loadingItems, setLoadingItems] = useState(false);
   const [lineItems, setLineItems] = useState<WebsiteOrderLineItem[]>([]);
   const [extraAddressLines, setExtraAddressLines] = useState<string[]>([]);
@@ -181,7 +185,7 @@ export function OrderDetailSheet({
           await updateOrder(userId, order.id, {
             website_line_items: snapshot.lineItems,
           });
-          onOrderUpdated?.({
+          onOrderUpdatedRef.current?.({
             ...order,
             website_line_items: snapshot.lineItems,
           });
@@ -194,7 +198,7 @@ export function OrderDetailSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, order, userId, parsed.itemLines, onOrderUpdated]);
+  }, [open, order, userId, parsed.itemLines]);
 
   if (!open || !order) return null;
 
@@ -220,7 +224,7 @@ export function OrderDetailSheet({
       className="fixed inset-0 z-[110] flex items-end justify-center bg-black/45 md:items-center md:px-4"
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (shouldDismissBackdrop(e.target, e.currentTarget)) onClose();
       }}
     >
       <div
@@ -228,6 +232,8 @@ export function OrderDetailSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-detail-title"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         className="flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-2xl border border-gray-200 bg-gray-50 shadow-xl dark:border-slate-600 dark:bg-slate-900 md:rounded-2xl"
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-800">

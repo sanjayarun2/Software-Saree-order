@@ -130,8 +130,14 @@ export default function OrdersPage() {
       pendingIgnoreNextRowClickRef.current = false;
       return;
     }
-    setDetailOrder(order);
+    // Defer open so mobile ghost-click does not hit the new backdrop overlay.
+    window.setTimeout(() => setDetailOrder(order), 50);
   };
+
+  const handleDetailOrderUpdated = React.useCallback((updated: Order) => {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
+    setDetailOrder(updated);
+  }, []);
 
   const openWhatsAppForOrder = (order: Order) => {
     if (typeof window === "undefined") return;
@@ -475,12 +481,7 @@ export default function OrdersPage() {
           order={detailOrder}
           userId={user?.id ?? null}
           onClose={() => setDetailOrder(null)}
-          onOrderUpdated={(updated) => {
-            setOrders((prev) =>
-              prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
-            );
-            setDetailOrder(updated);
-          }}
+          onOrderUpdated={handleDetailOrderUpdated}
           labels={orderDetailSheetLabels(t)}
         />
 
