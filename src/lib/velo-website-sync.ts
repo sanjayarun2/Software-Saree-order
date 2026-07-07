@@ -15,6 +15,12 @@ import {
   notifyNewWebsiteOrders,
   type ImportedWebsiteOrderSummary,
 } from "./order-alert-service";
+import type { WebsiteOrderLineItem } from "./db-types";
+import {
+  hasWebsiteLineItems,
+  lineItemsFromVeloApiItems,
+  totalQuantityFromLineItems,
+} from "./website-order-line-items";
 
 const EPOCH_SINCE = new Date(0).toISOString();
 const MAX_RECIPIENT_LEN = 600;
@@ -31,6 +37,10 @@ export type VeloWebsitePollResult = {
 };
 
 type VeloLineItem = {
+  productId?: string;
+  productCode?: string | null;
+  imageUrl?: string | null;
+  unitPrice?: number;
   name?: string;
   title?: string;
   productName?: string | null;
@@ -226,12 +236,26 @@ async function findImportedWebsiteOrder(
   return (data as Order) ?? null;
 }
 
+function mapWebsiteLineItems(order: VeloWebsiteOrderPayload): WebsiteOrderLineItem[] {
+  const fromApi = lineItemsFromVeloApiItems(extractLineItems(order));
+  if (fromApi.length > 0) return fromApi;
+
+  const { productLines } = parseProducts(order);
+  return productLines.map((line) => {
+    const match = line.match(/^(.+?)\s+x(\d+)$/i);
+    const name = match ? match[1].trim() : line;
+    const quantity = match ? Math.max(1, Number(match[2]) || 1) : 1;
+    return { name, quantity };
+  });
+}
+
 function mapWebsiteOrderToInsert(
   order: VeloWebsiteOrderPayload,
   userId: string,
   senderDetails: string,
   externalOrderId: string
 ): OrderInsert {
+  const lineItems = mapWebsiteLineItems(order);
   const { totalQty } = parseProducts(order);
   const mobile =
     order.customer?.mobile?.trim() ||
@@ -247,9 +271,10 @@ function mapWebsiteOrderToInsert(
     booking_date: resolveBookingDate(order),
     status: "PENDING",
     user_id: userId,
-    quantity: totalQty,
+    quantity: lineItems.length ? totalQuantityFromLineItems(lineItems) : totalQty,
     order_source: "website",
     external_order_id: externalOrderId,
+    website_line_items: lineItems.length ? lineItems : null,
     payment_status: normalizeWebsitePaymentStatus(
       order.paymentStatus ?? order.payment_status
     ),
@@ -411,9 +436,17 @@ async function importOrdersForIntegration(
       raw.paymentStatus ?? raw.payment_status
     );
     const existing = await findImportedWebsiteOrder(userId, externalId);
+    const lineItems = mapWebsiteLineItems(raw);
     if (existing) {
+      const patches: Record<string, unknown> = {};
       if (existing.payment_status !== paymentStatus) {
-        await updateOrder(userId, existing.id, { payment_status: paymentStatus });
+        patches.payment_status = paymentStatus;
+      }
+      if (lineItems.length > 0 && !hasWebsiteLineItems(existing.website_line_items)) {
+        patches.website_line_items = lineItems;
+      }
+      if (Object.keys(patches).length > 0) {
+        await updateOrder(userId, existing.id, patches);
         updated++;
       } else {
         skipped++;

@@ -3,6 +3,15 @@ export type OrderSource = "manual" | "website";
 /** Website orders only: paid checkout vs unpaid / failed / pending attempt. */
 export type OrderPaymentStatus = "paid" | "unpaid";
 
+export type WebsiteOrderLineItem = {
+  productId?: string | null;
+  name: string;
+  productCode?: string | null;
+  quantity: number;
+  imageUrl?: string | null;
+  unitPrice?: number | null;
+};
+
 export interface Order {
   id: string;
   recipient_details: string;
@@ -18,6 +27,7 @@ export interface Order {
   order_source?: OrderSource | null;
   external_order_id?: string | null;
   payment_status?: OrderPaymentStatus | null;
+  website_line_items?: WebsiteOrderLineItem[] | null;
   created_at: string;
   updated_at: string;
   user_id: string;
@@ -36,4 +46,5 @@ export interface OrderInsert {
   order_source?: OrderSource;
   external_order_id?: string | null;
   payment_status?: OrderPaymentStatus | null;
+  website_line_items?: WebsiteOrderLineItem[] | null;
 }

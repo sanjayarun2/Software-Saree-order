@@ -34,6 +34,10 @@ import {
   OrdersFilterModal,
   ordersFilterModalLabels,
 } from "@/components/orders/OrdersFilterModal";
+import {
+  OrderDetailSheet,
+  orderDetailSheetLabels,
+} from "@/components/orders/OrderDetailSheet";
 
 function getAddressSummary(text: string, maxLen = 45): string {
   const first = (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "";
@@ -56,6 +60,7 @@ export default function OrdersPage() {
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterGenerating, setFilterGenerating] = useState(false);
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
 
   const status = appliedFilters.status;
 
@@ -114,6 +119,18 @@ export default function OrdersPage() {
       else next.add(orderId);
       return next;
     });
+  };
+
+  const handleOrderCardClick = (order: Order) => {
+    if (status === "PENDING" && pendingSelectionActive) {
+      handlePendingOrderRowClick(order.id);
+      return;
+    }
+    if (pendingIgnoreNextRowClickRef.current) {
+      pendingIgnoreNextRowClickRef.current = false;
+      return;
+    }
+    setDetailOrder(order);
   };
 
   const openWhatsAppForOrder = (order: Order) => {
@@ -453,6 +470,20 @@ export default function OrdersPage() {
           labels={ordersFilterModalLabels(t)}
         />
 
+        <OrderDetailSheet
+          open={detailOrder != null}
+          order={detailOrder}
+          userId={user?.id ?? null}
+          onClose={() => setDetailOrder(null)}
+          onOrderUpdated={(updated) => {
+            setOrders((prev) =>
+              prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+            );
+            setDetailOrder(updated);
+          }}
+          labels={orderDetailSheetLabels(t)}
+        />
+
         {error && (
           <p className="rounded-bento bg-red-50 p-3 text-red-700 dark:bg-red-900/30 dark:text-red-300">
             {error}
@@ -483,17 +514,15 @@ export default function OrdersPage() {
                   }`}
                 >
                   <div
-                    className={`flex min-w-0 flex-1 items-center gap-4 ${status === "PENDING" ? "touch-manipulation select-none" : ""}`}
+                    className={`flex min-w-0 flex-1 cursor-pointer items-center gap-4 ${
+                      status === "PENDING" ? "touch-manipulation select-none" : ""
+                    }`}
                     style={
                       status === "PENDING"
                         ? ({ WebkitTouchCallout: "none" } as React.CSSProperties)
                         : undefined
                     }
-                    onClick={
-                      status === "PENDING"
-                        ? () => handlePendingOrderRowClick(order.id)
-                        : undefined
-                    }
+                    onClick={() => handleOrderCardClick(order)}
                     onPointerDown={
                       status === "PENDING"
                         ? (e) => {
