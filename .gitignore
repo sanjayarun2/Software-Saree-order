@@ -36,3 +36,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+firebase-debug.log
+
+# Firebase / Google (CI writes from GOOGLE_SERVICES_JSON_B64 secret)
+android/app/google-services.json
