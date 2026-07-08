@@ -31,6 +31,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/product-codes": "Product Codes",
   "/products": "Products",
   "/settings": "Settings",
+  "/settings/test-sound": "Order alert sound",
   "/reports": "Reports",
 };
 

@@ -252,8 +252,8 @@ export async function notifyNewWebsiteOrders(
   );
 }
 
-export async function testOrderAlert(): Promise<void> {
-  if (!readOrderAlertsEnabled()) return;
+export async function testOrderAlert(options?: { ignoreEnabled?: boolean }): Promise<void> {
+  if (!options?.ignoreEnabled && !readOrderAlertsEnabled()) return;
   await playOrderClingSound();
   if (Capacitor.isNativePlatform()) {
     const granted = await requestOrderAlertPermission();

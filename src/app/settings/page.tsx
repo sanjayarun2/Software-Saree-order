@@ -9,11 +9,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
 import { syncDashboardOrders, shouldSkipBackgroundDashboardSync } from "@/lib/order-service";
 import { getLastSyncTimestamp } from "@/lib/local-store";
-import {
-  readOrderAlertsEnabled,
-  writeOrderAlertsEnabled,
-} from "@/lib/order-alert-preferences";
-import { requestOrderAlertPermission, testOrderAlert } from "@/lib/order-alert-service";
 
 function PdfIconOutlined({ className }: { className?: string }) {
   return (
@@ -60,6 +55,18 @@ function ProductCodeIconOutlined({ className }: { className?: string }) {
   );
 }
 
+function AlertSoundIconOutlined({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+      />
+    </svg>
+  );
+}
+
 export default function SettingsPage() {
   const { user, loading } = useAuth();
   const { t } = useLanguage();
@@ -67,16 +74,10 @@ export default function SettingsPage() {
   const [isListedWorker, setIsListedWorker] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [orderAlertsEnabled, setOrderAlertsEnabled] = useState(true);
-  const [testingAlert, setTestingAlert] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
   }, [user, loading, router]);
-
-  useEffect(() => {
-    setOrderAlertsEnabled(readOrderAlertsEnabled());
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -147,46 +148,6 @@ export default function SettingsPage() {
             {t("Account")}
           </p>
           <p className="mt-1 truncate text-base text-slate-900 dark:text-slate-100">{user.email}</p>
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {t("Website order alerts")}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {t("Sound and notification when a new customer order syncs from your website.")}
-          </p>
-          <label className="mt-4 flex cursor-pointer items-center gap-3">
-            <input
-              type="checkbox"
-              checked={orderAlertsEnabled}
-              onChange={async (e) => {
-                const enabled = e.target.checked;
-                setOrderAlertsEnabled(enabled);
-                writeOrderAlertsEnabled(enabled);
-                if (enabled) await requestOrderAlertPermission();
-              }}
-              className="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm text-slate-700 dark:text-slate-300">
-              {t("Enable order alerts")}
-            </span>
-          </label>
-          <button
-            type="button"
-            disabled={testingAlert || !orderAlertsEnabled}
-            onClick={async () => {
-              setTestingAlert(true);
-              try {
-                await testOrderAlert();
-              } finally {
-                setTestingAlert(false);
-              }
-            }}
-            className="mt-3 min-h-[40px] rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-          >
-            {testingAlert ? t("Working…") : t("Test alert sound")}
-          </button>
         </div>
 
         <div className="flex items-center justify-between overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
@@ -260,6 +221,17 @@ export default function SettingsPage() {
           >
             <ApiIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
             <span className="flex-1 text-base font-medium">{t("API Settings")}</span>
+            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+          <div className="border-t border-white/30 dark:border-white/10" />
+          <Link
+            href="/settings/test-sound/"
+            className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+          >
+            <AlertSoundIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+            <span className="flex-1 text-base font-medium">{t("Order alert sound")}</span>
             <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>

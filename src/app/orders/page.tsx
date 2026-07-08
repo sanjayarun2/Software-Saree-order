@@ -17,6 +17,7 @@ import { downloadOrdersPosPdf, printOrdersPosPdf } from "@/lib/pos-pdf-utils";
 import { useSearch } from "@/lib/search-context";
 import {
   getOrders as svcGetOrders,
+  getPendingOrderCount,
   deleteOrder as svcDeleteOrder,
   updateOrderStatus as svcUpdateOrderStatus,
 } from "@/lib/order-service";
@@ -71,6 +72,7 @@ export default function OrdersPage() {
   appliedFiltersRef.current = appliedFilters;
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -150,11 +152,6 @@ export default function OrdersPage() {
     }, 50);
   };
 
-  const handleDetailOrderUpdated = React.useCallback((updated: Order) => {
-    setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
-    setDetailOrder(updated);
-  }, []);
-
   const openWhatsAppForOrder = (order: Order) => {
     if (typeof window === "undefined") return;
     const booking = new Date(order.booking_date).toLocaleDateString("en-GB");
@@ -231,6 +228,24 @@ export default function OrdersPage() {
     };
   }, [user, authLoading, router]);
 
+  const refreshPendingCount = React.useCallback(async () => {
+    if (!user) {
+      setPendingCount(0);
+      return;
+    }
+    try {
+      setPendingCount(await getPendingOrderCount(user.id));
+    } catch {
+      /* keep last count */
+    }
+  }, [user]);
+
+  const handleDetailOrderUpdated = React.useCallback((updated: Order) => {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
+    setDetailOrder(updated);
+    void refreshPendingCount();
+  }, [refreshPendingCount]);
+
   const fetchOrders = React.useCallback(
     async (filters: OrderFilterState) => {
       if (!user) return;
@@ -243,16 +258,18 @@ export default function OrdersPage() {
           { status: st, fromDate, toDate, allOrders },
           (fresh) => {
             setOrders(fresh);
+            void refreshPendingCount();
           }
         );
         setOrders(cached);
+        void refreshPendingCount();
       } catch (e) {
         setError((e as Error).message || "Failed to load orders");
       } finally {
         setLoading(false);
       }
     },
-    [user]
+    [user, refreshPendingCount]
   );
 
   const handleApplyFilters = React.useCallback(
@@ -299,14 +316,18 @@ export default function OrdersPage() {
   useEffect(() => {
     const onImported = () => {
       void fetchOrders(appliedFiltersRef.current);
+      void refreshPendingCount();
     };
     window.addEventListener("velo-website-orders-imported", onImported);
     return () => window.removeEventListener("velo-website-orders-imported", onImported);
-  }, [fetchOrders]);
+  }, [fetchOrders, refreshPendingCount]);
 
   useEffect(() => {
-    if (user) void fetchOrders(appliedFiltersRef.current);
-  }, [user, fetchOrders]);
+    if (user) {
+      void fetchOrders(appliedFiltersRef.current);
+      void refreshPendingCount();
+    }
+  }, [user, fetchOrders, refreshPendingCount]);
 
   // Sync status from URL when returning from edit-order or browser back; refetch list
   useEffect(() => {
@@ -391,6 +412,7 @@ export default function OrdersPage() {
     try {
       await svcDeleteOrder(user.id, id);
       setOrders((prev) => prev.filter((o) => o.id !== id));
+      void refreshPendingCount();
     } catch (e) {
       setError((e as Error).message || "Delete failed");
     }
@@ -412,6 +434,7 @@ export default function OrdersPage() {
       await svcUpdateOrderStatus(user.id, dispatchOrder.id, "DESPATCHED", today, tn);
       setOrders((prev) => prev.filter((o) => o.id !== dispatchOrder.id));
       setDispatchOrder(null);
+      void refreshPendingCount();
     } catch (e) {
       setError((e as Error).message || "Failed to mark as despatched");
     } finally {
@@ -425,6 +448,7 @@ export default function OrdersPage() {
     try {
       await svcUpdateOrderStatus(user.id, order.id, "PENDING", null);
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      void refreshPendingCount();
     } catch (e) {
       setError((e as Error).message || "Failed to move to pending");
     }
@@ -524,7 +548,7 @@ export default function OrdersPage() {
                 : "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
             }`}
           >
-            {t("Pending")}
+            {t("Pending")} ({pendingCount})
           </button>
           <button
             type="button"

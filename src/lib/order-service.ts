@@ -128,6 +128,12 @@ export async function getOrdersLocal(userId: string, filters: OrderFilters): Pro
   return list;
 }
 
+/** Total pending orders for tab badge (ignores date filters; matches orders list visibility rules). */
+export async function getPendingOrderCount(userId: string): Promise<number> {
+  const list = await getOrdersLocal(userId, { status: "PENDING", allOrders: true });
+  return list.length;
+}
+
 async function revalidateOrders(
   userId: string,
   filters: OrderFilters,

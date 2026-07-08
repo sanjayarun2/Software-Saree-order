@@ -347,6 +347,12 @@ const TA: Record<string, string> = {
     "வலைத்தளத்திலிருந்து புதிய ஆர்டர் வரும்போது ஒலி மற்றும் அறிவிப்பு.",
   "Enable order alerts": "ஆர்டர் எச்சரிக்கைகளை இயக்கு",
   "Test alert sound": "எச்சரிக்கை ஒலியை சோதி",
+  "Order alert sound": "ஆர்டர் எச்சரிக்கை ஒலி",
+  "Play test sound": "சோதனை ஒலியை இயக்கு",
+  "Plays the same sound used when a new website order arrives.":
+    "புதிய வலைத்தள ஆர்டர் வரும்போது பயன்படுத்தப்படும் அதே ஒலியை இயக்கும்.",
+  "Use test below to check volume and notification permission before relying on alerts.":
+    "எச்சரிக்கைகளை நம்புவதற்கு முன் ஒலி அளவு மற்றும் அறிவிப்பு அனுமதியை சோதிக்க கீழே உள்ள சோதனையைப் பயன்படுத்தவும்.",
   'Enable "Show successful calls" to see recent activity.':
     "சமீபத்திய செயல்பாட்டைக் காண \"வெற்றிகரமான அழைப்புகளைக் காட்டு\" ஐ இயக்கவும்.",
   "Manage website products using your Velo API key.": "Velo API விசை மூலம் வலைத்தள புராடக்ட்களை நிர்வகிக்கவும்.",
