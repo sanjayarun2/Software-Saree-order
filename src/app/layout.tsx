@@ -13,6 +13,7 @@ import { AppShell } from "@/components/AppShell";
 import { OrderAlertToast } from "@/components/OrderAlertToast";
 import { SplashController } from "@/lib/SplashController";
 import { NativeOAuthBridge } from "@/components/NativeOAuthBridge";
+import { NativeGoogleAuthBootstrap } from "@/components/NativeGoogleAuthBootstrap";
 import { OrderNotificationBridge } from "@/components/OrderNotificationBridge";
 
 const inter = Inter({
@@ -49,6 +50,7 @@ export default function RootLayout({
           <ThemeProvider>
             <AuthProvider>
               <NativeOAuthBridge />
+              <NativeGoogleAuthBootstrap />
               <OrderNotificationBridge />
               <LanguageProvider>
                 <SplashController>

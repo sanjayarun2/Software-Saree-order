@@ -1,10 +1,10 @@
 import { Capacitor } from "@capacitor/core";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { getAuthCallbackUrl } from "./auth-site-url";
-import {
-  NATIVE_OAUTH_CALLBACK,
-  runNativeOAuthBrowserFlow,
-} from "./native-oauth-handler";
+import { NATIVE_OAUTH_CALLBACK } from "./native-oauth-handler";
+import { signInWithNativeGoogle } from "./native-google-sign-in";
+import { isNativeGoogleSignInConfigured } from "./google-client-config";
 
 export { NATIVE_OAUTH_CALLBACK };
 
@@ -15,32 +15,31 @@ export function getGoogleOAuthRedirectUrl(): string {
   return getAuthCallbackUrl();
 }
 
+export type GoogleOAuthResult = { error: Error | null; session: Session | null };
+
 /**
- * Industry-standard OAuth:
- * - Web: full redirect to /auth/callback/
- * - Native: in-app browser + deep link (sareeorder://auth/callback) back to the app
+ * Google Sign-In:
+ * - Native (APK): account picker + signInWithIdToken (no browser)
+ * - Web: Supabase OAuth redirect to /auth/callback/
  */
-export async function startGoogleOAuth(redirectTo: string): Promise<{ error: Error | null }> {
-  const { data, error } = await supabase.auth.signInWithOAuth({
+export async function startGoogleOAuth(_redirectTo: string): Promise<GoogleOAuthResult> {
+  if (Capacitor.isNativePlatform()) {
+    if (!isNativeGoogleSignInConfigured()) {
+      return {
+        error: new Error(
+          "Native Google Sign-In is not configured. Add NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID and rebuild the APK."
+        ),
+        session: null,
+      };
+    }
+    return signInWithNativeGoogle();
+  }
+
+  const redirectTo = getAuthCallbackUrl();
+  const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: {
-      redirectTo,
-      skipBrowserRedirect: Capacitor.isNativePlatform(),
-    },
+    options: { redirectTo },
   });
 
-  if (error) {
-    return { error: new Error(error.message) };
-  }
-
-  if (!Capacitor.isNativePlatform()) {
-    return { error: null };
-  }
-
-  if (!data?.url) {
-    return { error: new Error("Google sign-in URL missing.") };
-  }
-
-  const { error: nativeError } = await runNativeOAuthBrowserFlow(data.url, redirectTo);
-  return { error: nativeError };
+  return { error: error ? new Error(error.message) : null, session: null };
 }

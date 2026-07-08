@@ -1,40 +1,69 @@
-# Google Sign-In (mobile APK)
+# Google Sign-In (mobile APK + web)
 
-## Supabase redirect URLs
+## Native sign-in (APK — recommended)
 
-In **Supabase Dashboard → Authentication → URL configuration → Redirect URLs**, add:
+The mobile app uses **native Google account picker** (`@capgo/capacitor-social-login`) and Supabase `signInWithIdToken`. **No browser opens.**
+
+### 1. Environment variable
+
+Add to `.env.local` and GitHub Actions secret `GOOGLE_WEB_CLIENT_ID`:
+
+```
+NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID=xxxx.apps.googleusercontent.com
+```
+
+Use the **Web application** OAuth client ID from Google Cloud Console (same ID configured in Supabase → Authentication → Google).
+
+### 2. Google Cloud Console
+
+1. **OAuth consent screen** — configured and published (or test users added).
+2. **Credentials → Web client** — copy Client ID → `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
+3. **Credentials → Android client**:
+   - Package name: `com.sareeorder.app`
+   - SHA-1: from your signing key (debug for local APK, release for production)
+
+   Get debug SHA-1:
+   ```bash
+   cd android && ./gradlew signingReport
+   ```
+
+4. Supabase Google provider must use the **same Web client ID** and matching client secret.
+
+### 3. Supabase
+
+**Authentication → Providers → Google** — enabled with Web client ID + secret.
+
+**Redirect URLs** (for web only):
 
 ```
 https://software-saree-order.vercel.app/auth/callback/
-sareeorder://auth/callback
 ```
 
-The custom scheme `sareeorder://` is registered in `AndroidManifest.xml` so Google OAuth returns to the app after in-app browser sign-in.
+Native APK does **not** need `sareeorder://` for Google sign-in anymore (browser OAuth is fallback only).
 
-## Flow
+### 4. GitHub Actions (APK build)
 
-| Screen | Google | Mobile |
-|--------|--------|--------|
-| **App open** | — | Lands on **Login** first |
-| **Login** | Primary; no mobile | — |
-| **Login fail (unknown email)** | — | **Register** link nudges |
-| **Register (email)** | Google first | Popup **after** verify + sign-in |
-| **Register (Google)** | After OAuth → `/complete-mobile/` if new | Mandatory gate |
-| **Login (existing)** | → dashboard | Never asked |
+Add repository secret:
 
-## Native OAuth
+| Secret | Value |
+|--------|--------|
+| `GOOGLE_WEB_CLIENT_ID` | Web OAuth client ID |
 
-On Capacitor Android/iOS the app uses `@capacitor/browser` + `sareeorder://auth/callback` deep link (PKCE).
+Workflow passes it as `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` during `npm run build`.
 
-**Robust return handling:**
-- `NativeOAuthBridge` (app root) listens for `appUrlOpen` and `getLaunchUrl()` so cold-start returns still complete sign-in.
-- OAuth intent is stored in `localStorage` (survives WebView reload).
-- PKCE code exchange has a timeout; corrupted redirect URLs (`sareeorder:?code=`) are normalized.
+---
 
-**Supabase redirect URLs** must include exactly:
+## Web sign-in
 
-```
-sareeorder://auth/callback
-```
+Browser redirect to `/auth/callback/` via Supabase OAuth (unchanged).
 
-(not bare `sareeorder://` — required for reliable PKCE on mobile)
+---
+
+## Auth flow summary
+
+| Platform | Method |
+|----------|--------|
+| **APK** | Native account picker → ID token → Supabase session → dashboard |
+| **Web** | Redirect OAuth → `/auth/callback/` |
+| **New Google signup** | → `/complete-mobile/` if mobile missing |
+| **Login** | Never asks mobile |
