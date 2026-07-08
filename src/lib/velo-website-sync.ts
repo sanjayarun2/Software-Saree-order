@@ -15,6 +15,7 @@ import {
   notifyNewWebsiteOrders,
   type ImportedWebsiteOrderSummary,
 } from "./order-alert-service";
+import { markWebsitePollComplete } from "./sync-coalesce";
 import type { WebsiteOrderLineItem } from "./db-types";
 import {
   hasWebsiteLineItems,
@@ -79,7 +80,28 @@ type VeloOrdersApiResponse = {
   nextSince?: string;
 };
 
-let pollInFlight = false;
+let pollInFlightPromise: Promise<VeloWebsitePollResult> | null = null;
+
+const INTEGRATIONS_CACHE_MS = 60_000;
+let integrationsCache: { userId: string; at: number; rows: ApiIntegrationRow[] } | null = null;
+const senderAddressCache = new Map<string, { at: number; address: string }>();
+const SENDER_CACHE_MS = 120_000;
+
+export { wasWebsitePollRecent } from "./sync-coalesce";
+
+async function getCachedEnabledIntegrations(userId: string): Promise<ApiIntegrationRow[]> {
+  const now = Date.now();
+  if (
+    integrationsCache &&
+    integrationsCache.userId === userId &&
+    now - integrationsCache.at < INTEGRATIONS_CACHE_MS
+  ) {
+    return integrationsCache.rows;
+  }
+  const rows = await getEnabledApiIntegrations(userId);
+  integrationsCache = { userId, at: now, rows };
+  return rows;
+}
 
 const VELO_PROXY_FUNCTION = "velo-website-orders";
 
@@ -202,14 +224,23 @@ function resolveExternalOrderId(order: VeloWebsiteOrderPayload): string | null {
 }
 
 async function getDefaultSenderAddress(userId: string): Promise<string> {
+  const cached = senderAddressCache.get(userId);
+  if (cached && Date.now() - cached.at < SENDER_CACHE_MS) {
+    return cached.address;
+  }
   try {
-    const cached = await getSuggestions(userId);
-    const senders = buildSuggestionsFromOrders(cached).senders;
-    if (senders.length > 0) return senders[0];
+    const suggestions = await getSuggestions(userId);
+    const senders = buildSuggestionsFromOrders(suggestions).senders;
+    if (senders.length > 0) {
+      senderAddressCache.set(userId, { at: Date.now(), address: senders[0] });
+      return senders[0];
+    }
   } catch {
     /* use fallback below */
   }
-  return "Shop Address";
+  const fallback = "Shop Address";
+  senderAddressCache.set(userId, { at: Date.now(), address: fallback });
+  return fallback;
 }
 
 async function findImportedWebsiteOrder(
@@ -511,62 +542,67 @@ async function importOrdersForIntegration(
 }
 
 export async function pollVeloWebsiteOrders(userId: string): Promise<VeloWebsitePollResult> {
-  if (pollInFlight) {
-    return { imported: 0, updated: 0, skipped: 0, errors: [], newOrders: [] };
-  }
+  if (pollInFlightPromise) return pollInFlightPromise;
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return { imported: 0, updated: 0, skipped: 0, errors: ["Offline"], newOrders: [] };
   }
 
-  pollInFlight = true;
-  const result: VeloWebsitePollResult = {
-    imported: 0,
-    updated: 0,
-    skipped: 0,
-    errors: [],
-    newOrders: [],
-  };
+  pollInFlightPromise = (async (): Promise<VeloWebsitePollResult> => {
+    const result: VeloWebsitePollResult = {
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      newOrders: [],
+    };
+
+    try {
+      const integrations = await getCachedEnabledIntegrations(userId);
+      const active = integrations.filter((i) => i.api_key.trim().length > 0);
+      if (!active.length) return result;
+
+      const senderDetails = await getDefaultSenderAddress(userId);
+
+      for (const integration of active) {
+        try {
+          const batch = await importOrdersForIntegration(userId, integration, senderDetails);
+          result.imported += batch.imported;
+          result.updated += batch.updated;
+          result.skipped += batch.skipped;
+          result.newOrders.push(...batch.newOrders);
+
+          await updateApiIntegrationSyncState(integration.id, {
+            last_since: batch.nextSince ?? integration.last_since,
+            last_sync_at: new Date().toISOString(),
+            last_error: null,
+          });
+        } catch (e) {
+          const msg = (e as Error).message || "Sync failed";
+          result.errors.push(`${integration.label}: ${msg}`);
+          await updateApiIntegrationSyncState(integration.id, {
+            last_sync_at: new Date().toISOString(),
+            last_error: msg,
+          });
+        }
+      }
+    } finally {
+      markWebsitePollComplete();
+    }
+
+    if ((result.imported > 0 || result.updated > 0) && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("velo-website-orders-imported", { detail: result }));
+    }
+
+    if (result.newOrders.length > 0) {
+      void notifyNewWebsiteOrders(result.newOrders);
+    }
+
+    return result;
+  })();
 
   try {
-    const integrations = await getEnabledApiIntegrations(userId);
-    const active = integrations.filter((i) => i.api_key.trim().length > 0);
-    if (!active.length) return result;
-
-    const senderDetails = await getDefaultSenderAddress(userId);
-
-    for (const integration of active) {
-      try {
-        const batch = await importOrdersForIntegration(userId, integration, senderDetails);
-        result.imported += batch.imported;
-        result.updated += batch.updated;
-        result.skipped += batch.skipped;
-        result.newOrders.push(...batch.newOrders);
-
-        await updateApiIntegrationSyncState(integration.id, {
-          last_since: batch.nextSince ?? integration.last_since,
-          last_sync_at: new Date().toISOString(),
-          last_error: null,
-        });
-      } catch (e) {
-        const msg = (e as Error).message || "Sync failed";
-        result.errors.push(`${integration.label}: ${msg}`);
-        await updateApiIntegrationSyncState(integration.id, {
-          last_sync_at: new Date().toISOString(),
-          last_error: msg,
-        });
-      }
-    }
+    return await pollInFlightPromise;
   } finally {
-    pollInFlight = false;
+    pollInFlightPromise = null;
   }
-
-  if ((result.imported > 0 || result.updated > 0) && typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("velo-website-orders-imported", { detail: result }));
-  }
-
-  if (result.newOrders.length > 0) {
-    void notifyNewWebsiteOrders(result.newOrders);
-  }
-
-  return result;
 }

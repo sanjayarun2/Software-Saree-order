@@ -29,6 +29,7 @@ import {
 import {
   isOrderFilterActive,
   orderFiltersFromTabParam,
+  describeDateFilters,
   type OrderFilterState,
 } from "@/lib/order-filter-utils";
 import {
@@ -61,7 +62,7 @@ export default function OrdersPage() {
     orderFiltersFromTabParam(tabParam)
   );
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filterGenerating, setFilterGenerating] = useState(false);
+  const [filterApplying, setFilterApplying] = useState(false);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
 
   const status = appliedFilters.status;
@@ -256,18 +257,28 @@ export default function OrdersPage() {
 
   const handleApplyFilters = React.useCallback(
     async (filters: OrderFilterState) => {
-      setFilterGenerating(true);
+      setFilterApplying(true);
       try {
         setAppliedFilters(filters);
         appliedFiltersRef.current = filters;
         await fetchOrders(filters);
         setFilterOpen(false);
       } finally {
-        setFilterGenerating(false);
+        setFilterApplying(false);
       }
     },
     [fetchOrders]
   );
+
+  const handleClearFilter = React.useCallback(() => {
+    const next: OrderFilterState = {
+      ...appliedFiltersRef.current,
+      fromDate: "",
+      toDate: "",
+      allOrders: true,
+    };
+    void handleApplyFilters(next);
+  }, [handleApplyFilters]);
 
   const handleStatusChange = React.useCallback(
     (nextStatus: OrderStatus) => {
@@ -283,6 +294,7 @@ export default function OrdersPage() {
   );
 
   const filterActive = isOrderFilterActive(appliedFilters);
+  const filterSummary = describeDateFilters(appliedFilters, { allOrders: t("All Orders") });
 
   useEffect(() => {
     const onImported = () => {
@@ -465,6 +477,43 @@ export default function OrdersPage() {
             </button>
         </div>
 
+        {filterActive ? (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 dark:border-primary-700/60 dark:bg-primary-950/40"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-600 dark:bg-primary-900/60 dark:text-primary-300"
+                aria-hidden
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-primary-800 dark:text-primary-200">
+                  {t("Filtered orders")}
+                </p>
+                <p className="truncate text-sm text-primary-700/90 dark:text-primary-300/90">
+                  {filterSummary}
+                  {" · "}
+                  {filteredOrders.length} {t("orders")}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearFilter}
+              disabled={filterApplying || loading}
+              className="shrink-0 rounded-lg border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-600 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
+            >
+              {t("Clear filter")}
+            </button>
+          </div>
+        ) : null}
+
         <div className="flex gap-2">
           <button
             type="button"
@@ -495,10 +544,10 @@ export default function OrdersPage() {
           status={status}
           initialFilters={appliedFilters}
           onClose={() => {
-            if (!filterGenerating) setFilterOpen(false);
+            if (!filterApplying) setFilterOpen(false);
           }}
           onApply={(filters) => void handleApplyFilters(filters)}
-          generating={filterGenerating || loading}
+          applying={filterApplying || loading}
           labels={ordersFilterModalLabels(t)}
         />
 
@@ -677,6 +726,11 @@ export default function OrdersPage() {
 
         {status === "PENDING" && (
         <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 md:bottom-8 md:right-8">
+          {filterActive ? (
+            <p className="max-w-[220px] rounded-lg bg-primary-600/95 px-3 py-1.5 text-center text-xs font-medium text-white shadow-md dark:bg-primary-700/95">
+              {t("Print and PDF use filtered orders only")}
+            </p>
+          ) : null}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -685,12 +739,22 @@ export default function OrdersPage() {
                 deferModalOpen(() => setShowFormatModal("print"));
               }}
               disabled={filteredOrders.length === 0 || printing}
-              className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl border border-primary-500 bg-white px-4 py-3 text-primary-600 shadow-lg transition active:bg-primary-50 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
-              title="Print labels"
+              className="relative flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl border border-primary-500 bg-white px-4 py-3 text-primary-600 shadow-lg transition active:bg-primary-50 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
+              title={filterActive ? t("Print filtered orders") : t("Print labels")}
             >
+              {filterActive ? (
+                <span
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500 text-white ring-2 ring-white dark:ring-slate-900"
+                  aria-hidden
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                  </svg>
+                </span>
+              ) : null}
               <IconPrint className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
               <span className="text-sm font-medium">
-                {printing ? "Printing…" : "Print"}
+                {printing ? t("Printing…") : t("Print")}
               </span>
             </button>
             <button
@@ -705,9 +769,19 @@ export default function OrdersPage() {
                 downloadingPdf ||
                 (pendingSelectionActive && ordersForPdfAndPrint.length === 0)
               }
-              className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
-              title="Download all as PDF"
+              className="relative flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
+              title={filterActive ? t("Download filtered orders PDF") : "Download all as PDF"}
             >
+              {filterActive ? (
+                <span
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-primary-600 ring-2 ring-primary-500"
+                  aria-hidden
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                  </svg>
+                </span>
+              ) : null}
               <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
               <span className="text-sm font-medium">
                 {downloadingPdf ? "Generating…" : "PDF"}

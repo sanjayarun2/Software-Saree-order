@@ -20,14 +20,23 @@ import {
   setCachedSuggestions,
   type OutboxEntry,
 } from "./local-store";
+import {
+  markDashboardSyncComplete,
+  markFullSyncComplete,
+  shouldSkipBackgroundDashboardSync,
+} from "./sync-coalesce";
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 const REFRESH_COOLDOWN_MS = 60_000;
+const REVALIDATE_COOLDOWN_MS = 30_000;
 let lastRefreshAttemptAt = 0;
 let refreshInFlight: Promise<boolean> | null = null;
+const lastRevalidateAt = new Map<string, number>();
+
+export { shouldSkipBackgroundDashboardSync } from "./sync-coalesce";
 
 function isAuthForbiddenError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -124,6 +133,11 @@ async function revalidateOrders(
   filters: OrderFilters,
   onFresh?: (orders: Order[]) => void,
 ): Promise<void> {
+  const now = Date.now();
+  const last = lastRevalidateAt.get(userId) ?? 0;
+  if (now - last < REVALIDATE_COOLDOWN_MS) return;
+  lastRevalidateAt.set(userId, now);
+
   try {
     const data = await withAuthRefreshRetry(async () => {
       const dateColumn = filters.status === "PENDING" ? "booking_date" : "despatch_date";
@@ -473,26 +487,33 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
       changed = true;
     }
 
-    const idData = await withAuthRefreshRetry(async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id")
-        .in("user_id", idList)
-        .limit(50_000);
-      if (error) throw error;
-      return data;
-    });
+    const skipIdPrune =
+      deltaOrders.length === 0 &&
+      lastSync != null &&
+      shouldSkipBackgroundDashboardSync();
 
-    const idRows = idData ?? [];
-    const serverIds = new Set(idRows.map((r: { id: string }) => r.id));
-    const localMap = await getAllOrders(userId);
-    // Never prune from an empty id set (would wipe cache); never drop optimistic temp_ rows (handled in removeOrdersNotIn).
-    if (serverIds.size > 0) {
-      const localKeys = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
-      const deletedLocally = localKeys.filter((id) => !serverIds.has(id));
-      if (deletedLocally.length > 0) {
-        await removeOrdersNotIn(userId, serverIds);
-        changed = true;
+    if (!skipIdPrune) {
+      const idData = await withAuthRefreshRetry(async () => {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("id")
+          .in("user_id", idList)
+          .limit(50_000);
+        if (error) throw error;
+        return data;
+      });
+
+      const idRows = idData ?? [];
+      const serverIds = new Set(idRows.map((r: { id: string }) => r.id));
+      const localMap = await getAllOrders(userId);
+      // Never prune from an empty id set (would wipe cache); never drop optimistic temp_ rows (handled in removeOrdersNotIn).
+      if (serverIds.size > 0) {
+        const localKeys = Object.keys(localMap).filter((id) => !id.startsWith("temp_"));
+        const deletedLocally = localKeys.filter((id) => !serverIds.has(id));
+        if (deletedLocally.length > 0) {
+          await removeOrdersNotIn(userId, serverIds);
+          changed = true;
+        }
       }
     }
 
@@ -501,6 +522,7 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
       : lastSync;
     if (newest) await setLastSyncTimestamp(userId, newest);
 
+    markDashboardSyncComplete();
     return changed;
   } catch (err) {
     console.warn("[OrderService] syncDashboardOrders failed:", err);
@@ -615,6 +637,7 @@ export async function fullSync(userId: string): Promise<Order[]> {
       await setLastSyncTimestamp(userId, newest.updated_at);
     }
 
+    markFullSyncComplete();
     return orders;
   } catch (err) {
     console.warn("[OrderService] fullSync failed:", err);

@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import { getOrCreateDeviceId } from "./device-id";
 import {
-  resolveDeviceForSession,
+  resolveDeviceForSessionOnce,
   markSessionEndedForDeviceLimit,
 } from "./user-devices-supabase";
 import { clearSession } from "./capacitor-storage";
@@ -29,7 +29,7 @@ export async function finishGoogleAuthSession(user: User): Promise<GoogleAuthFin
 
   const deviceId = getOrCreateDeviceId();
   if (deviceId) {
-    const r = await resolveDeviceForSession(user.id, deviceId);
+    const r = await resolveDeviceForSessionOnce(user.id, deviceId);
     if (!r.ok) {
       markSessionEndedForDeviceLimit();
       await supabase.auth.signOut();

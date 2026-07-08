@@ -71,6 +71,46 @@ export type ResolveDeviceResult =
  * max_devices === 1: strict — new device blocked if a slot is already used.
  * max_devices >= 2: LRU — oldest last_seen row removed when over limit, then new device registered.
  */
+const DEVICE_RESOLVE_CACHE_MS = 120_000;
+const deviceResolveCache = new Map<string, { at: number; result: ResolveDeviceResult }>();
+const deviceResolveInFlight = new Map<string, Promise<ResolveDeviceResult>>();
+
+export function clearDeviceResolveCache(): void {
+  deviceResolveCache.clear();
+  deviceResolveInFlight.clear();
+}
+
+/** Dedupes concurrent calls and caches successful lookups for the same user+device. */
+export async function resolveDeviceForSessionOnce(
+  userId: string,
+  deviceId: string,
+): Promise<ResolveDeviceResult> {
+  if (!deviceId) return { ok: true };
+
+  const key = `${userId}:${deviceId}`;
+  const cached = deviceResolveCache.get(key);
+  if (cached && cached.result.ok && Date.now() - cached.at < DEVICE_RESOLVE_CACHE_MS) {
+    return cached.result;
+  }
+
+  const inFlight = deviceResolveInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const promise = resolveDeviceForSession(userId, deviceId)
+    .then((result) => {
+      if (result.ok) {
+        deviceResolveCache.set(key, { at: Date.now(), result });
+      }
+      return result;
+    })
+    .finally(() => {
+      deviceResolveInFlight.delete(key);
+    });
+
+  deviceResolveInFlight.set(key, promise);
+  return promise;
+}
+
 export async function resolveDeviceForSession(
   userId: string,
   deviceId: string

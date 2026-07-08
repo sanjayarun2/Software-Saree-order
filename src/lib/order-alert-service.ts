@@ -110,8 +110,11 @@ export async function playOrderClingSound(): Promise<void> {
   playTone(1318.5, now + 0.11, 0.28);
 }
 
+let channelReady = false;
+
 async function ensureNativeChannel(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
+  if (channelReady) return;
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
     await LocalNotifications.createChannel({
@@ -123,9 +126,14 @@ async function ensureNativeChannel(): Promise<void> {
       vibration: true,
       visibility: 1,
     });
+    channelReady = true;
   } catch (e) {
     console.warn("[OrderAlert] createChannel failed:", e);
   }
+}
+
+export function wasOrderRecentlyNotified(externalOrderId: string): boolean {
+  return wasRecentlyNotified(externalOrderId);
 }
 
 export async function ensureOrderNotificationChannel(): Promise<void> {

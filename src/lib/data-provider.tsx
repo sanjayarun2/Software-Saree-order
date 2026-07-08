@@ -9,6 +9,7 @@ import {
 } from "./push-registration-service";
 import { initSyncManager, teardownSyncManager } from "./sync-manager";
 import { fullSync } from "./order-service";
+import { resetSyncCoalesceState } from "./sync-coalesce";
 
 interface DataContextValue {
   ready: boolean;
@@ -44,6 +45,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       teardownSyncManager();
       void teardownOrderAlertService();
       void teardownPushRegistration();
+      resetSyncCoalesceState();
       syncedRef.current = null;
       setReady(false);
       return;
@@ -52,8 +54,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (syncedRef.current === user.id) return;
     syncedRef.current = user.id;
 
-    initSyncManager(user.id);
-    fullSyncWithRetry(user.id).finally(() => setReady(true));
+    fullSyncWithRetry(user.id)
+      .finally(() => {
+        setReady(true);
+        initSyncManager(user.id);
+      });
 
     // Defer native notification/FCM setup until after first screen paint + sync start.
     nativeServicesTimerRef.current = setTimeout(() => {

@@ -6,12 +6,17 @@ import { supabase } from "./supabase";
 import type { Order } from "./db-types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { PluginListenerHandle } from "@capacitor/core";
+import {
+  clearResumeSyncSchedule,
+  scheduleResumeSync,
+  wasWebsitePollRecent,
+} from "./sync-coalesce";
 
 let initialized = false;
 let userId: string | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let websitePollTimer: ReturnType<typeof setInterval> | null = null;
-const WEBSITE_POLL_INTERVAL_MS = 15_000;
+const WEBSITE_POLL_INTERVAL_MS = 30_000;
 let realtimeChannel: RealtimeChannel | null = null;
 let appStateListenerHandle: PluginListenerHandle | null = null;
 let syncInFlight = false;
@@ -33,6 +38,7 @@ function canRunWebsitePoll(): boolean {
 async function safeWebsitePoll() {
   if (!userId) return;
   if (!canRunWebsitePoll()) return;
+  if (wasWebsitePollRecent()) return;
   try {
     await pollVeloWebsiteOrders(userId);
   } catch (err) {
@@ -66,14 +72,14 @@ async function safeSync() {
 function handleOnline() {
   if (!userId) return;
   console.log("[SyncManager] Online – flushing outbox & syncing");
-  safeSync();
+  scheduleResumeSync(() => safeSync());
 }
 
 function handleVisibilityChange() {
   if (!userId) return;
   if (document.visibilityState === "visible") {
     console.log("[SyncManager] App resumed – syncing");
-    safeSync();
+    scheduleResumeSync(() => safeSync());
   }
 }
 
@@ -85,8 +91,7 @@ async function handleAppStateChange() {
       appInForeground = isActive;
       if (isActive && userId) {
         console.log("[SyncManager] Capacitor appStateChange – syncing");
-        safeSync();
-        void safeWebsitePoll();
+        scheduleResumeSync(() => safeSync());
       }
     });
   } catch {
@@ -176,7 +181,6 @@ export function initSyncManager(uid: string): void {
 
   if (navigator.onLine) {
     setTimeout(() => safeSync(), 1500);
-    setTimeout(() => safeWebsitePoll(), 2500);
   }
 }
 
@@ -186,6 +190,7 @@ export function teardownSyncManager(): void {
   window.removeEventListener("visibilitychange", handleVisibilityChange);
   void appStateListenerHandle?.remove().catch(() => {});
   appStateListenerHandle = null;
+  clearResumeSyncSchedule();
   stopPolling();
   stopRealtime();
   initialized = false;

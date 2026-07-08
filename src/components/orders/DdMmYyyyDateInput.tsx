@@ -12,6 +12,8 @@ type DdMmYyyyDateInputProps = {
   label: string;
   value: string;
   onChange: (isoValue: string) => void;
+  /** Called when the user focuses or opens the calendar — use to enable date filtering. */
+  onInteract?: () => void;
   disabled?: boolean;
   error?: string | null;
 };
@@ -48,6 +50,7 @@ export function DdMmYyyyDateInput({
   label,
   value,
   onChange,
+  onInteract,
   disabled = false,
   error = null,
 }: DdMmYyyyDateInputProps) {
@@ -98,7 +101,12 @@ export function DdMmYyyyDateInput({
           type="date"
           value={value || ""}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => onInteract?.()}
+          onClick={() => onInteract?.()}
+          onChange={(e) => {
+            onInteract?.();
+            onChange(e.target.value);
+          }}
           className={`${nativeDateCls} ${fieldBorderCls(Boolean(showError))}`}
           aria-invalid={showError ? true : undefined}
           aria-describedby={showError ? `${id}-error` : undefined}
@@ -131,7 +139,9 @@ export function DdMmYyyyDateInput({
           placeholder="dd-mm-yyyy"
           value={text}
           disabled={disabled}
+          onFocus={() => onInteract?.()}
           onChange={(e) => {
+            onInteract?.();
             setText(e.target.value);
             if (localError) setLocalError(null);
           }}
@@ -147,6 +157,7 @@ export function DdMmYyyyDateInput({
           aria-describedby={showError ? `${id}-error` : undefined}
         />
         <label
+          onClick={() => onInteract?.()}
           className={`relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center border-l border-gray-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100 ${
             disabled ? "pointer-events-none opacity-50" : ""
           }`}
@@ -156,7 +167,9 @@ export function DdMmYyyyDateInput({
             type="date"
             value={value || ""}
             disabled={disabled}
+            onFocus={() => onInteract?.()}
             onChange={(e) => {
+              onInteract?.();
               const iso = e.target.value;
               onChange(iso);
               setText(formatIsoToDdMmYyyy(iso));

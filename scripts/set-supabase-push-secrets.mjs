@@ -17,22 +17,26 @@ const webhookSecret =
   process.env.VELO_PUSH_WEBHOOK_SECRET?.trim() ||
   "b36abebcb3c11dfa0cdf385204ca66392ad6ded96844f97451598286609746b4";
 
-async function setSecret(name, value) {
+async function setSecrets(entries) {
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/secrets`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name, value }),
+    body: JSON.stringify(entries.map(({ name, value }) => ({ name, value }))),
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Secret ${name}: ${res.status} ${text}`);
+    throw new Error(`Secrets: ${res.status} ${text}`);
   }
-  console.log("Set secret:", name);
+  for (const { name } of entries) {
+    console.log("Set secret:", name);
+  }
 }
 
-await setSecret("FCM_SERVICE_ACCOUNT_JSON", fcmJson);
-await setSecret("VELO_PUSH_WEBHOOK_SECRET", webhookSecret);
+await setSecrets([
+  { name: "FCM_SERVICE_ACCOUNT_JSON", value: fcmJson },
+  { name: "VELO_PUSH_WEBHOOK_SECRET", value: webhookSecret },
+]);
 console.log("Supabase edge secrets configured.");

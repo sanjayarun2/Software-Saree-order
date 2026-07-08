@@ -20,7 +20,7 @@ export type OrdersFilterModalProps = {
   initialFilters: OrderFilterState;
   onClose: () => void;
   onApply: (filters: OrderFilterState) => void;
-  generating?: boolean;
+  applying?: boolean;
   labels: {
     title: string;
     bookingFrom: string;
@@ -28,7 +28,7 @@ export type OrdersFilterModalProps = {
     dispatchFrom: string;
     dispatchTo: string;
     allOrders: string;
-    generate: string;
+    apply: string;
     cancel: string;
     clearDates: string;
   };
@@ -40,7 +40,7 @@ export function OrdersFilterModal({
   initialFilters,
   onClose,
   onApply,
-  generating = false,
+  applying = false,
   labels,
 }: OrdersFilterModalProps) {
   const [draft, setDraft] = useState<OrderDateFilterDraft>({
@@ -50,7 +50,7 @@ export function OrdersFilterModal({
   });
   const [formError, setFormError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const generateRef = useRef<HTMLButtonElement>(null);
+  const applyRef = useRef<HTMLButtonElement>(null);
   const shouldDismissBackdrop = useBackdropDismissGuard(open);
 
   useEffect(() => {
@@ -71,20 +71,25 @@ export function OrdersFilterModal({
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !generating) onClose();
+      if (e.key === "Escape" && !applying) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
 
-    const t = window.setTimeout(() => generateRef.current?.focus(), 50);
+    const t = window.setTimeout(() => applyRef.current?.focus(), 50);
 
     return () => {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKeyDown);
       window.clearTimeout(t);
     };
-  }, [open, generating, onClose]);
+  }, [open, applying, onClose]);
 
-  const handleGenerate = () => {
+  const enableDateFilter = () => {
+    setDraft((prev) => (prev.allOrders ? { ...prev, allOrders: false } : prev));
+    setFormError(null);
+  };
+
+  const handleApply = () => {
     const merged: OrderFilterState = { status, ...draft };
     const err = validateOrderFilters(merged);
     if (err) {
@@ -102,7 +107,6 @@ export function OrdersFilterModal({
 
   if (!open) return null;
 
-  const dateFieldsDisabled = draft.allOrders;
   const fromLabel = status === "PENDING" ? labels.bookingFrom : labels.dispatchFrom;
   const toLabel = status === "PENDING" ? labels.bookingTo : labels.dispatchTo;
 
@@ -111,7 +115,7 @@ export function OrdersFilterModal({
       className="fixed inset-0 z-[100] flex items-end justify-center bg-black/45 p-0 md:items-center md:px-4"
       role="presentation"
       onClick={(e) => {
-        if (shouldDismissBackdrop(e.target, e.currentTarget) && !generating) onClose();
+        if (shouldDismissBackdrop(e.target, e.currentTarget) && !applying) onClose();
       }}
     >
       <div
@@ -133,7 +137,7 @@ export function OrdersFilterModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={generating}
+            disabled={applying}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-700"
             aria-label={labels.cancel}
           >
@@ -149,18 +153,18 @@ export function OrdersFilterModal({
               <DdMmYyyyDateInput
                 label={fromLabel}
                 value={draft.fromDate}
-                disabled={dateFieldsDisabled}
+                onInteract={enableDateFilter}
                 onChange={(fromDate) => {
-                  setDraft((prev) => ({ ...prev, fromDate }));
+                  setDraft((prev) => ({ ...prev, fromDate, allOrders: false }));
                   setFormError(null);
                 }}
               />
               <DdMmYyyyDateInput
                 label={toLabel}
                 value={draft.toDate}
-                disabled={dateFieldsDisabled}
+                onInteract={enableDateFilter}
                 onChange={(toDate) => {
-                  setDraft((prev) => ({ ...prev, toDate }));
+                  setDraft((prev) => ({ ...prev, toDate, allOrders: false }));
                   setFormError(null);
                 }}
               />
@@ -206,19 +210,19 @@ export function OrdersFilterModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={generating}
+            disabled={applying}
             className="min-h-touch flex-1 rounded-bento border border-gray-200 bg-white font-medium text-slate-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
           >
             {labels.cancel}
           </button>
           <button
-            ref={generateRef}
+            ref={applyRef}
             type="button"
-            onClick={handleGenerate}
-            disabled={generating}
+            onClick={handleApply}
+            disabled={applying}
             className="min-h-touch flex-1 rounded-bento bg-primary-500 font-semibold text-white hover:bg-primary-600 disabled:opacity-50"
           >
-            {generating ? "…" : labels.generate}
+            {applying ? "…" : labels.apply}
           </button>
         </div>
       </div>
@@ -234,7 +238,7 @@ export function ordersFilterModalLabels(t: (key: string) => string) {
     dispatchFrom: t("Dispatch From date"),
     dispatchTo: t("Dispatch To date"),
     allOrders: t("All Orders"),
-    generate: t("Generate"),
+    apply: t("Filter"),
     cancel: t("Cancel"),
     clearDates: t("Clear dates"),
   };

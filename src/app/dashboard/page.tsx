@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
-import { getStatsFromCache, syncDashboardOrders } from "@/lib/order-service";
+import { getStatsFromCache, syncDashboardOrders, shouldSkipBackgroundDashboardSync } from "@/lib/order-service";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import {
   getDashboardDateRange,
@@ -300,6 +300,7 @@ export default function DashboardPage() {
       setLoadingStats(false);
 
       if (syncingRef.current) return;
+      if (shouldSkipBackgroundDashboardSync()) return;
       syncingRef.current = true;
       syncDashboardOrders(user.id)
         .then(async () => {

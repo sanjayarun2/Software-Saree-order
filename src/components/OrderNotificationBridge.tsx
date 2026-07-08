@@ -8,7 +8,7 @@ import {
   subscribeOpenOrdersNavigation,
   type OpenOrdersNavDetail,
 } from "@/lib/order-notification-navigation";
-import { pollVeloWebsiteOrders } from "@/lib/velo-website-sync";
+import { pollVeloWebsiteOrders, wasWebsitePollRecent } from "@/lib/velo-website-sync";
 
 const ORDERS_PATH = "/orders/";
 
@@ -30,7 +30,11 @@ export function OrderNotificationBridge() {
       };
 
       if (detail.sync !== false && user?.id) {
-        void pollVeloWebsiteOrders(user.id).finally(go);
+        if (wasWebsitePollRecent()) {
+          go();
+        } else {
+          void pollVeloWebsiteOrders(user.id).finally(go);
+        }
       } else {
         go();
       }

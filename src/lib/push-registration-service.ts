@@ -9,6 +9,7 @@ import {
 import {
   notifyNewWebsiteOrders,
   ensureOrderNotificationChannel,
+  wasOrderRecentlyNotified,
   type ImportedWebsiteOrderSummary,
 } from "./order-alert-service";
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
@@ -104,10 +105,9 @@ export async function initPushRegistration(userId: string): Promise<void> {
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
       (action) => {
-        if (!readOrderAlertsEnabled()) return;
         const data = (action.notification?.data ?? {}) as Record<string, unknown>;
         const order = orderFromPushData(data);
-        if (order) {
+        if (order && readOrderAlertsEnabled() && !wasOrderRecentlyNotified(order.externalOrderId)) {
           void notifyNewWebsiteOrders([order], { fromPush: true });
         }
         openOrdersPage();

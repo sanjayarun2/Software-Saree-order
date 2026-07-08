@@ -7,10 +7,11 @@ import { clearSession } from "./capacitor-storage";
 import { clearLastSyncTimestamp } from "./local-store";
 import { getOrCreateDeviceId } from "./device-id";
 import {
-  resolveDeviceForSession,
+  resolveDeviceForSessionOnce,
   unregisterDeviceForSession,
   markSessionEndedForDeviceLimit,
   markDeviceSlotEvicted,
+  clearDeviceResolveCache,
   AUTH_ERROR_DEVICE_LIMIT,
   type ResolveDeviceResult,
 } from "./user-devices-supabase";
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!error && session?.user && typeof window !== "undefined") {
           const deviceId = getOrCreateDeviceId();
           if (deviceId) {
-            const r = await resolveDeviceForSession(session.user.id, deviceId);
+            const r = await resolveDeviceForSessionOnce(session.user.id, deviceId);
             if (!r.ok) {
               markSessionEndedForDeviceLimit();
               await supabase.auth.signOut();
@@ -110,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void (async () => {
         const deviceId = getOrCreateDeviceId();
         if (deviceId) {
-          const r = await resolveDeviceForSession(session.user.id, deviceId);
+          const r = await resolveDeviceForSessionOnce(session.user.id, deviceId);
           if (!r.ok) {
             markSessionEndedForDeviceLimit();
             await supabase.auth.signOut();
@@ -162,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (u && typeof window !== "undefined") {
       const deviceId = getOrCreateDeviceId();
       if (deviceId) {
-        const r = await resolveDeviceForSession(u.id, deviceId);
+        const r = await resolveDeviceForSessionOnce(u.id, deviceId);
         if (!r.ok) {
           markSessionEndedForDeviceLimit();
           await supabase.auth.signOut();
@@ -215,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     await supabase.auth.signOut();
     await clearSession();
+    clearDeviceResolveCache();
     setSession(null);
     setUser(null);
   };

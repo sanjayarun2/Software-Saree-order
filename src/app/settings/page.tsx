@@ -7,7 +7,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
-import { syncDashboardOrders } from "@/lib/order-service";
+import { syncDashboardOrders, shouldSkipBackgroundDashboardSync } from "@/lib/order-service";
+import { getLastSyncTimestamp } from "@/lib/local-store";
 import {
   readOrderAlertsEnabled,
   writeOrderAlertsEnabled,
@@ -90,6 +91,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+    void getLastSyncTimestamp(user.id).then((ts) => {
+      if (!cancelled && ts) setLastSyncedAt(ts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (shouldSkipBackgroundDashboardSync()) return;
     let cancelled = false;
     setSyncing(true);
     syncDashboardOrders(user.id)
