@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { Order, OrderInsert, OrderStatus } from "./db-types";
+import { isVisibleInOrdersList } from "./order-payment-status";
 import {
   getAllOrders,
   setAllOrders,
@@ -533,6 +534,8 @@ export async function getStatsFromCache(
   let ownPending = 0;
 
   for (const o of orders) {
+    if (!isVisibleInOrdersList(o)) continue;
+
     const bookDate = o.booking_date;
     const isOwn = o.user_id === userId;
 
