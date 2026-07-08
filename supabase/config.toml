@@ -1,0 +1,12 @@
+# Supabase Edge Functions
+
+[functions.notify-velo-order-push]
+verify_jwt = false
+
+[functions.poll-velo-order-push]
+verify_jwt = false
+
+# Server polls each client's Velo API key every 2 minutes (push when app is closed).
+# Enable in Dashboard → Edge Functions → poll-velo-order-push → Schedules if cron file is not applied.
+[functions.poll-velo-order-push.cron]
+schedule = "*/2 * * * *"

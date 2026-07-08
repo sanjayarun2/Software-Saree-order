@@ -1,8 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { JWT } from "npm:google-auth-library@9";
+import {
+  sendFcmToTokens,
+  type ServiceAccount,
+} from "./_shared/fcm.ts";
 
 const DEFAULT_SHOP_BASE = "https://sakthi-textiles-shop.vercel.app";
-const CHANNEL_ID = "website-new-orders";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,12 +18,6 @@ type PushRequest = {
   customerName?: string;
   quantity?: number;
   itemSummary?: string;
-};
-
-type ServiceAccount = {
-  project_id: string;
-  client_email: string;
-  private_key: string;
 };
 
 Deno.serve(async (req) => {
@@ -74,8 +70,7 @@ Deno.serve(async (req) => {
           .filter(
             (row) =>
               row.enabled !== false &&
-              normalizeShopBaseUrl(row.api_base_url ?? DEFAULT_SHOP_BASE) ===
-                shopBase
+              normalizeShopBaseUrl(row.api_base_url ?? DEFAULT_SHOP_BASE) === shopBase
           )
           .map((row) => row.user_id as string)
           .filter(Boolean)
@@ -86,65 +81,73 @@ Deno.serve(async (req) => {
       return json({ sent: 0, failed: 0, message: "No Velo users for this shop" });
     }
 
-    const { data: tokenRows, error: tokenError } = await admin
-      .from("push_device_tokens")
-      .select("token")
-      .in("user_id", userIds);
-
-    if (tokenError) {
-      return json({ error: tokenError.message }, 500);
-    }
-
-    const tokens = [
-      ...new Set(
-        (tokenRows ?? [])
-          .map((row) => (row.token as string)?.trim())
-          .filter(Boolean)
-      ),
-    ];
-
-    if (!tokens.length) {
-      return json({ sent: 0, failed: 0, message: "No registered devices" });
-    }
-
     const fcmJson = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON")?.trim();
     if (!fcmJson) {
       return json({ error: "FCM not configured" }, 503);
     }
-
     const serviceAccount = JSON.parse(fcmJson) as ServiceAccount;
-    const accessToken = await getFcmAccessToken(serviceAccount);
-
-    const title = "New website order";
-    const bodyText =
-      quantity > 1
-        ? `${customerName} · ${quantity} items`
-        : itemSummary
-          ? `${customerName} · ${itemSummary}`
-          : customerName;
 
     let sent = 0;
     let failed = 0;
+    let skipped = 0;
 
-    for (const token of tokens) {
-      const ok = await sendFcmMessage({
-        projectId: serviceAccount.project_id,
-        accessToken,
-        token,
-        title,
-        body: bodyText,
-        data: {
-          route: "/orders/",
-          externalOrderId: orderId,
-          customerName,
-          quantity: String(quantity),
-        },
+    for (const userId of userIds) {
+      const { data: existing } = await admin
+        .from("push_notified_orders")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("external_order_id", orderId)
+        .maybeSingle();
+
+      if (existing?.id) {
+        skipped++;
+        continue;
+      }
+
+      const { data: tokenRows, error: tokenError } = await admin
+        .from("push_device_tokens")
+        .select("token")
+        .eq("user_id", userId);
+
+      if (tokenError) {
+        return json({ error: tokenError.message }, 500);
+      }
+
+      const tokens = [
+        ...new Set(
+          (tokenRows ?? [])
+            .map((row) => (row.token as string)?.trim())
+            .filter(Boolean)
+        ),
+      ];
+
+      if (!tokens.length) {
+        continue;
+      }
+
+      const result = await sendFcmToTokens(serviceAccount, tokens, {
+        externalOrderId: orderId,
+        customerName,
+        quantity,
+        itemSummary,
       });
-      if (ok) sent++;
-      else failed++;
+
+      sent += result.sent;
+      failed += result.failed;
+
+      if (result.sent > 0) {
+        await admin.from("push_notified_orders").insert({
+          user_id: userId,
+          external_order_id: orderId,
+        });
+      }
     }
 
-    return json({ sent, failed, orderId });
+    if (sent === 0 && failed === 0 && skipped === 0) {
+      return json({ sent: 0, failed: 0, message: "No registered devices" });
+    }
+
+    return json({ sent, failed, skipped, orderId });
   } catch (e) {
     return json({ error: (e as Error).message || "Push failed" }, 500);
   }
@@ -162,64 +165,6 @@ function normalizeShopBaseUrl(input: string): string {
   } catch {
     return DEFAULT_SHOP_BASE;
   }
-}
-
-async function getFcmAccessToken(sa: ServiceAccount): Promise<string> {
-  const client = new JWT({
-    email: sa.client_email,
-    key: sa.private_key,
-    scopes: ["https://www.googleapis.com/auth/firebase.messaging"],
-  });
-  const creds = await client.authorize();
-  if (!creds.access_token) {
-    throw new Error("Failed to obtain FCM access token");
-  }
-  return creds.access_token;
-}
-
-async function sendFcmMessage(params: {
-  projectId: string;
-  accessToken: string;
-  token: string;
-  title: string;
-  body: string;
-  data: Record<string, string>;
-}): Promise<boolean> {
-  const res = await fetch(
-    `https://fcm.googleapis.com/v1/projects/${params.projectId}/messages:send`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${params.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: {
-          token: params.token,
-          notification: {
-            title: params.title,
-            body: params.body,
-          },
-          data: params.data,
-          android: {
-            priority: "high",
-            notification: {
-              channel_id: CHANNEL_ID,
-              sound: "order_cling",
-              default_vibrate_timings: true,
-            },
-          },
-        },
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.error("[FCM] send failed:", res.status, text);
-    return false;
-  }
-  return true;
 }
 
 function json(body: unknown, status: number) {
