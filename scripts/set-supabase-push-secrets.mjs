@@ -40,3 +40,6 @@ await setSecrets([
   { name: "VELO_PUSH_WEBHOOK_SECRET", value: webhookSecret },
 ]);
 console.log("Supabase edge secrets configured.");
+console.log(
+  "If cron poll fails auth, ensure vault secret velo_push_webhook_secret matches VELO_PUSH_WEBHOOK_SECRET (see schedule_poll_velo_order_push_cron migration)."
+);
