@@ -1,5 +1,5 @@
 import type { Order, OrderInsert } from "./db-types";
-import { normalizeWebsitePaymentStatus } from "./order-payment-status";
+import { normalizeWebsitePaymentStatus, isPaidOrderPayment } from "./order-payment-status";
 import {
   type ApiIntegrationRow,
   DEFAULT_VELO_WEBSITE_BASE_URL,
@@ -437,7 +437,23 @@ async function importOrdersForIntegration(
     );
     const existing = await findImportedWebsiteOrder(userId, externalId);
     const lineItems = mapWebsiteLineItems(raw);
+
+    const summaryFromRaw = (): ImportedWebsiteOrderSummary => ({
+      externalOrderId: externalId,
+      customerName: raw.customer?.name?.trim() || "Customer",
+      quantity: lineItems.length
+        ? totalQuantityFromLineItems(lineItems)
+        : parseProducts(raw).totalQty,
+      createdAt:
+        raw.paidAt?.trim() ||
+        raw.createdAt?.trim() ||
+        raw.orderDate?.trim() ||
+        raw.bookedAt?.trim() ||
+        undefined,
+    });
+
     if (existing) {
+      const wasPaid = isPaidOrderPayment(existing.payment_status);
       const patches: Record<string, unknown> = {};
       if (existing.payment_status !== paymentStatus) {
         patches.payment_status = paymentStatus;
@@ -448,9 +464,20 @@ async function importOrdersForIntegration(
       if (Object.keys(patches).length > 0) {
         await updateOrder(userId, existing.id, patches);
         updated++;
+        const nowPaid = isPaidOrderPayment(
+          (patches.payment_status as typeof paymentStatus) ?? existing.payment_status
+        );
+        if (!wasPaid && nowPaid) {
+          newOrders.push(summaryFromRaw());
+        }
       } else {
         skipped++;
       }
+      continue;
+    }
+
+    if (!isPaidOrderPayment(paymentStatus)) {
+      skipped++;
       continue;
     }
 

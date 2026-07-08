@@ -1,6 +1,7 @@
 import type { PluginListenerHandle } from "@capacitor/core";
 import { Capacitor } from "@capacitor/core";
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
+import { requestOpenOrdersPage } from "./order-notification-navigation";
 
 export type ImportedWebsiteOrderSummary = {
   externalOrderId: string;
@@ -17,7 +18,6 @@ const DEDUPE_KEY = "velo_order_alert_notified_v1";
 const DEDUPE_MAX = 400;
 const DEDUPE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CHANNEL_ID = "website-new-orders";
-const ORDERS_PATH = "/orders/";
 
 type DedupeEntry = { id: string; at: number };
 
@@ -142,11 +142,7 @@ export async function requestOrderAlertPermission(): Promise<boolean> {
 }
 
 function openOrdersPage() {
-  if (typeof window === "undefined") return;
-  const target = `${window.location.origin}${ORDERS_PATH}`;
-  if (window.location.pathname !== ORDERS_PATH) {
-    window.location.href = target;
-  }
+  requestOpenOrdersPage({ sync: true });
 }
 
 async function showNativeNotification(order: ImportedWebsiteOrderSummary, title: string, body: string) {
@@ -161,7 +157,7 @@ async function showNativeNotification(order: ImportedWebsiteOrderSummary, title:
           body,
           channelId: CHANNEL_ID,
           sound: "order_cling.wav",
-          extra: { route: ORDERS_PATH },
+          extra: { route: "/orders/" },
         },
       ],
     });
@@ -281,8 +277,11 @@ export function initOrderAlertService(): void {
       const { LocalNotifications } = await import("@capacitor/local-notifications");
       const tap = await LocalNotifications.addListener("localNotificationActionPerformed", (event) => {
         const route = (event.notification.extra as { route?: string } | undefined)?.route;
-        if (route) window.location.href = `${window.location.origin}${route}`;
-        else openOrdersPage();
+        if (route?.startsWith("/orders")) {
+          requestOpenOrdersPage({ sync: true });
+        } else {
+          openOrdersPage();
+        }
       });
       listenerHandles.push(tap);
     } catch (e) {

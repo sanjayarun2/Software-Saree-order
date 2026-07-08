@@ -12,6 +12,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppShell } from "@/components/AppShell";
 import { OrderAlertToast } from "@/components/OrderAlertToast";
 import { SplashController } from "@/lib/SplashController";
+import { NativeOAuthBridge } from "@/components/NativeOAuthBridge";
+import { OrderNotificationBridge } from "@/components/OrderNotificationBridge";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -46,6 +48,8 @@ export default function RootLayout({
         <ErrorBoundary>
           <ThemeProvider>
             <AuthProvider>
+              <NativeOAuthBridge />
+              <OrderNotificationBridge />
               <LanguageProvider>
                 <SplashController>
                   <ToastProvider>

@@ -39,6 +39,7 @@ import {
   OrderDetailSheet,
   orderDetailSheetLabels,
 } from "@/components/orders/OrderDetailSheet";
+import { supabase } from "@/lib/supabase";
 
 function getAddressSummary(text: string, maxLen = 45): string {
   const first = (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "";
@@ -215,7 +216,18 @@ export default function OrdersPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace("/login/");
+    if (authLoading) return;
+    if (user) return;
+
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
+      if (!session?.user) router.replace("/login/");
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, authLoading, router]);
 
   const fetchOrders = React.useCallback(

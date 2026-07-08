@@ -13,7 +13,8 @@ import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { useGoogleSignIn } from "@/lib/use-google-sign-in";
 import { supabase } from "@/lib/supabase";
-import { isInvalidLoginCredentials, resolvePostAuthRoute } from "@/lib/post-auth-route";
+import { classifyLoginCredentialFailure } from "@/lib/login-email-check";
+import { isInvalidLoginCredentials, resolvePostLoginRoute } from "@/lib/post-auth-route";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -32,7 +33,7 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (!authLoading && user) {
-      void resolvePostAuthRoute(user.id).then((path) => router.replace(path));
+      void resolvePostLoginRoute(user.id).then((path) => router.replace(path));
     }
   }, [user, authLoading, router]);
 
@@ -68,8 +69,17 @@ export default function LoginPage() {
         return;
       }
       if (isInvalidLoginCredentials(err.message || "")) {
-        setRegisterNudge(true);
-        setError(t("No account found for this email. Please register."));
+        const kind = await classifyLoginCredentialFailure(email);
+        if (kind === "wrong_password") {
+          setError(t("Incorrect password. Please try again or use Forgot Password."));
+          return;
+        }
+        if (kind === "email_not_registered") {
+          setRegisterNudge(true);
+          setError(t("This email is not registered. Please register."));
+          return;
+        }
+        setError(t("Incorrect email or password."));
         return;
       }
       setError(err.message || `${t("Login")} ${t("Failed")}.`);
@@ -79,7 +89,7 @@ export default function LoginPage() {
     const { data: { session } } = await supabase.auth.getSession();
     setLoading(false);
     if (session?.user) {
-      const path = await resolvePostAuthRoute(session.user.id);
+      const path = await resolvePostLoginRoute(session.user.id);
       router.replace(path);
     } else {
       router.replace("/dashboard/");

@@ -13,7 +13,8 @@ import {
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
 import { shouldInitNativePush } from "./fcm-push-config";
 
-const ORDERS_PATH = "/orders/";
+import { requestOpenOrdersPage } from "./order-notification-navigation";
+
 let initialized = false;
 let currentUserId: string | null = null;
 let currentToken: string | null = null;
@@ -27,11 +28,7 @@ function pushPlatform(): PushPlatform {
 }
 
 function openOrdersPage() {
-  if (typeof window === "undefined") return;
-  const target = `${window.location.origin}${ORDERS_PATH}`;
-  if (window.location.pathname !== ORDERS_PATH) {
-    window.location.href = target;
-  }
+  requestOpenOrdersPage({ sync: true });
 }
 
 function orderFromPushData(data: Record<string, unknown>): ImportedWebsiteOrderSummary | null {
@@ -103,14 +100,8 @@ export async function initPushRegistration(userId: string): Promise<void> {
 
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
-      (action) => {
-        const data = (action.notification.data ?? {}) as Record<string, unknown>;
-        const route = String(data.route ?? ORDERS_PATH);
-        if (typeof window !== "undefined") {
-          window.location.href = `${window.location.origin}${route.startsWith("/") ? route : `/${route}`}`;
-        } else {
-          openOrdersPage();
-        }
+      () => {
+        openOrdersPage();
       }
     );
 

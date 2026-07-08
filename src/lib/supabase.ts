@@ -16,6 +16,7 @@ const storage = isCapacitorNative() ? capacitorStorage : undefined;
 
 function shouldDetectSessionInUrl(): boolean {
   if (typeof window === "undefined") return false;
+  if (isCapacitorNative()) return false;
   return !window.location.pathname.includes("/auth/callback");
 }
 

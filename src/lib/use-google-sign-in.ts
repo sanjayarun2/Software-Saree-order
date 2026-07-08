@@ -7,7 +7,7 @@ import type { GoogleAuthIntent } from "@/lib/google-auth-intent";
 import { stageGoogleAuthIntent } from "@/lib/google-auth-intent";
 import { getGoogleOAuthRedirectUrl, startGoogleOAuth } from "@/lib/google-oauth-flow";
 import { finishGoogleAuthSession } from "@/lib/google-auth-finish";
-import { supabase } from "@/lib/supabase";
+import { waitForAuthSession } from "@/lib/native-oauth-handler";
 import { useLanguage } from "@/lib/language-context";
 
 export function useGoogleSignIn() {
@@ -34,22 +34,18 @@ export function useGoogleSignIn() {
           return { error: null };
         }
 
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          return { error: sessionError.message };
+        const session = await waitForAuthSession(4000);
+        if (!session?.user) {
+          return { error: t("Google sign-in failed. Please try again.") };
         }
 
-        if (session?.user) {
-          const route = await finishGoogleAuthSession(session.user);
-          if (!route.ok) {
-            const q = route.query ? `?${route.query}` : "";
-            router.replace(`${route.path}${q}`);
-            return { error: null };
-          }
-          router.replace(route.path);
+        const route = await finishGoogleAuthSession(session.user);
+        if (!route.ok) {
+          const q = route.query ? `?${route.query}` : "";
+          router.replace(`${route.path}${q}`);
           return { error: null };
         }
-
+        router.replace(route.path);
         return { error: null };
       } finally {
         setGoogleLoading(false);

@@ -52,6 +52,16 @@
                 <data android:scheme="sareeorder" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sareeorder"
+                    android:host="auth"
+                    android:pathPrefix="/callback" />
+            </intent-filter>
+
         </activity>
 
         <!-- Optional: backported Photo Picker on older Android 11/12 with Google Play -->

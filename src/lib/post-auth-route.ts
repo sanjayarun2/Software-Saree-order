@@ -3,6 +3,7 @@ import {
   clearPendingMobileCompletion,
 } from "./mobile-completion-gate";
 import { userProfileHasMobile } from "./google-auth-mobile";
+import { consumePendingNavigation } from "./pending-navigation";
 
 export type PostAuthPath = "/complete-mobile/" | "/dashboard/";
 
@@ -19,6 +20,13 @@ export async function resolvePostAuthRoute(userId: string): Promise<PostAuthPath
 
   clearPendingMobileCompletion();
   return "/dashboard/";
+}
+
+/** Post-login destination: pending notification/deep link first, then mobile gate, then dashboard. */
+export async function resolvePostLoginRoute(userId: string): Promise<string> {
+  const pending = consumePendingNavigation();
+  if (pending) return pending;
+  return resolvePostAuthRoute(userId);
 }
 
 export function isInvalidLoginCredentials(message: string): boolean {

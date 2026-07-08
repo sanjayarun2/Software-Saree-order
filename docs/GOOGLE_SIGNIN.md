@@ -24,4 +24,17 @@ The custom scheme `sareeorder://` is registered in `AndroidManifest.xml` so Goog
 
 ## Native OAuth
 
-On Capacitor Android/iOS the app uses `@capacitor/browser` + `appUrlOpen` deep link (industry standard for Supabase PKCE in hybrid apps).
+On Capacitor Android/iOS the app uses `@capacitor/browser` + `sareeorder://auth/callback` deep link (PKCE).
+
+**Robust return handling:**
+- `NativeOAuthBridge` (app root) listens for `appUrlOpen` and `getLaunchUrl()` so cold-start returns still complete sign-in.
+- OAuth intent is stored in `localStorage` (survives WebView reload).
+- PKCE code exchange has a timeout; corrupted redirect URLs (`sareeorder:?code=`) are normalized.
+
+**Supabase redirect URLs** must include exactly:
+
+```
+sareeorder://auth/callback
+```
+
+(not bare `sareeorder://` — required for reliable PKCE on mobile)
