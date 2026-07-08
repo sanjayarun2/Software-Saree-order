@@ -18,13 +18,22 @@ Use the **Web application** OAuth client ID from Google Cloud Console (same ID c
 
 1. **OAuth consent screen** — configured and published (or test users added).
 2. **Credentials → Web client** — copy Client ID → `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
-3. **Credentials → Android client**:
+3. **Credentials → Android client** (required for native account picker without error `[16]`):
    - Package name: `com.sareeorder.app`
-   - SHA-1: from your signing key (debug for local APK, release for production)
+   - SHA-1: from your signing key (debug for CI APK, release for production)
 
-   Get debug SHA-1:
+   If SHA is added only via Firebase API/CLI, you may still need to **create the Android OAuth client manually** in [Google Cloud Credentials](https://console.cloud.google.com/apis/credentials?project=helical-patrol-499311-d0), then re-download `google-services.json`.
+
+   Validate locally:
+
+   ```powershell
+   .\scripts\validate-google-signin.ps1
+   ```
+
+   Fix helper (refresh config after manual Android client creation):
+
    ```bash
-   cd android && ./gradlew signingReport
+   node scripts/fix-google-android-oauth.mjs
    ```
 
 4. Supabase Google provider must use the **same Web client ID** and matching client secret.
@@ -39,7 +48,7 @@ Use the **Web application** OAuth client ID from Google Cloud Console (same ID c
 https://software-saree-order.vercel.app/auth/callback/
 ```
 
-Native APK does **not** need `sareeorder://` for Google sign-in anymore (browser OAuth is fallback only).
+Native APK uses native account picker first. If Google returns error `[16]`, the app **automatically falls back** to in-app browser OAuth (`sareeorder://auth/callback`). Add that URL in Supabase → Authentication → URL Configuration → Redirect URLs.
 
 ### 4. GitHub Actions (APK build)
 

@@ -63,6 +63,25 @@ if (-not (Test-Path $gsPath)) {
   } else {
     Pass "Web client ID matches expected value"
   }
+
+  $androidClients = @($gs.client[0].oauth_client | Where-Object { $_.client_type -eq 1 })
+  if ($androidClients.Count -eq 0) {
+    Warn "No Android OAuth client (type 1) in google-services.json - native picker may fail with [16]"
+    Warn "Create Android OAuth client in GCP Console, or rely on browser fallback in latest app build"
+  } else {
+    $matchedAndroid = $false
+    foreach ($ac in $androidClients) {
+      $sha = $ac.android_info.certificate_hash
+      $pkg = $ac.android_info.package_name
+      if ($pkg -eq $PackageName -and $localSha1 -and (Normalize-Sha1 $sha) -eq (Normalize-Sha1 $localSha1)) {
+        $matchedAndroid = $true
+        Pass "Android OAuth client linked to package + SHA-1"
+      }
+    }
+    if (-not $matchedAndroid) {
+      Warn "Android OAuth client(s) present but none match current package + SHA-1"
+    }
+  }
 }
 
 # 3) Env / build config
@@ -124,7 +143,7 @@ if ($Failed) {
   exit 1
 }
 
-Write-Host "Validation PASSED. Install latest APK, open login, tap Continue with Google." -ForegroundColor Green
-Write-Host "If sign-in still fails, wait 2-5 minutes after SHA registration and retry." -ForegroundColor White
+Write-Host "Validation PASSED (see WARN above for native Android OAuth gaps)." -ForegroundColor Green
+Write-Host "Install latest APK. Native sign-in uses account picker; if [16], app falls back to browser OAuth." -ForegroundColor White
 Write-Host ""
 exit 0

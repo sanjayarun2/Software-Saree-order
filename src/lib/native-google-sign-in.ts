@@ -52,6 +52,8 @@ function isGoogleReauthFailed(message: string): boolean {
   return /\[16\]|account reauth failed|reauth.*failed/i.test(message);
 }
 
+export { isGoogleReauthFailed };
+
 function normalizeGoogleSignInError(message: string): string {
   if (/cannot use scopes without modifying the main activity/i.test(message)) {
     return "Google sign-in is not configured for this app build. Please install the latest update.";
