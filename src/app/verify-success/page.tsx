@@ -2,9 +2,11 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppLogo } from "@/components/AppLogo";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/language-context";
+import { resolvePostAuthRoute } from "@/lib/post-auth-route";
 
 const APP_SCHEME = "sareeorder://";
 const APP_PACKAGE = "com.sareeorder.app";
@@ -31,6 +33,7 @@ function hasVerificationInHash(): boolean {
 
 export default function VerifySuccessPage() {
   const { t } = useLanguage();
+  const router = useRouter();
   const [openAppUrl, setOpenAppUrl] = useState("/dashboard/");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -46,19 +49,32 @@ export default function VerifySuccessPage() {
 
     // 1) Hash: handle browsers that don't trigger full reload (cache / frozen tab)
     if (hasVerificationInHash()) {
-      showModal();
+      void supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          void resolvePostAuthRoute(session.user.id).then((path) => {
+            if (path === "/complete-mobile/") router.replace(path);
+            else showModal();
+          });
+        }
+      });
       return;
     }
 
     // 2) Auth state: Supabase may have already applied the session from the link
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        showModal();
+      if (event === "SIGNED_IN" && session?.user) {
+        void resolvePostAuthRoute(session.user.id).then((path) => {
+          if (path === "/complete-mobile/") {
+            router.replace(path);
+          } else {
+            showModal();
+          }
+        });
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [showModal]);
+  }, [showModal, router]);
 
   // Re-check hash on focus (e.g. user returns to tab after opening link in same tab)
   useEffect(() => {
@@ -67,7 +83,7 @@ export default function VerifySuccessPage() {
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [showModal]);
+  }, [showModal, router]);
 
   return (
     <>

@@ -234,6 +234,7 @@ const TA: Record<string, string> = {
   "Add your mobile number": "உங்கள் மொபைல் எண்ணை சேர்க்கவும்",
   "Required to complete signup. You can continue once your number is saved.": "பதிவை முடிக்க மொபைல் எண் அவசியம். சேமித்த பிறகு தொடரலாம்.",
   "Required for email signup.": "மின்னஞ்சல் பதிவுக்கு அவசியம்.",
+  "No account found for this email. Please register.": "இந்த மின்னஞ்சலுக்கு கணக்கு இல்லை. பதிவு செய்யவும்.",
   "Don't have an account?": "கணக்கு இல்லையா?",
   "Register": "பதிவு செய்",
   "Already have an account?": "ஏற்கனவே கணக்கு உள்ளதா?",

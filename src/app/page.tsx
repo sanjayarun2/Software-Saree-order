@@ -4,8 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
-const RETURNING_KEY = "saree_app_returning";
-
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -23,11 +21,13 @@ export default function Home() {
       router.replace("/verify-success/");
       return;
     }
-    if (user) router.replace("/dashboard/");
-    else {
-      const returning = typeof window !== "undefined" && localStorage.getItem(RETURNING_KEY);
-      router.replace(returning ? "/login/" : "/register/");
+    if (user) {
+      void import("@/lib/post-auth-route").then(({ resolvePostAuthRoute }) => {
+        void resolvePostAuthRoute(user.id).then((path) => router.replace(path));
+      });
+      return;
     }
+    router.replace("/login/");
   }, [user, loading, router]);
 
   return (

@@ -15,10 +15,12 @@ The custom scheme `sareeorder://` is registered in `AndroidManifest.xml` so Goog
 
 | Screen | Google | Mobile |
 |--------|--------|--------|
-| **Login** | Primary; no mobile asked | — |
-| **Register (email)** | Primary for Google signup | Required on email form only |
-| **Register (Google)** | After OAuth → `/complete-mobile/` if new user | Mandatory gate; back blocked |
-| **Login (Google)** | Existing users → dashboard | Never asked |
+| **App open** | — | Lands on **Login** first |
+| **Login** | Primary; no mobile | — |
+| **Login fail (unknown email)** | — | **Register** link nudges |
+| **Register (email)** | Google first | Popup **after** verify + sign-in |
+| **Register (Google)** | After OAuth → `/complete-mobile/` if new | Mandatory gate |
+| **Login (existing)** | → dashboard | Never asked |
 
 ## Native OAuth
 

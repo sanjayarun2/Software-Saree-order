@@ -34,7 +34,7 @@ export default function CompleteMobilePage() {
     if (authLoading) return;
 
     if (!user) {
-      router.replace("/register/");
+      router.replace("/login/");
       return;
     }
 

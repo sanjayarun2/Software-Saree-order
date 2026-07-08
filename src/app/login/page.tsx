@@ -12,6 +12,8 @@ import { AUTH_ERROR_DEVICE_LIMIT, consumeDeviceLimitRedirectFlag } from "@/lib/u
 import { WHATSAPP_SUPPORT_GROUP_URL } from "@/lib/support-links";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { useGoogleSignIn } from "@/lib/use-google-sign-in";
+import { supabase } from "@/lib/supabase";
+import { isInvalidLoginCredentials, resolvePostAuthRoute } from "@/lib/post-auth-route";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -21,6 +23,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deviceLimit, setDeviceLimit] = useState(false);
+  const [registerNudge, setRegisterNudge] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, user, loading: authLoading } = useAuth();
   const { googleLoading, startGoogleSignIn } = useGoogleSignIn();
@@ -28,7 +31,9 @@ export default function LoginPage() {
   const router = useRouter();
 
   React.useEffect(() => {
-    if (!authLoading && user) router.replace("/dashboard/");
+    if (!authLoading && user) {
+      void resolvePostAuthRoute(user.id).then((path) => router.replace(path));
+    }
   }, [user, authLoading, router]);
 
   React.useEffect(() => {
@@ -36,6 +41,12 @@ export default function LoginPage() {
       setDeviceLimit(true);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!registerNudge) return;
+    const t = window.setTimeout(() => setRegisterNudge(false), 8000);
+    return () => window.clearTimeout(t);
+  }, [registerNudge]);
 
   const openWhatsAppSupport = () => {
     if (typeof window !== "undefined") {
@@ -47,6 +58,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setDeviceLimit(false);
+    setRegisterNudge(false);
     setLoading(true);
     const { error: err } = await signIn(email, password);
     if (err) {
@@ -55,16 +67,29 @@ export default function LoginPage() {
         setDeviceLimit(true);
         return;
       }
+      if (isInvalidLoginCredentials(err.message || "")) {
+        setRegisterNudge(true);
+        setError(t("No account found for this email. Please register."));
+        return;
+      }
       setError(err.message || `${t("Login")} ${t("Failed")}.`);
       return;
     }
+
+    const { data: { session } } = await supabase.auth.getSession();
     setLoading(false);
-    router.replace("/dashboard/");
+    if (session?.user) {
+      const path = await resolvePostAuthRoute(session.user.id);
+      router.replace(path);
+    } else {
+      router.replace("/dashboard/");
+    }
   };
 
   const handleGoogleSignIn = async () => {
     setError(null);
     setDeviceLimit(false);
+    setRegisterNudge(false);
     const { error: err } = await startGoogleSignIn("login");
     if (err) setError(err);
   };
@@ -198,7 +223,12 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             {t("Don't have an account?")}{" "}
-            <Link href="/register/" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+            <Link
+              href="/register/"
+              className={`inline-block font-medium text-primary-600 hover:underline dark:text-primary-400 ${
+                registerNudge ? "animate-register-nudge rounded-md px-1 ring-2 ring-primary-400 ring-offset-2 dark:ring-primary-500" : ""
+              }`}
+            >
               {t("Register")}
             </Link>
           </p>

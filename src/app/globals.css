@@ -162,3 +162,20 @@ img[src*="icon.svg"] {
   -moz-osx-font-smoothing: grayscale;
   shape-rendering: geometricPrecision;
 }
+
+@keyframes register-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+.animate-register-nudge {
+  animation: register-nudge 0.55s ease-in-out 4;
+}

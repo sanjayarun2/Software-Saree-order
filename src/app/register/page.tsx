@@ -2,40 +2,35 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppLogo } from "@/components/AppLogo";
-import { getRecentMobiles, saveMobile } from "@/lib/mobile-storage";
-import { isValidMobile, normalizeMobileInput } from "@/lib/google-auth-mobile";
 import { getGmailDeepLinkUrl, getGmailWebInboxUrlForEmail, openGmailApp } from "@/lib/gmail-deep-link";
 import { useToast } from "@/lib/toast-context";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
-import { MobileNumberField } from "@/components/MobileNumberField";
 import { useGoogleSignIn } from "@/lib/use-google-sign-in";
+import { supabase } from "@/lib/supabase";
+import { markPendingMobileCompletion } from "@/lib/mobile-completion-gate";
 
 const OPEN_GMAIL_DEBOUNCE_MS = 600;
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mobile, setMobile] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [recentMobiles, setRecentMobiles] = useState<string[]>([]);
   const [openGmailUrl, setOpenGmailUrl] = useState("https://mail.google.com");
   const openGmailLastAt = useRef(0);
   const { signUp } = useAuth();
   const { googleLoading: googleAuthLoading, startGoogleSignIn } = useGoogleSignIn();
   const { t } = useLanguage();
   const { toast } = useToast();
-
-  useEffect(() => {
-    setRecentMobiles(getRecentMobiles());
-  }, []);
+  const router = useRouter();
 
   useEffect(() => {
     setOpenGmailUrl(getGmailDeepLinkUrl());
@@ -44,13 +39,8 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const trimmedMobile = normalizeMobileInput(mobile);
-    if (!isValidMobile(trimmedMobile)) {
-      setError(t("Enter a valid mobile number (at least 10 digits)."));
-      return;
-    }
     setLoading(true);
-    const { error: err, user: newUser } = await signUp(email, password, { mobile: trimmedMobile });
+    const { error: err, user: newUser } = await signUp(email, password);
     setLoading(false);
     if (err) {
       const msg = err.message || "";
@@ -69,13 +59,18 @@ export default function RegisterPage() {
       setError("EMAIL_EXISTS");
       return;
     }
-    if (trimmedMobile) {
-      saveMobile(trimmedMobile);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("saree_pending_mobile", trimmedMobile);
-      }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("saree_app_returning", "1");
     }
-    if (typeof window !== "undefined") localStorage.setItem("saree_app_returning", "1");
+    markPendingMobileCompletion();
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      router.replace("/complete-mobile/");
+      return;
+    }
+
     setSuccess(true);
   };
 
@@ -92,19 +87,12 @@ export default function RegisterPage() {
     openGmailLastAt.current = now;
 
     toast("Opening Gmail… Please wait a moment.");
-    console.log("[GMAIL] Open Gmail button clicked");
-    console.log("[GMAIL] Current email:", email);
-    console.log("[GMAIL] User agent:", navigator.userAgent);
 
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    console.log("[GMAIL] Detected platform (isMobile):", { isMobile });
-
     if (isMobile) {
-      console.log("[GMAIL] Opening Gmail via openGmailApp(email) (system browser / app)");
       openGmailApp(email);
     } else {
       const url = getGmailWebInboxUrlForEmail(email);
-      console.log("[GMAIL] Using web Gmail URL:", url);
       window.open(url, "_blank", "noopener,noreferrer");
     }
   };
@@ -129,7 +117,7 @@ export default function RegisterPage() {
             {success ? (
               <div className="relative z-10 space-y-4">
                 <p className="rounded-bento bg-green-50 p-4 text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                  Check your inbox! We sent a verification link to <strong>{email}</strong>. If you don&apos;t see it, please check your Spam folder.
+                  Check your inbox! We sent a verification link to <strong>{email}</strong>. After you verify, sign in and we&apos;ll ask for your mobile number once.
                 </p>
                 <button
                   type="button"
@@ -181,71 +169,61 @@ export default function RegisterPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {t("Email")}
-                  </label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder={t("Email")}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    inputMode="email"
-                    autoComplete="email"
-                    autoCorrect="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    className="w-full rounded-bento border border-slate-300 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {t("Password")}
-                  </label>
-                  <div className="relative">
+                  <div>
+                    <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {t("Email")}
+                    </label>
                     <input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder={t("Password")}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder={t("Email")}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
-                      minLength={6}
-                      className="w-full rounded-bento border border-slate-300 px-4 py-3 pr-12 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      autoComplete="new-password"
+                      inputMode="email"
+                      autoComplete="email"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      className="w-full rounded-bento border border-slate-300 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                      aria-label={showPassword ? t("Hide password") : t("Show password")}
-                    >
-                      {showPassword ? "🙈" : "👁"}
-                    </button>
                   </div>
-                </div>
 
-                <MobileNumberField
-                  id="mobile"
-                  value={mobile}
-                  onChange={setMobile}
-                  recentMobiles={recentMobiles}
-                  required
-                  disabled={loading || googleAuthLoading}
-                  helperText={t("Required for email signup.")}
-                />
+                  <div>
+                    <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {t("Password")}
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder={t("Password")}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        className="w-full rounded-bento border border-slate-300 px-4 py-3 pr-12 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
+                        aria-label={showPassword ? t("Hide password") : t("Show password")}
+                      >
+                        {showPassword ? "🙈" : "👁"}
+                      </button>
+                    </div>
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || googleAuthLoading}
-                  className="w-full min-h-touch rounded-bento border border-primary-500 bg-white px-4 py-3 font-semibold text-primary-600 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
-                >
-                  {loading ? t("Creating account…") : t("Register with email")}
-                </button>
+                  <button
+                    type="submit"
+                    disabled={loading || googleAuthLoading}
+                    className="w-full min-h-touch rounded-bento border border-primary-500 bg-white px-4 py-3 font-semibold text-primary-600 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
+                  >
+                    {loading ? t("Creating account…") : t("Register with email")}
+                  </button>
                 </form>
               </div>
             )}
