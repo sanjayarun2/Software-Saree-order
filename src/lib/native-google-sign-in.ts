@@ -48,6 +48,33 @@ function isUserCancelled(message: string): boolean {
   return /cancel|cancelled|canceled|12501|user abort|user denied|dismiss/i.test(message);
 }
 
+function normalizeGoogleSignInError(message: string): string {
+  if (/cannot use scopes without modifying the main activity/i.test(message)) {
+    return "Google sign-in is not configured for this app build. Please install the latest update.";
+  }
+  if (/28444|developer console is not set up correctly/i.test(message)) {
+    return "Google sign-in is not set up for this app. Contact support if this continues.";
+  }
+  if (/client id is not set|webclientid/i.test(message)) {
+    return "Google sign-in is not configured. Missing Web Client ID.";
+  }
+  return message;
+}
+
+/** Login options for Credential Manager / Google Sign-In. */
+function buildGoogleLoginOptions(nonceDigest: string): {
+  nonce: string;
+  forcePrompt?: boolean;
+} {
+  const options: { nonce: string; forcePrompt?: boolean } = { nonce: nonceDigest };
+  // Do not pass `scopes` on Android: the plugin already requests openid + email + profile.
+  // Custom scopes require ModifiedMainActivityForSocialLoginPlugin (see MainActivity.java).
+  if (Capacitor.getPlatform() === "ios") {
+    options.forcePrompt = true;
+  }
+  return options;
+}
+
 export async function ensureNativeGoogleAuthInitialized(): Promise<void> {
   if (!Capacitor.isNativePlatform() || initialized) return;
 
@@ -85,11 +112,7 @@ export async function signInWithNativeGoogle(
 
     const response = await SocialLogin.login({
       provider: "google",
-      options: {
-        scopes: ["email", "profile"],
-        nonce: nonceDigest,
-        forcePrompt: Capacitor.getPlatform() === "ios",
-      },
+      options: buildGoogleLoginOptions(nonceDigest),
     });
 
     if (response.provider !== "google") {
@@ -131,8 +154,9 @@ export async function signInWithNativeGoogle(
 
     return { error: null, session: data.session };
   } catch (e) {
-    const message = (e as Error).message || "Google sign-in failed.";
-    if (isUserCancelled(message)) {
+    const raw = (e as Error).message || "Google sign-in failed.";
+    const message = normalizeGoogleSignInError(raw);
+    if (isUserCancelled(message) || isUserCancelled(raw)) {
       return { error: new Error("Google sign-in was cancelled."), session: null };
     }
     return { error: new Error(message), session: null };
