@@ -48,9 +48,16 @@ function isUserCancelled(message: string): boolean {
   return /cancel|cancelled|canceled|12501|user abort|user denied|dismiss/i.test(message);
 }
 
+function isGoogleReauthFailed(message: string): boolean {
+  return /\[16\]|account reauth failed|reauth.*failed/i.test(message);
+}
+
 function normalizeGoogleSignInError(message: string): string {
   if (/cannot use scopes without modifying the main activity/i.test(message)) {
     return "Google sign-in is not configured for this app build. Please install the latest update.";
+  }
+  if (isGoogleReauthFailed(message)) {
+    return "Google could not verify this app with your account. Update the app, wait a minute, then try again.";
   }
   if (/28444|developer console is not set up correctly/i.test(message)) {
     return "Google sign-in is not set up for this app. Contact support if this continues.";
@@ -61,12 +68,17 @@ function normalizeGoogleSignInError(message: string): string {
   return message;
 }
 
-/** Login options for Credential Manager / Google Sign-In. */
-function buildGoogleLoginOptions(nonceDigest: string): {
-  nonce: string;
+type GoogleLoginOptions = {
+  nonce?: string;
   forcePrompt?: boolean;
-} {
-  const options: { nonce: string; forcePrompt?: boolean } = { nonce: nonceDigest };
+};
+
+/** Login options for Credential Manager / Google Sign-In. */
+function buildGoogleLoginOptions(nonceDigest?: string): GoogleLoginOptions {
+  const options: GoogleLoginOptions = {};
+  if (nonceDigest) {
+    options.nonce = nonceDigest;
+  }
   // Do not pass `scopes` on Android: the plugin already requests openid + email + profile.
   // Custom scopes require ModifiedMainActivityForSocialLoginPlugin (see MainActivity.java).
   if (Capacitor.getPlatform() === "ios") {
@@ -97,7 +109,8 @@ export async function ensureNativeGoogleAuthInitialized(): Promise<void> {
  * Native Google account picker → ID token → Supabase session (no browser).
  */
 export async function signInWithNativeGoogle(
-  retry = false
+  retry = false,
+  useNonce = true
 ): Promise<{ error: Error | null; session: Session | null }> {
   if (!Capacitor.isNativePlatform()) {
     return {
@@ -108,11 +121,11 @@ export async function signInWithNativeGoogle(
 
   try {
     await ensureNativeGoogleAuthInitialized();
-    const { rawNonce, nonceDigest } = await getNoncePair();
+    const noncePair = useNonce ? await getNoncePair() : null;
 
     const response = await SocialLogin.login({
       provider: "google",
-      options: buildGoogleLoginOptions(nonceDigest),
+      options: buildGoogleLoginOptions(noncePair?.nonceDigest),
     });
 
     if (response.provider !== "google") {
@@ -135,8 +148,8 @@ export async function signInWithNativeGoogle(
     };
 
     const payload = decodeJwtPayload(online.idToken);
-    if (payload?.nonce) {
-      signInOptions.nonce = rawNonce;
+    if (noncePair && payload?.nonce) {
+      signInOptions.nonce = noncePair.rawNonce;
     }
 
     const { data, error } = await supabase.auth.signInWithIdToken(signInOptions);
@@ -147,7 +160,7 @@ export async function signInWithNativeGoogle(
         } catch {
           /* ignore */
         }
-        return signInWithNativeGoogle(true);
+        return signInWithNativeGoogle(true, useNonce);
       }
       return { error: new Error(error.message), session: null };
     }
@@ -155,6 +168,14 @@ export async function signInWithNativeGoogle(
     return { error: null, session: data.session };
   } catch (e) {
     const raw = (e as Error).message || "Google sign-in failed.";
+    if (!retry && isGoogleReauthFailed(raw)) {
+      try {
+        await SocialLogin.logout({ provider: "google" });
+      } catch {
+        /* ignore */
+      }
+      return signInWithNativeGoogle(true, false);
+    }
     const message = normalizeGoogleSignInError(raw);
     if (isUserCancelled(message) || isUserCancelled(raw)) {
       return { error: new Error("Google sign-in was cancelled."), session: null };
