@@ -8,6 +8,7 @@ import {
 } from "./push-device-tokens-supabase";
 import {
   notifyNewWebsiteOrders,
+  ensureOrderNotificationChannel,
   type ImportedWebsiteOrderSummary,
 } from "./order-alert-service";
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
@@ -64,6 +65,8 @@ export async function initPushRegistration(userId: string): Promise<void> {
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
+    await ensureOrderNotificationChannel();
+
     const perm = await PushNotifications.checkPermissions();
     if (perm.receive === "prompt") {
       await PushNotifications.requestPermissions();
@@ -100,7 +103,13 @@ export async function initPushRegistration(userId: string): Promise<void> {
 
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
-      () => {
+      (action) => {
+        if (!readOrderAlertsEnabled()) return;
+        const data = (action.notification?.data ?? {}) as Record<string, unknown>;
+        const order = orderFromPushData(data);
+        if (order) {
+          void notifyNewWebsiteOrders([order], { fromPush: true });
+        }
         openOrdersPage();
       }
     );

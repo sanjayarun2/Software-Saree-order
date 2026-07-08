@@ -128,6 +128,10 @@ async function ensureNativeChannel(): Promise<void> {
   }
 }
 
+export async function ensureOrderNotificationChannel(): Promise<void> {
+  await ensureNativeChannel();
+}
+
 export async function requestOrderAlertPermission(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return true;
   try {
