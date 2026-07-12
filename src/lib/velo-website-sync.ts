@@ -22,6 +22,7 @@ import {
   lineItemsFromVeloApiItems,
   totalQuantityFromLineItems,
 } from "./website-order-line-items";
+import { buildWebsiteToAddress } from "./pdf-address-sanitize";
 
 const EPOCH_SINCE = new Date(0).toISOString();
 const MAX_RECIPIENT_LEN = 600;
@@ -187,24 +188,20 @@ function formatAddressField(address: VeloWebsiteOrderPayload["address"]): string
   return String(address).trim();
 }
 
-function buildRecipientDetails(order: VeloWebsiteOrderPayload, externalId: string): string {
-  const parts: string[] = [];
-  const customerName = order.customer?.name?.trim();
-  if (customerName) parts.push(customerName);
+function buildRecipientDetails(order: VeloWebsiteOrderPayload, _externalId: string): string {
+  const mobile =
+    order.customer?.mobile?.trim() ||
+    order.customer?.phone?.trim() ||
+    "";
 
-  const addr = formatAddressField(order.address);
-  if (addr) parts.push(addr);
-
-  const { productLines } = parseProducts(order);
-  if (productLines.length > 0) {
-    parts.push("---");
-    parts.push("Items:");
-    parts.push(...productLines);
-  }
-
-  const idChunks = externalId.match(/.{1,12}/g) ?? [externalId];
-  parts.push(`Web # ${idChunks.join(" ")}`);
-  return parts.join("\n").slice(0, MAX_RECIPIENT_LEN);
+  // TO for labels/app: name + address only — no Web #, no Items block.
+  // Mob No is always the last separate line when mobile is present.
+  return buildWebsiteToAddress({
+    customerName: order.customer?.name?.trim() || null,
+    addressText: formatAddressField(order.address) || null,
+    mobile,
+    maxLen: MAX_RECIPIENT_LEN,
+  });
 }
 
 function resolveBookingDate(order: VeloWebsiteOrderPayload): string {
@@ -492,6 +489,28 @@ async function importOrdersForIntegration(
       if (lineItems.length > 0 && !hasWebsiteLineItems(existing.website_line_items)) {
         patches.website_line_items = lineItems;
       }
+
+      // Refresh TO: strip legacy Web # / Items and enforce Mob No last line.
+      const cleanTo = buildRecipientDetails(raw, externalId);
+      const mobile =
+        raw.customer?.mobile?.trim() ||
+        raw.customer?.phone?.trim() ||
+        existing.booked_mobile_no?.trim() ||
+        "";
+      if (
+        cleanTo &&
+        cleanTo !== (existing.recipient_details ?? "").trim() &&
+        (/Web\s*#/i.test(existing.recipient_details ?? "") ||
+          /(?:^|\n)---\s*(?:\n|$)/.test(existing.recipient_details ?? "") ||
+          /^Items:$/m.test(existing.recipient_details ?? "") ||
+          (mobile && !/\(Mob No\s*:/i.test(existing.recipient_details ?? "")))
+      ) {
+        patches.recipient_details = cleanTo;
+      }
+      if (mobile && !existing.booked_mobile_no?.trim()) {
+        patches.booked_mobile_no = mobile;
+      }
+
       if (Object.keys(patches).length > 0) {
         await updateOrder(userId, existing.id, patches);
         updated++;

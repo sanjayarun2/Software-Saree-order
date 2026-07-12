@@ -120,17 +120,33 @@ export async function getOrdersLocal(userId: string, filters: OrderFilters): Pro
     list = list.filter((o) => {
       const d = o[dateColumn as keyof Order] as string | null;
       if (!d) return false;
-      return d >= filters.fromDate! && d <= filters.toDate!;
+      // Compare date portion only (YYYY-MM-DD) for timestamp-safe matching.
+      const day = String(d).slice(0, 10);
+      return day >= filters.fromDate! && day <= filters.toDate!;
     });
+  } else if (!filters.allOrders) {
+    // Date-scoped request missing bounds → show nothing (never fall back to all).
+    return [];
   }
 
   list.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
   return list;
 }
 
-/** Total pending orders for tab badge (ignores date filters; matches orders list visibility rules). */
-export async function getPendingOrderCount(userId: string): Promise<number> {
-  const list = await getOrdersLocal(userId, { status: "PENDING", allOrders: true });
+/**
+ * Pending count for the tab badge.
+ * Pass the same date scope as the list so Today/Yesterday counts match the rows shown.
+ */
+export async function getPendingOrderCount(
+  userId: string,
+  dateScope?: Pick<OrderFilters, "fromDate" | "toDate" | "allOrders">
+): Promise<number> {
+  const list = await getOrdersLocal(userId, {
+    status: "PENDING",
+    allOrders: dateScope?.allOrders ?? false,
+    fromDate: dateScope?.fromDate,
+    toDate: dateScope?.toDate,
+  });
   return list.length;
 }
 
@@ -154,7 +170,11 @@ async function revalidateOrders(
 
       if (filters.status) query = query.eq("status", filters.status);
 
-      if (!filters.allOrders && filters.fromDate && filters.toDate) {
+      if (!filters.allOrders) {
+        if (!filters.fromDate || !filters.toDate) {
+          // Refuse unbounded fetch when caller asked for a date window.
+          return [];
+        }
         query = query.gte(dateColumn, filters.fromDate).lte(dateColumn, filters.toDate);
       }
 

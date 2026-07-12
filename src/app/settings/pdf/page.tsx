@@ -15,7 +15,8 @@ import {
   type PdfContentType,
   type PdfPlacement,
 } from "@/lib/pdf-settings-supabase";
-import { normalizeAddressBlock, stripEmptyAddressLines } from "@/lib/pdf-utils";
+import { prepareAddressForPdf } from "@/lib/pdf-utils";
+import { sanitizePdfBrandText } from "@/lib/pdf-address-sanitize";
 import {
   pickLogoImageNative,
   useNativeLogoPicker,
@@ -114,19 +115,19 @@ export default function PdfSettingsPage() {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingYRef = useRef<{ logo?: number; from?: number; to?: number } | null>(null);
 
-  // Sample addresses used in live preview; when "Formalize address" is ON we run them through
-  // the same normalizeAddressBlock function that PDF generation uses so behaviour matches.
-  const previewFromRaw = "Global Tech Solutions\n123   Innovation   Drive,\nSilicon  Valley ,  CA   94043.\nPh:   +1  555 123 4567";
+  // Sample addresses used in live preview — same prepareAddressForPdf path as label PDFs.
+  const previewFromRaw =
+    "Sakthi Textiles®\n123 Innovation Drive,\nCoimbatore, Tamil Nadu, IN\nGSTIN: 33AAAAA0000A1Z5\nPh: +91 98765 43210";
   const previewToRaw =
-    "Anthony   Raj,\nNo.  45, Park View   Apartments,\nChennai ,   Tamil  Nadu  600001.\nPh: +91   98765  43210";
-  const previewFromStripped = stripEmptyAddressLines(previewFromRaw);
-  const previewToStripped = stripEmptyAddressLines(previewToRaw);
-  const previewFromText = normalizeAddresses
-    ? normalizeAddressBlock(previewFromStripped)
-    : previewFromStripped;
-  const previewToText = normalizeAddresses
-    ? normalizeAddressBlock(previewToStripped)
-    : previewToStripped;
+    "Anthony Raj,\nNo. 45, Park View Apartments,\nChennai, Tamil Nadu, IN 600001.\nemail: anthony@example.com\nWeb # ORD123456\nPh: +91 98765 43210";
+  const previewFromText = prepareAddressForPdf(previewFromRaw, normalizeAddresses, "from");
+  const previewToText = prepareAddressForPdf(
+    previewToRaw,
+    normalizeAddresses,
+    "to",
+    "9876543210"
+  );
+  const previewBrandText = sanitizePdfBrandText(customText);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -917,7 +918,7 @@ export default function PdfSettingsPage() {
                         }`}
                         style={{ fontSize: `${scaledFontPx}px`, lineHeight: `${scaledCenterLineHeightPx}px` }}
                       >
-                        {customText.trim() || "Thank you…"}
+                        {previewBrandText || "Thank you…"}
                       </p>
                     ) : (
                       <div

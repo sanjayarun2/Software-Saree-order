@@ -3,16 +3,50 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { OrderStatus } from "@/lib/db-types";
 import {
+  type OrderDatePreset,
   type OrderFilterState,
+  createAllOrdersFilters,
+  createRangeOrderFilters,
+  createTodayOrderFilters,
+  createYesterdayOrderFilters,
+  isTodayFilter,
+  isYesterdayFilter,
+  localDateIso,
+  resolveOrderFilters,
   validateOrderFilters,
 } from "@/lib/order-filter-utils";
 import { DdMmYyyyDateInput } from "./DdMmYyyyDateInput";
 import { useBackdropDismissGuard } from "@/lib/use-backdrop-dismiss-guard";
 
-export type OrderDateFilterDraft = Pick<
-  OrderFilterState,
-  "fromDate" | "toDate" | "allOrders"
->;
+export type OrderDateFilterDraft = {
+  fromDate: string;
+  toDate: string;
+  allOrders: boolean;
+  datePreset: OrderDatePreset;
+};
+
+function draftFromFilters(filters: OrderFilterState): OrderDateFilterDraft {
+  const resolved = resolveOrderFilters(filters);
+  return {
+    fromDate: resolved.fromDate,
+    toDate: resolved.toDate,
+    allOrders: resolved.allOrders,
+    datePreset: resolved.datePreset,
+  };
+}
+
+function draftToFilters(status: OrderStatus, draft: OrderDateFilterDraft): OrderFilterState {
+  if (draft.allOrders || draft.datePreset === "all") {
+    return createAllOrdersFilters(status);
+  }
+  if (draft.datePreset === "today") {
+    return createTodayOrderFilters(status);
+  }
+  if (draft.datePreset === "yesterday") {
+    return createYesterdayOrderFilters(status);
+  }
+  return createRangeOrderFilters(status, draft.fromDate, draft.toDate);
+}
 
 export type OrdersFilterModalProps = {
   open: boolean;
@@ -28,9 +62,11 @@ export type OrdersFilterModalProps = {
     dispatchFrom: string;
     dispatchTo: string;
     allOrders: string;
+    today: string;
+    yesterday: string;
     apply: string;
     cancel: string;
-    clearDates: string;
+    resetToToday: string;
   };
 };
 
@@ -43,11 +79,9 @@ export function OrdersFilterModal({
   applying = false,
   labels,
 }: OrdersFilterModalProps) {
-  const [draft, setDraft] = useState<OrderDateFilterDraft>({
-    fromDate: initialFilters.fromDate,
-    toDate: initialFilters.toDate,
-    allOrders: initialFilters.allOrders,
-  });
+  const [draft, setDraft] = useState<OrderDateFilterDraft>(() =>
+    draftFromFilters(initialFilters)
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const applyRef = useRef<HTMLButtonElement>(null);
@@ -55,11 +89,7 @@ export function OrdersFilterModal({
 
   useEffect(() => {
     if (open) {
-      setDraft({
-        fromDate: initialFilters.fromDate,
-        toDate: initialFilters.toDate,
-        allOrders: initialFilters.allOrders,
-      });
+      setDraft(draftFromFilters(initialFilters));
       setFormError(null);
     }
   }, [open, initialFilters]);
@@ -85,12 +115,21 @@ export function OrdersFilterModal({
   }, [open, applying, onClose]);
 
   const enableDateFilter = () => {
-    setDraft((prev) => (prev.allOrders ? { ...prev, allOrders: false } : prev));
+    setDraft((prev) =>
+      prev.allOrders
+        ? {
+            fromDate: localDateIso(),
+            toDate: localDateIso(),
+            allOrders: false,
+            datePreset: "today",
+          }
+        : prev
+    );
     setFormError(null);
   };
 
   const handleApply = () => {
-    const merged: OrderFilterState = { status, ...draft };
+    const merged = draftToFilters(status, draft);
     const err = validateOrderFilters(merged);
     if (err) {
       setFormError(err);
@@ -100,8 +139,17 @@ export function OrdersFilterModal({
     onApply(merged);
   };
 
-  const handleResetDates = () => {
-    setDraft({ fromDate: "", toDate: "", allOrders: true });
+  const handleResetToToday = () => {
+    setDraft(draftFromFilters(createTodayOrderFilters(status)));
+    setFormError(null);
+  };
+
+  const applyPresetDay = (day: "today" | "yesterday") => {
+    const next =
+      day === "today"
+        ? createTodayOrderFilters(status)
+        : createYesterdayOrderFilters(status);
+    setDraft(draftFromFilters(next));
     setFormError(null);
   };
 
@@ -109,6 +157,9 @@ export function OrdersFilterModal({
 
   const fromLabel = status === "PENDING" ? labels.bookingFrom : labels.dispatchFrom;
   const toLabel = status === "PENDING" ? labels.bookingTo : labels.dispatchTo;
+  const draftAsFilters = draftToFilters(status, draft);
+  const todaySelected = isTodayFilter(draftAsFilters);
+  const yesterdaySelected = isYesterdayFilter(draftAsFilters);
 
   return (
     <div
@@ -149,13 +200,43 @@ export function OrdersFilterModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => applyPresetDay("today")}
+                className={`min-h-touch rounded-xl border px-3 text-sm font-semibold transition ${
+                  todaySelected && !draft.allOrders
+                    ? "border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-200"
+                    : "border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                }`}
+              >
+                {labels.today}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPresetDay("yesterday")}
+                className={`min-h-touch rounded-xl border px-3 text-sm font-semibold transition ${
+                  yesterdaySelected && !draft.allOrders
+                    ? "border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-200"
+                    : "border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                }`}
+              >
+                {labels.yesterday}
+              </button>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <DdMmYyyyDateInput
                 label={fromLabel}
                 value={draft.fromDate}
                 onInteract={enableDateFilter}
                 onChange={(fromDate) => {
-                  setDraft((prev) => ({ ...prev, fromDate, allOrders: false }));
+                  setDraft((prev) => ({
+                    ...prev,
+                    fromDate,
+                    allOrders: false,
+                    datePreset: "range",
+                  }));
                   setFormError(null);
                 }}
               />
@@ -164,7 +245,12 @@ export function OrdersFilterModal({
                 value={draft.toDate}
                 onInteract={enableDateFilter}
                 onChange={(toDate) => {
-                  setDraft((prev) => ({ ...prev, toDate, allOrders: false }));
+                  setDraft((prev) => ({
+                    ...prev,
+                    toDate,
+                    allOrders: false,
+                    datePreset: "range",
+                  }));
                   setFormError(null);
                 }}
               />
@@ -176,11 +262,11 @@ export function OrdersFilterModal({
                 checked={draft.allOrders}
                 onChange={(e) => {
                   const allOrders = e.target.checked;
-                  setDraft((prev) => ({
-                    ...prev,
-                    allOrders,
-                    ...(allOrders ? { fromDate: "", toDate: "" } : {}),
-                  }));
+                  if (allOrders) {
+                    setDraft(draftFromFilters(createAllOrdersFilters(status)));
+                  } else {
+                    setDraft(draftFromFilters(createTodayOrderFilters(status)));
+                  }
                   setFormError(null);
                 }}
                 className="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
@@ -188,13 +274,13 @@ export function OrdersFilterModal({
               <span className="text-sm font-medium">{labels.allOrders}</span>
             </label>
 
-            {!draft.allOrders ? (
+            {!isTodayFilter(draftAsFilters) || draft.allOrders ? (
               <button
                 type="button"
-                onClick={handleResetDates}
+                onClick={handleResetToToday}
                 className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
               >
-                {labels.clearDates}
+                {labels.resetToToday}
               </button>
             ) : null}
 
@@ -238,8 +324,10 @@ export function ordersFilterModalLabels(t: (key: string) => string) {
     dispatchFrom: t("Dispatch From date"),
     dispatchTo: t("Dispatch To date"),
     allOrders: t("All Orders"),
+    today: t("Today"),
+    yesterday: t("Yesterday"),
     apply: t("Filter"),
     cancel: t("Cancel"),
-    clearDates: t("Clear dates"),
+    resetToToday: t("Reset to today"),
   };
 }

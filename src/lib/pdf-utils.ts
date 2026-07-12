@@ -3,6 +3,11 @@ import autoTable from "jspdf-autotable";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
+import {
+  sanitizePdfAddress,
+  sanitizePdfBrandText,
+  type PdfAddressRole,
+} from "./pdf-address-sanitize";
 
 /** Options passed from fetchPdfSettingsForRendering; used for centre block and vertical position. */
 export type PdfRenderOptions = {
@@ -758,7 +763,7 @@ function measureCenterBlockHalfH(
   centerTextSizePt: number
 ): number {
   const contentType = options.settings?.content_type ?? "logo";
-  const customText = (options.settings?.custom_text ?? "").trim();
+  const customText = sanitizePdfBrandText(options.settings?.custom_text ?? "");
   if (contentType === "text" && customText && doc.splitTextToSize) {
     const maxCenterW = CENTER_COL_W - 8;
     const centerLines = doc.splitTextToSize(customText, maxCenterW);
@@ -778,8 +783,13 @@ function measureOrderSectionLayout(
   centerTextSizePt: number
 ): { fits: boolean; layout: SectionVerticalLayout; centerBlockHalfH: number } {
   const shouldNormalize = options.settings?.normalize_addresses === true;
-  const fromSource = prepareAddressForPdf(order.sender_details ?? "", shouldNormalize);
-  const toSource = prepareAddressForPdf(order.recipient_details ?? "", shouldNormalize);
+  const fromSource = prepareAddressForPdf(order.sender_details ?? "", shouldNormalize, "from");
+  const toSource = prepareAddressForPdf(
+    order.recipient_details ?? "",
+    shouldNormalize,
+    "to",
+    order.booked_mobile_no
+  );
 
   const maxWFrom = getLeftColumnMaxTextWidth();
   const maxWTo = getRightColumnMaxTextWidth(toShiftMm);
@@ -984,7 +994,7 @@ export function normalizeAddressBlock(text: string): string {
   return result.join("\n");
 }
 
-/** Drop website order item lines (--- / Items: / product rows); keep name, address, Web #. */
+/** Drop website order item lines and Web # mentions from TO text before PDF. */
 function stripPdfItemDetails(text: string): string {
   const lines = text.split("\n");
   const kept: string[] = [];
@@ -997,10 +1007,13 @@ function stripPdfItemDetails(text: string): string {
       continue;
     }
     if (inItemsSection) {
+      // Skip product rows and any trailing Web # that used to close the section.
       if (/^Web\s*#/i.test(trim)) {
         inItemsSection = false;
-        kept.push(line);
       }
+      continue;
+    }
+    if (/^Web\s*#/i.test(trim) || /^(?:web|website)\s+order\b/i.test(trim)) {
       continue;
     }
     kept.push(line);
@@ -1009,20 +1022,24 @@ function stripPdfItemDetails(text: string): string {
   return kept.join("\n");
 }
 
-/** Address text ready for PDF: strip empty lines, optionally normalize. */
-export function prepareAddressForPdf(text: string, normalize: boolean): string {
+/** Address text ready for PDF: strip empty lines, sanitize label rules, optionally normalize. */
+export function prepareAddressForPdf(
+  text: string,
+  normalize: boolean,
+  role: PdfAddressRole = "to",
+  fallbackMobile?: string | null
+): string {
   let stripped = stripEmptyAddressLines(text);
-  if (!stripped) return "";
-  stripped = stripPdfItemDetails(stripped)
-    .split("\n")
-    .map((line) =>
-      line.replace(/^Web\s*#\s*(\S+)/i, (_match, id: string) => {
-        const chunks = id.match(/.{1,12}/g) ?? [id];
-        return `Web # ${chunks.join(" ")}`;
-      })
-    )
-    .join("\n");
-  return normalize ? normalizeAddressBlock(stripped) : stripped;
+  if (!stripped && role === "from") return "";
+  if (!stripped && role === "to") {
+    return sanitizePdfAddress("", "to", { fallbackMobile });
+  }
+  stripped = stripPdfItemDetails(stripped);
+  if (normalize) {
+    stripped = normalizeAddressBlock(stripped);
+  }
+  // Always apply label cleanup last so normalize cannot undo Mob No / GSTIN / email / Web # rules.
+  return sanitizePdfAddress(stripped, role, { fallbackMobile });
 }
 
 // Square logo fills center column width (edge to edge of centre column)
@@ -1087,7 +1104,12 @@ function computeToShiftMm(
 ): number {
   const shouldNormalize = options.settings?.normalize_addresses === true;
   const rawTo = order.recipient_details ?? "";
-  const toSource = prepareAddressForPdf(rawTo, shouldNormalize);
+  const toSource = prepareAddressForPdf(
+    rawTo,
+    shouldNormalize,
+    "to",
+    order.booked_mobile_no
+  );
 
   let toShift = 0;
   let toLines: string[] = [];
@@ -1141,7 +1163,7 @@ function drawOrderLabel(
   const addressStartYTo = sectionTop + resolved.toY + labelToAddressGap;
 
   const contentType = options.settings?.content_type ?? "logo";
-  const customText = (options.settings?.custom_text ?? "").trim();
+  const customText = sanitizePdfBrandText(options.settings?.custom_text ?? "");
   const textSize = resolved.centerTextSizePt;
 
   // FROM — left column (uses settings: text_size, text_bold)

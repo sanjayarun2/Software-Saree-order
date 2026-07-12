@@ -31,6 +31,13 @@ import {
   isOrderFilterActive,
   orderFiltersFromTabParam,
   describeDateFilters,
+  dateScopeFromFilters,
+  createTodayOrderFilters,
+  createYesterdayOrderFilters,
+  isTodayFilter,
+  isYesterdayFilter,
+  orderFiltersEqual,
+  resolveOrderFilters,
   type OrderFilterState,
 } from "@/lib/order-filter-utils";
 import {
@@ -234,7 +241,8 @@ export default function OrdersPage() {
       return;
     }
     try {
-      setPendingCount(await getPendingOrderCount(user.id));
+      const scope = dateScopeFromFilters(appliedFiltersRef.current);
+      setPendingCount(await getPendingOrderCount(user.id, scope));
     } catch {
       /* keep last count */
     }
@@ -252,7 +260,8 @@ export default function OrdersPage() {
       setError(null);
       setLoading(true);
       try {
-        const { status: st, fromDate, toDate, allOrders } = filters;
+        const resolved = resolveOrderFilters(filters);
+        const { status: st, fromDate, toDate, allOrders } = resolved;
         const cached = await svcGetOrders(
           user.id,
           { status: st, fromDate, toDate, allOrders },
@@ -276,9 +285,10 @@ export default function OrdersPage() {
     async (filters: OrderFilterState) => {
       setFilterApplying(true);
       try {
-        setAppliedFilters(filters);
-        appliedFiltersRef.current = filters;
-        await fetchOrders(filters);
+        const resolved = resolveOrderFilters(filters);
+        setAppliedFilters(resolved);
+        appliedFiltersRef.current = resolved;
+        await fetchOrders(resolved);
         setFilterOpen(false);
       } finally {
         setFilterApplying(false);
@@ -288,14 +298,22 @@ export default function OrdersPage() {
   );
 
   const handleClearFilter = React.useCallback(() => {
-    const next: OrderFilterState = {
-      ...appliedFiltersRef.current,
-      fromDate: "",
-      toDate: "",
-      allOrders: true,
-    };
+    const next = createTodayOrderFilters(appliedFiltersRef.current.status);
     void handleApplyFilters(next);
   }, [handleApplyFilters]);
+
+  const handleQuickDate = React.useCallback(
+    (day: "today" | "yesterday") => {
+      const statusNow = appliedFiltersRef.current.status;
+      const next =
+        day === "today"
+          ? createTodayOrderFilters(statusNow)
+          : createYesterdayOrderFilters(statusNow);
+      if (orderFiltersEqual(next, appliedFiltersRef.current)) return;
+      void handleApplyFilters(next);
+    },
+    [handleApplyFilters]
+  );
 
   const handleStatusChange = React.useCallback(
     (nextStatus: OrderStatus) => {
@@ -311,7 +329,14 @@ export default function OrdersPage() {
   );
 
   const filterActive = isOrderFilterActive(appliedFilters);
-  const filterSummary = describeDateFilters(appliedFilters, { allOrders: t("All Orders") });
+  const showingToday = isTodayFilter(appliedFilters);
+  const showingYesterday = isYesterdayFilter(appliedFilters);
+  const filterSummary = describeDateFilters(appliedFilters, {
+    allOrders: t("All Orders"),
+    today: t("Today"),
+    yesterday: t("Yesterday"),
+  });
+  const showResetToToday = !showingToday || appliedFilters.allOrders;
 
   useEffect(() => {
     const onImported = () => {
@@ -328,6 +353,29 @@ export default function OrdersPage() {
       void refreshPendingCount();
     }
   }, [user, fetchOrders, refreshPendingCount]);
+
+  // If the calendar day rolls over while Today/Yesterday is selected, refresh bounds.
+  useEffect(() => {
+    const syncRelativePreset = () => {
+      const current = appliedFiltersRef.current;
+      if (current.datePreset !== "today" && current.datePreset !== "yesterday") return;
+      const fresh = resolveOrderFilters(current);
+      if (orderFiltersEqual(fresh, current)) return;
+      setAppliedFilters(fresh);
+      appliedFiltersRef.current = fresh;
+      void fetchOrders(fresh);
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncRelativePreset();
+    };
+    window.addEventListener("focus", syncRelativePreset);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", syncRelativePreset);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchOrders]);
 
   // Sync status from URL when returning from edit-order or browser back; refetch list
   useEffect(() => {
@@ -501,42 +549,60 @@ export default function OrdersPage() {
             </button>
         </div>
 
-        {filterActive ? (
-          <div
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 dark:border-primary-700/60 dark:bg-primary-950/40"
-            role="status"
-            aria-live="polite"
+        <div className="flex gap-2" role="group" aria-label={t("Filter orders")}>
+          <button
+            type="button"
+            onClick={() => handleQuickDate("today")}
+            disabled={filterApplying || loading}
+            className={`min-h-touch flex-1 rounded-bento px-3 text-sm font-semibold transition disabled:opacity-50 ${
+              showingToday
+                ? "bg-primary-500 text-white"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            }`}
           >
-            <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-600 dark:bg-primary-900/60 dark:text-primary-300"
-                aria-hidden
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-                </svg>
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-primary-800 dark:text-primary-200">
-                  {t("Filtered orders")}
-                </p>
-                <p className="truncate text-sm text-primary-700/90 dark:text-primary-300/90">
-                  {filterSummary}
-                  {" · "}
-                  {filteredOrders.length} {t("orders")}
-                </p>
-              </div>
-            </div>
+            {t("Today")}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickDate("yesterday")}
+            disabled={filterApplying || loading}
+            className={`min-h-touch flex-1 rounded-bento px-3 text-sm font-semibold transition disabled:opacity-50 ${
+              showingYesterday
+                ? "bg-primary-500 text-white"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            }`}
+          >
+            {t("Yesterday")}
+          </button>
+        </div>
+
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 dark:border-primary-700/60 dark:bg-primary-950/40"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-primary-800 dark:text-primary-200">
+              {filterSummary}
+            </p>
+            <p className="truncate text-sm text-primary-700/90 dark:text-primary-300/90">
+              {filteredOrders.length} {t("orders")}
+              {filterActive
+                ? ` · ${status === "PENDING" ? t("Booking date") : t("Dispatched date")}`
+                : null}
+            </p>
+          </div>
+          {showResetToToday ? (
             <button
               type="button"
               onClick={handleClearFilter}
               disabled={filterApplying || loading}
               className="shrink-0 rounded-lg border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-600 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
             >
-              {t("Clear filter")}
+              {t("Reset to today")}
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
 
         <div className="flex gap-2">
           <button

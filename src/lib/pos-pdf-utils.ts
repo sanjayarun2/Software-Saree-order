@@ -6,6 +6,7 @@ import {
   type PdfRenderOptions,
   type ResolvedLabelLayout,
 } from "./pdf-utils";
+import { sanitizePdfBrandText } from "./pdf-address-sanitize";
 import { printPdfBase64ViaBluetooth } from "./pos-bluetooth-print";
 import { addPrinterLog } from "./printer-debug-log";
 
@@ -224,7 +225,7 @@ function drawPosLabel(
   const a4ToX = rightColStart - resolved.toShiftMm + ADDRESS_PADDING;
 
   const contentType = options.settings?.content_type ?? "logo";
-  const customText = (options.settings?.custom_text ?? "").trim();
+  const customText = sanitizePdfBrandText(options.settings?.custom_text ?? "");
   const textSize = resolved.centerTextSizePt;
 
   // ── Coordinate transform ──

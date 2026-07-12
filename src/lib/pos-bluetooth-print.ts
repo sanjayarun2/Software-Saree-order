@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { ESCPOSPlugin } from "@albgen/capacitor-escpos-plugin";
 import type { Order } from "./db-types";
-import { normalizeAddressBlock } from "./pdf-utils";
+import { prepareAddressForPdf } from "./pdf-utils";
 import { addPrinterLog } from "./printer-debug-log";
 
 interface PrintResult {
@@ -537,10 +537,13 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
 }
 
 function formatOrderForEscPos(order: Order, normalize: boolean): string {
-  const rawFrom = order.sender_details ?? "";
-  const rawTo = order.recipient_details ?? "";
-  const from = normalize ? normalizeAddressBlock(rawFrom) : rawFrom;
-  const to = normalize ? normalizeAddressBlock(rawTo) : rawTo;
+  const from = prepareAddressForPdf(order.sender_details ?? "", normalize, "from");
+  const to = prepareAddressForPdf(
+    order.recipient_details ?? "",
+    normalize,
+    "to",
+    order.booked_mobile_no
+  );
 
   const SEPARATOR = "--------------------------------";
 
@@ -611,8 +614,8 @@ function formatOrderForEscPos(order: Order, normalize: boolean): string {
       message: "Built POS formatted text for one order",
       data: {
         normalize,
-        rawFromLen: rawFrom.length,
-        rawToLen: rawTo.length,
+        rawFromLen: (order.sender_details ?? "").length,
+        rawToLen: (order.recipient_details ?? "").length,
         normalizedFromLineCount: (from || "").split("\n").filter(Boolean).length,
         normalizedToLineCount: (to || "").split("\n").filter(Boolean).length,
         formattedLineCount: lines.length,

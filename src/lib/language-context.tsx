@@ -102,6 +102,7 @@ const TA: Record<string, string> = {
   "Download filtered orders PDF": "வடிகட்டப்பட்ட ஆர்டர்கள் PDF",
   "Print and PDF use filtered orders only": "அச்சு/PDF வடிகட்டப்பட்ட ஆர்டர்களுக்கு மட்டும்",
   "Clear dates": "தேதிகளை அழி",
+  "Reset to today": "இன்றுக்கு மீட்டமை",
   "Order details": "ஆர்டர் விவரங்கள்",
   "Pack these items": "பேக் செய்ய வேண்டிய பொருட்கள்",
   "Customer": "வாடிக்கையாளர்",

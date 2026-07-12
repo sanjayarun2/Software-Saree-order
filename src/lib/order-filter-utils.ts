@@ -1,25 +1,104 @@
 import type { OrderStatus } from "./db-types";
 
+/** Relative day presets stay correct across midnight; range/all are absolute. */
+export type OrderDatePreset = "today" | "yesterday" | "range" | "all";
+
 export type OrderFilterState = {
   status: OrderStatus;
   fromDate: string;
   toDate: string;
   allOrders: boolean;
+  datePreset: OrderDatePreset;
 };
 
-export const DEFAULT_ORDER_FILTERS: OrderFilterState = {
-  status: "PENDING",
-  fromDate: "",
-  toDate: "",
-  allOrders: true,
-};
+/** Local calendar date as YYYY-MM-DD (not UTC). */
+export function localDateIso(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
-/** ISO yyyy-mm-dd from URL tab param. */
-export function orderFiltersFromTabParam(tab: string | null): OrderFilterState {
+/** Shift a YYYY-MM-DD local calendar day by `days` (can be negative). */
+export function shiftLocalDateIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return localDateIso(dt);
+}
+
+export function createDayOrderFilters(
+  status: OrderStatus,
+  dayIso: string,
+  datePreset: OrderDatePreset = "range"
+): OrderFilterState {
   return {
-    ...DEFAULT_ORDER_FILTERS,
-    status: tab === "dispatched" ? "DESPATCHED" : "PENDING",
+    status,
+    fromDate: dayIso,
+    toDate: dayIso,
+    allOrders: false,
+    datePreset,
   };
+}
+
+export function createTodayOrderFilters(status: OrderStatus = "PENDING"): OrderFilterState {
+  return createDayOrderFilters(status, localDateIso(), "today");
+}
+
+export function createYesterdayOrderFilters(
+  status: OrderStatus = "PENDING"
+): OrderFilterState {
+  return createDayOrderFilters(status, shiftLocalDateIso(localDateIso(), -1), "yesterday");
+}
+
+export function createAllOrdersFilters(status: OrderStatus = "PENDING"): OrderFilterState {
+  return {
+    status,
+    fromDate: "",
+    toDate: "",
+    allOrders: true,
+    datePreset: "all",
+  };
+}
+
+export function createRangeOrderFilters(
+  status: OrderStatus,
+  fromDate: string,
+  toDate: string
+): OrderFilterState {
+  return {
+    status,
+    fromDate,
+    toDate,
+    allOrders: false,
+    datePreset: "range",
+  };
+}
+
+/** Resolve relative presets to the current calendar day before fetch/display. */
+export function resolveOrderFilters(filters: OrderFilterState): OrderFilterState {
+  if (filters.datePreset === "today") {
+    return createTodayOrderFilters(filters.status);
+  }
+  if (filters.datePreset === "yesterday") {
+    return createYesterdayOrderFilters(filters.status);
+  }
+  if (filters.datePreset === "all" || filters.allOrders) {
+    return createAllOrdersFilters(filters.status);
+  }
+  return {
+    ...filters,
+    allOrders: false,
+    datePreset: "range",
+  };
+}
+
+/** Default: today only — never load the full history on open. */
+export const DEFAULT_ORDER_FILTERS: OrderFilterState = createTodayOrderFilters("PENDING");
+
+/** Always defaults date range to today. */
+export function orderFiltersFromTabParam(tab: string | null): OrderFilterState {
+  return createTodayOrderFilters(tab === "dispatched" ? "DESPATCHED" : "PENDING");
 }
 
 const DD_MM_YYYY = /^(\d{2})-(\d{2})-(\d{4})$/;
@@ -56,50 +135,98 @@ export function parseDdMmYyyyToIso(text: string): string | null {
 }
 
 export function validateOrderFilters(filters: OrderFilterState): string | null {
-  if (filters.allOrders) return null;
+  const resolved = resolveOrderFilters(filters);
+  if (resolved.allOrders) return null;
 
-  if (!filters.fromDate.trim() || !filters.toDate.trim()) {
+  if (!resolved.fromDate.trim() || !resolved.toDate.trim()) {
     return "Select both From and To dates, or enable All Orders.";
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(filters.fromDate)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(resolved.fromDate)) {
     return "Invalid From date.";
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(filters.toDate)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(resolved.toDate)) {
     return "Invalid To date.";
   }
-  if (filters.fromDate > filters.toDate) {
+  if (resolved.fromDate > resolved.toDate) {
     return "From date must be on or before To date.";
   }
 
   return null;
 }
 
+/** True when a bounded date range is applied (not All Orders). */
 export function isOrderFilterActive(filters: OrderFilterState): boolean {
-  return !filters.allOrders && Boolean(filters.fromDate && filters.toDate);
+  const resolved = resolveOrderFilters(filters);
+  return !resolved.allOrders && Boolean(resolved.fromDate && resolved.toDate);
+}
+
+export function isSingleDayFilter(filters: OrderFilterState): boolean {
+  const resolved = resolveOrderFilters(filters);
+  return (
+    !resolved.allOrders &&
+    Boolean(resolved.fromDate && resolved.toDate) &&
+    resolved.fromDate === resolved.toDate
+  );
+}
+
+export function isTodayFilter(filters: OrderFilterState): boolean {
+  return resolveOrderFilters(filters).datePreset === "today";
+}
+
+export function isYesterdayFilter(filters: OrderFilterState): boolean {
+  return resolveOrderFilters(filters).datePreset === "yesterday";
 }
 
 export function describeDateFilters(
   filters: OrderFilterState,
-  labels: { allOrders: string }
+  labels: { allOrders: string; today?: string; yesterday?: string }
 ): string {
-  if (filters.allOrders) {
+  const resolved = resolveOrderFilters(filters);
+  if (resolved.allOrders || resolved.datePreset === "all") {
     return labels.allOrders;
   }
 
-  const from = formatIsoToDdMmYyyy(filters.fromDate);
-  const to = formatIsoToDdMmYyyy(filters.toDate);
+  if (labels.today && resolved.datePreset === "today") {
+    return labels.today;
+  }
+  if (labels.yesterday && resolved.datePreset === "yesterday") {
+    return labels.yesterday;
+  }
+
+  const from = formatIsoToDdMmYyyy(resolved.fromDate);
+  const to = formatIsoToDdMmYyyy(resolved.toDate);
   if (from && to) {
-    return `${from} – ${to}`;
+    return from === to ? from : `${from} – ${to}`;
   }
   return labels.allOrders;
 }
 
+/** Date fields used when counting pending for the same window as the list. */
+export function dateScopeFromFilters(filters: OrderFilterState): {
+  fromDate?: string;
+  toDate?: string;
+  allOrders: boolean;
+} {
+  const resolved = resolveOrderFilters(filters);
+  if (resolved.allOrders) {
+    return { allOrders: true };
+  }
+  return {
+    allOrders: false,
+    fromDate: resolved.fromDate,
+    toDate: resolved.toDate,
+  };
+}
+
 export function orderFiltersEqual(a: OrderFilterState, b: OrderFilterState): boolean {
+  const ra = resolveOrderFilters(a);
+  const rb = resolveOrderFilters(b);
   return (
-    a.status === b.status &&
-    a.fromDate === b.fromDate &&
-    a.toDate === b.toDate &&
-    a.allOrders === b.allOrders
+    ra.status === rb.status &&
+    ra.fromDate === rb.fromDate &&
+    ra.toDate === rb.toDate &&
+    ra.allOrders === rb.allOrders &&
+    ra.datePreset === rb.datePreset
   );
 }
