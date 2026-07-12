@@ -166,20 +166,29 @@ export async function enrichLineItemsWithProductImages(
 
   const needNetwork = next.filter((i) => !i.imageUrl?.trim());
   for (const item of needNetwork) {
-    const search = (
-      item.productCode ||
+    const code =
+      item.productCode?.trim() ||
       extractProductCodeFromText(item.name) ||
-      item.name ||
-      ""
-    ).trim();
+      "";
+    const search = (code || item.name || "").trim();
     if (!search) continue;
     try {
+      // Always refresh when resolving photos — stale product cache often lacks imageUrl.
       const { products } = await listVeloProducts(
         userId,
         { search, page: 1, pageSize: 10, draft: "all" },
-        { forceRefresh: false }
+        { forceRefresh: true }
       );
-      const match = products.find((p) => productMatchesLine(p, item));
+      const match =
+        products.find((p) => productMatchesLine(p, item)) ??
+        (code
+          ? products.find(
+              (p) =>
+                (p.productCode ?? "").trim().toUpperCase() ===
+                  code.toUpperCase() ||
+                (p.name ?? "").toUpperCase().includes(code.toUpperCase())
+            )
+          : undefined);
       if (!match) continue;
       const url =
         extractImageUrlFromUnknown(match) ??
@@ -193,7 +202,11 @@ export async function enrichLineItemsWithProductImages(
       }
       if (match.productId) newCacheEntries[`id:${match.productId}`] = url;
       next = next.map((row) => {
-        const same =
+        const sameItem =
+          row.name === item.name ||
+          (row.productId &&
+            item.productId &&
+            row.productId === item.productId) ||
           productMatchesLine(
             {
               productId: row.productId ?? undefined,
@@ -201,8 +214,8 @@ export async function enrichLineItemsWithProductImages(
               name: row.name,
             },
             item
-          ) || row.name === item.name;
-        return same && !row.imageUrl?.trim() ? { ...row, imageUrl: url } : row;
+          );
+        return sameItem && !row.imageUrl?.trim() ? { ...row, imageUrl: url } : row;
       });
     } catch {
       /* keep going */

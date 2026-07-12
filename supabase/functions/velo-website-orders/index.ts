@@ -4,7 +4,8 @@ const DEFAULT_BASE = "https://sakthi-textiles-shop.vercel.app";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req) => {
@@ -37,6 +38,8 @@ Deno.serve(async (req) => {
       integration_id?: string;
       since?: string;
       limit?: number;
+      /** Single order id → GET /api/velo/orders/:orderId */
+      order_id?: string;
       test_only?: boolean;
       api_key?: string;
       api_base_url?: string;
@@ -73,10 +76,13 @@ Deno.serve(async (req) => {
       return json({ error: "API key is required" }, 400);
     }
 
-    const since = body.since || new Date(0).toISOString();
-    const limit = Math.min(Math.max(body.limit ?? 50, 1), 200);
     const base = apiBaseUrl.replace(/\/$/, "");
-    const url = `${base}/api/velo/orders?since=${encodeURIComponent(since)}&limit=${limit}`;
+    const orderId = body.order_id?.trim() || "";
+    const url = orderId
+      ? `${base}/api/velo/orders/${encodeURIComponent(orderId)}`
+      : `${base}/api/velo/orders?since=${encodeURIComponent(
+          body.since || new Date(0).toISOString()
+        )}&limit=${Math.min(Math.max(body.limit ?? 50, 1), 200)}`;
 
     const veloRes = await fetch(url, {
       headers: { "x-velo-key": apiKey },

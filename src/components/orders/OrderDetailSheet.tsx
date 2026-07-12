@@ -84,14 +84,14 @@ function LineItemRow({
             alt={item.name}
             className="h-full w-full object-cover"
             loading="lazy"
+            referrerPolicy="no-referrer"
             onError={() => setImgFailed(true)}
             onLoad={() => {
               if (userId) {
                 void rememberLoadedProductImage(userId, item);
               }
             }}
-          />
-        ) : (
+          />        ) : (
           <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] font-medium leading-tight text-slate-400">
             {noImageLabel}
           </div>
@@ -161,10 +161,12 @@ export function OrderDetailSheet({
     }
 
     let cancelled = false;
-    const stored = normalizeWebsiteLineItems(order.website_line_items);
-    const orderId = order.id;
-    const externalId = order.external_order_id?.trim() || "";
-    const isWebsite = order.order_source === "website";
+    const orderSnapshot = order;
+    const stored = normalizeWebsiteLineItems(orderSnapshot.website_line_items);
+    const orderId = orderSnapshot.id;
+    const externalId = orderSnapshot.external_order_id?.trim() || "";
+    const isWebsite = orderSnapshot.order_source === "website";
+    const fallbackMobile = orderSnapshot.booked_mobile_no;
 
     async function persistItems(items: WebsiteOrderLineItem[]) {
       if (!userId || !orderId || !items.length) return;
@@ -173,7 +175,7 @@ export function OrderDetailSheet({
           website_line_items: items,
         });
         onOrderUpdatedRef.current?.({
-          ...order!,
+          ...orderSnapshot,
           website_line_items: items,
         });
       } catch {
@@ -188,8 +190,16 @@ export function OrderDetailSheet({
 
       let next = items;
 
-      // 1) Refresh from shop order detail when images are missing.
-      if (isWebsite && externalId) {
+      // 1) Catalog first (proxy + force refresh) — reliable on phone; do not wait on order API.
+      try {
+        const enriched = await enrichLineItemsWithProductImages(userId, next);
+        next = enriched.items;
+      } catch {
+        /* continue */
+      }
+
+      // 2) If still missing, try shop order detail (proxied, short timeout).
+      if (lineItemsMissingImages(next) && isWebsite && externalId) {
         try {
           const snapshot = await fetchWebsiteOrderDetailSnapshot(
             userId,
@@ -200,18 +210,19 @@ export function OrderDetailSheet({
             if (!cancelled) {
               setExtraAddressLines(snapshot.addressLines);
               setExtraCustomerName(snapshot.customerName);
-              setExtraMobile(snapshot.customerMobile);
+              setExtraMobile(snapshot.customerMobile || fallbackMobile || "");
+            }
+            if (lineItemsMissingImages(next)) {
+              const enriched = await enrichLineItemsWithProductImages(
+                userId,
+                next
+              );
+              next = enriched.items;
             }
           }
         } catch {
-          /* fall through to product catalog */
+          /* keep catalog result */
         }
-      }
-
-      // 2) Fill remaining gaps from product catalog + local image cache.
-      if (lineItemsMissingImages(next)) {
-        const enriched = await enrichLineItemsWithProductImages(userId, next);
-        next = enriched.items;
       }
 
       return next;
@@ -219,7 +230,13 @@ export function OrderDetailSheet({
 
     if (stored.length > 0) {
       setLineItems(stored);
-      setLoadingItems(lineItemsMissingImages(stored));
+      const needsPhotos = lineItemsMissingImages(stored);
+      setLoadingItems(needsPhotos);
+
+      if (!needsPhotos) {
+        setLoadingItems(false);
+        return;
+      }
 
       void (async () => {
         const resolved = await resolveImages(stored);
@@ -227,11 +244,6 @@ export function OrderDetailSheet({
         setLineItems(resolved);
         setLoadingItems(false);
         if (
-          lineItemsMissingImages(stored) &&
-          !lineItemsMissingImages(resolved)
-        ) {
-          await persistItems(resolved);
-        } else if (
           resolved.some(
             (row, i) =>
               (row.imageUrl ?? null) !== (stored[i]?.imageUrl ?? null) ||
@@ -262,6 +274,7 @@ export function OrderDetailSheet({
     setLoadingItems(true);
     void (async () => {
       try {
+        // Try catalog-style resolve via order detail + products.
         const snapshot = await fetchWebsiteOrderDetailSnapshot(
           userId,
           externalId
@@ -287,7 +300,9 @@ export function OrderDetailSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, order, userId, parsed.itemLines]);
+    // Only re-run when opening a different order — avoid canceling photo resolve on persist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional stable key
+  }, [open, order?.id, userId]);
 
   if (!open || !order) return null;
 
