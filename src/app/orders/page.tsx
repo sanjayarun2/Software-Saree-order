@@ -28,16 +28,10 @@ import {
   shouldShowPaymentBadge,
 } from "@/lib/order-payment-status";
 import {
-  isOrderFilterActive,
   orderFiltersFromTabParam,
-  describeDateFilters,
   dateScopeFromFilters,
-  createTodayOrderFilters,
-  createYesterdayOrderFilters,
-  isTodayFilter,
-  isYesterdayFilter,
-  orderFiltersEqual,
   resolveOrderFilters,
+  orderFiltersEqual,
   type OrderFilterState,
 } from "@/lib/order-filter-utils";
 import {
@@ -297,24 +291,6 @@ export default function OrdersPage() {
     [fetchOrders]
   );
 
-  const handleClearFilter = React.useCallback(() => {
-    const next = createTodayOrderFilters(appliedFiltersRef.current.status);
-    void handleApplyFilters(next);
-  }, [handleApplyFilters]);
-
-  const handleQuickDate = React.useCallback(
-    (day: "today" | "yesterday") => {
-      const statusNow = appliedFiltersRef.current.status;
-      const next =
-        day === "today"
-          ? createTodayOrderFilters(statusNow)
-          : createYesterdayOrderFilters(statusNow);
-      if (orderFiltersEqual(next, appliedFiltersRef.current)) return;
-      void handleApplyFilters(next);
-    },
-    [handleApplyFilters]
-  );
-
   const handleStatusChange = React.useCallback(
     (nextStatus: OrderStatus) => {
       if (nextStatus === appliedFiltersRef.current.status) return;
@@ -328,15 +304,9 @@ export default function OrdersPage() {
     [fetchOrders, router]
   );
 
-  const filterActive = isOrderFilterActive(appliedFilters);
-  const showingToday = isTodayFilter(appliedFilters);
-  const showingYesterday = isYesterdayFilter(appliedFilters);
-  const filterSummary = describeDateFilters(appliedFilters, {
-    allOrders: t("All Orders"),
-    today: t("Today"),
-    yesterday: t("Yesterday"),
-  });
-  const showResetToToday = !showingToday || appliedFilters.allOrders;
+  // Highlight search filter when not the default "today" window.
+  const filterHighlight =
+    appliedFilters.datePreset !== "today" || appliedFilters.allOrders;
 
   useEffect(() => {
     const onImported = () => {
@@ -354,11 +324,18 @@ export default function OrdersPage() {
     }
   }, [user, fetchOrders, refreshPendingCount]);
 
-  // If the calendar day rolls over while Today/Yesterday is selected, refresh bounds.
+  // Refresh relative presets (today / yesterday / week / month) after midnight.
   useEffect(() => {
     const syncRelativePreset = () => {
       const current = appliedFiltersRef.current;
-      if (current.datePreset !== "today" && current.datePreset !== "yesterday") return;
+      if (
+        current.datePreset !== "today" &&
+        current.datePreset !== "yesterday" &&
+        current.datePreset !== "this_week" &&
+        current.datePreset !== "this_month"
+      ) {
+        return;
+      }
       const fresh = resolveOrderFilters(current);
       if (orderFiltersEqual(fresh, current)) return;
       setAppliedFilters(fresh);
@@ -533,7 +510,7 @@ export default function OrdersPage() {
               type="button"
               onClick={() => deferModalOpen(() => setFilterOpen(true))}
               className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
-                filterActive
+                filterHighlight
                   ? "border-primary-500 bg-primary-50 text-primary-600 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-300"
                   : "border-gray-200 bg-gray-50 text-slate-600 hover:bg-gray-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               }`}
@@ -543,65 +520,10 @@ export default function OrdersPage() {
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
               </svg>
-              {filterActive ? (
+              {filterHighlight ? (
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary-500 ring-2 ring-white dark:ring-slate-900" aria-hidden />
               ) : null}
             </button>
-        </div>
-
-        <div className="flex gap-2" role="group" aria-label={t("Filter orders")}>
-          <button
-            type="button"
-            onClick={() => handleQuickDate("today")}
-            disabled={filterApplying || loading}
-            className={`min-h-touch flex-1 rounded-bento px-3 text-sm font-semibold transition disabled:opacity-50 ${
-              showingToday
-                ? "bg-primary-500 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-            }`}
-          >
-            {t("Today")}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickDate("yesterday")}
-            disabled={filterApplying || loading}
-            className={`min-h-touch flex-1 rounded-bento px-3 text-sm font-semibold transition disabled:opacity-50 ${
-              showingYesterday
-                ? "bg-primary-500 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-            }`}
-          >
-            {t("Yesterday")}
-          </button>
-        </div>
-
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 dark:border-primary-700/60 dark:bg-primary-950/40"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-primary-800 dark:text-primary-200">
-              {filterSummary}
-            </p>
-            <p className="truncate text-sm text-primary-700/90 dark:text-primary-300/90">
-              {filteredOrders.length} {t("orders")}
-              {filterActive
-                ? ` · ${status === "PENDING" ? t("Booking date") : t("Dispatched date")}`
-                : null}
-            </p>
-          </div>
-          {showResetToToday ? (
-            <button
-              type="button"
-              onClick={handleClearFilter}
-              disabled={filterApplying || loading}
-              className="shrink-0 rounded-lg border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-600 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
-            >
-              {t("Reset to today")}
-            </button>
-          ) : null}
         </div>
 
         <div className="flex gap-2">
@@ -816,11 +738,6 @@ export default function OrdersPage() {
 
         {status === "PENDING" && (
         <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 md:bottom-8 md:right-8">
-          {filterActive ? (
-            <p className="max-w-[220px] rounded-lg bg-primary-600/95 px-3 py-1.5 text-center text-xs font-medium text-white shadow-md dark:bg-primary-700/95">
-              {t("Print and PDF use filtered orders only")}
-            </p>
-          ) : null}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -829,19 +746,9 @@ export default function OrdersPage() {
                 deferModalOpen(() => setShowFormatModal("print"));
               }}
               disabled={filteredOrders.length === 0 || printing}
-              className="relative flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl border border-primary-500 bg-white px-4 py-3 text-primary-600 shadow-lg transition active:bg-primary-50 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
-              title={filterActive ? t("Print filtered orders") : t("Print labels")}
+              className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl border border-primary-500 bg-white px-4 py-3 text-primary-600 shadow-lg transition active:bg-primary-50 hover:bg-primary-50 disabled:opacity-50 dark:border-primary-400 dark:bg-slate-800 dark:text-primary-300 dark:hover:bg-slate-700"
+              title={t("Print labels")}
             >
-              {filterActive ? (
-                <span
-                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500 text-white ring-2 ring-white dark:ring-slate-900"
-                  aria-hidden
-                >
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-                  </svg>
-                </span>
-              ) : null}
               <IconPrint className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
               <span className="text-sm font-medium">
                 {printing ? t("Printing…") : t("Print")}
@@ -859,19 +766,9 @@ export default function OrdersPage() {
                 downloadingPdf ||
                 (pendingSelectionActive && ordersForPdfAndPrint.length === 0)
               }
-              className="relative flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
-              title={filterActive ? t("Download filtered orders PDF") : "Download all as PDF"}
+              className="flex min-h-[48px] min-w-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-white shadow-lg transition active:bg-primary-600 hover:bg-primary-600 disabled:opacity-50"
+              title="Download PDF"
             >
-              {filterActive ? (
-                <span
-                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-primary-600 ring-2 ring-primary-500"
-                  aria-hidden
-                >
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-                  </svg>
-                </span>
-              ) : null}
               <IconPdf className="h-5 w-5 shrink-0 md:h-6 md:w-6" />
               <span className="text-sm font-medium">
                 {downloadingPdf ? "Generating…" : "PDF"}

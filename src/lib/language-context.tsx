@@ -64,6 +64,7 @@ const TA: Record<string, string> = {
   "Booking date": "புக்கிங் செய்த தேதி",
   "Dispatched date": "அனுப்பி வைக்கப்பட்ட தேதி",
   "All Orders": "அனைத்து ஆர்டர்கள்",
+  "All": "அனைத்தும்",
   "Move to Dispatch": "அனுப்புதலுக்கு மாற்றுக",
   "TO (Customer)": "பெறுநர் (வாடிக்கையாளர் பெயர்)",
   "FROM (Sender)": "அனுப்புநர்",

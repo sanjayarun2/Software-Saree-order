@@ -1,7 +1,13 @@
 import type { OrderStatus } from "./db-types";
 
-/** Relative day presets stay correct across midnight; range/all are absolute. */
-export type OrderDatePreset = "today" | "yesterday" | "range" | "all";
+/** Relative presets stay correct across midnight; range/all are absolute. */
+export type OrderDatePreset =
+  | "today"
+  | "yesterday"
+  | "this_week"
+  | "this_month"
+  | "range"
+  | "all";
 
 export type OrderFilterState = {
   status: OrderStatus;
@@ -25,6 +31,25 @@ export function shiftLocalDateIso(iso: string, days: number): string {
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + days);
   return localDateIso(dt);
+}
+
+/** Monday-start week containing today → today. */
+export function thisWeekRangeIso(now: Date = new Date()): { from: string; to: string } {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const day = today.getDay();
+  const monOffset = day === 0 ? -6 : 1 - day;
+  const from = new Date(today);
+  from.setDate(today.getDate() + monOffset);
+  return { from: localDateIso(from), to: localDateIso(today) };
+}
+
+/** First day of current month → today. */
+export function thisMonthRangeIso(now: Date = new Date()): { from: string; to: string } {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  return { from: localDateIso(from), to: localDateIso(today) };
 }
 
 export function createDayOrderFilters(
@@ -51,6 +76,28 @@ export function createYesterdayOrderFilters(
   return createDayOrderFilters(status, shiftLocalDateIso(localDateIso(), -1), "yesterday");
 }
 
+export function createThisWeekOrderFilters(status: OrderStatus = "PENDING"): OrderFilterState {
+  const { from, to } = thisWeekRangeIso();
+  return {
+    status,
+    fromDate: from,
+    toDate: to,
+    allOrders: false,
+    datePreset: "this_week",
+  };
+}
+
+export function createThisMonthOrderFilters(status: OrderStatus = "PENDING"): OrderFilterState {
+  const { from, to } = thisMonthRangeIso();
+  return {
+    status,
+    fromDate: from,
+    toDate: to,
+    allOrders: false,
+    datePreset: "this_month",
+  };
+}
+
 export function createAllOrdersFilters(status: OrderStatus = "PENDING"): OrderFilterState {
   return {
     status,
@@ -75,22 +122,27 @@ export function createRangeOrderFilters(
   };
 }
 
-/** Resolve relative presets to the current calendar day before fetch/display. */
+/** Resolve relative presets to the current calendar bounds before fetch/display. */
 export function resolveOrderFilters(filters: OrderFilterState): OrderFilterState {
-  if (filters.datePreset === "today") {
-    return createTodayOrderFilters(filters.status);
+  switch (filters.datePreset) {
+    case "today":
+      return createTodayOrderFilters(filters.status);
+    case "yesterday":
+      return createYesterdayOrderFilters(filters.status);
+    case "this_week":
+      return createThisWeekOrderFilters(filters.status);
+    case "this_month":
+      return createThisMonthOrderFilters(filters.status);
+    case "all":
+      return createAllOrdersFilters(filters.status);
+    default:
+      if (filters.allOrders) return createAllOrdersFilters(filters.status);
+      return {
+        ...filters,
+        allOrders: false,
+        datePreset: "range",
+      };
   }
-  if (filters.datePreset === "yesterday") {
-    return createYesterdayOrderFilters(filters.status);
-  }
-  if (filters.datePreset === "all" || filters.allOrders) {
-    return createAllOrdersFilters(filters.status);
-  }
-  return {
-    ...filters,
-    allOrders: false,
-    datePreset: "range",
-  };
 }
 
 /** Default: today only — never load the full history on open. */
@@ -180,19 +232,23 @@ export function isYesterdayFilter(filters: OrderFilterState): boolean {
 
 export function describeDateFilters(
   filters: OrderFilterState,
-  labels: { allOrders: string; today?: string; yesterday?: string }
+  labels: {
+    allOrders: string;
+    today?: string;
+    yesterday?: string;
+    thisWeek?: string;
+    thisMonth?: string;
+  }
 ): string {
   const resolved = resolveOrderFilters(filters);
   if (resolved.allOrders || resolved.datePreset === "all") {
     return labels.allOrders;
   }
 
-  if (labels.today && resolved.datePreset === "today") {
-    return labels.today;
-  }
-  if (labels.yesterday && resolved.datePreset === "yesterday") {
-    return labels.yesterday;
-  }
+  if (labels.today && resolved.datePreset === "today") return labels.today;
+  if (labels.yesterday && resolved.datePreset === "yesterday") return labels.yesterday;
+  if (labels.thisWeek && resolved.datePreset === "this_week") return labels.thisWeek;
+  if (labels.thisMonth && resolved.datePreset === "this_month") return labels.thisMonth;
 
   const from = formatIsoToDdMmYyyy(resolved.fromDate);
   const to = formatIsoToDdMmYyyy(resolved.toDate);
@@ -229,4 +285,36 @@ export function orderFiltersEqual(a: OrderFilterState, b: OrderFilterState): boo
     ra.allOrders === rb.allOrders &&
     ra.datePreset === rb.datePreset
   );
+}
+
+/** Quick-select periods shown in the filter menu (Custom opens date fields). */
+export const ORDER_PERIOD_MENU: {
+  preset: Exclude<OrderDatePreset, "range">;
+  labelKey: string;
+}[] = [
+  { preset: "today", labelKey: "Today" },
+  { preset: "yesterday", labelKey: "Yesterday" },
+  { preset: "this_week", labelKey: "This Week" },
+  { preset: "this_month", labelKey: "This Month" },
+  { preset: "all", labelKey: "All" },
+];
+
+export function createFiltersForPreset(
+  status: OrderStatus,
+  preset: OrderDatePreset
+): OrderFilterState {
+  switch (preset) {
+    case "today":
+      return createTodayOrderFilters(status);
+    case "yesterday":
+      return createYesterdayOrderFilters(status);
+    case "this_week":
+      return createThisWeekOrderFilters(status);
+    case "this_month":
+      return createThisMonthOrderFilters(status);
+    case "all":
+      return createAllOrdersFilters(status);
+    default:
+      return createTodayOrderFilters(status);
+  }
 }
