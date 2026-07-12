@@ -53,9 +53,33 @@ export function normalizeIsDraft(value: unknown): boolean {
 }
 
 export function normalizeProductListItem(item: VeloProductListItem): VeloProductListItem {
+  const raw = item as VeloProductListItem & Record<string, unknown>;
+  const imageUrl =
+    (typeof raw.imageUrl === "string" && raw.imageUrl.trim()) ||
+    null;
+  // Prefer explicit imageUrl; also accept alternate shop field names if present.
+  let resolved = imageUrl;
+  if (!resolved) {
+    for (const key of ["thumbnailUrl", "featuredImageUrl", "image", "thumbnail"]) {
+      const v = raw[key];
+      if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) {
+        resolved = v.trim();
+        break;
+      }
+      if (v && typeof v === "object") {
+        const nested = v as Record<string, unknown>;
+        const url = nested.url ?? nested.src;
+        if (typeof url === "string" && /^https?:\/\//i.test(url.trim())) {
+          resolved = url.trim();
+          break;
+        }
+      }
+    }
+  }
   return {
     ...item,
     isDraft: normalizeIsDraft(item.isDraft),
+    imageUrl: resolved,
   };
 }
 

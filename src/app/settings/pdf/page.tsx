@@ -15,7 +15,7 @@ import {
   type PdfContentType,
   type PdfPlacement,
 } from "@/lib/pdf-settings-supabase";
-import { prepareAddressForPdf } from "@/lib/pdf-utils";
+import { prepareAddressForPdf, LABEL_TO_ADDRESS_GAP_MM } from "@/lib/pdf-utils";
 import { sanitizePdfBrandText } from "@/lib/pdf-address-sanitize";
 import {
   pickLogoImageNative,
@@ -364,7 +364,6 @@ export default function PdfSettingsPage() {
   const setSelectedValue = selectedTarget === "logo" ? setLogoYmm : selectedTarget === "from" ? setFromYmm : setToYmm;
   const scaledFontPx = textSize * MM_PER_PT * previewPxPerMm;
   const scaledAddressLineHeightPx = textSize * 0.5 * previewPxPerMm;
-  const LABEL_TO_ADDRESS_GAP_MM = 6;
   const scaledAddressGapPx = LABEL_TO_ADDRESS_GAP_MM * previewPxPerMm;
   const scaledCenterLineHeightPx = textSize * 0.4 * previewPxPerMm;
   const stepY = (dir: 1 | -1) => {

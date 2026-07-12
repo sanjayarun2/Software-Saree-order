@@ -21,6 +21,7 @@ import {
   hasWebsiteLineItems,
   lineItemsFromVeloApiItems,
   totalQuantityFromLineItems,
+  websiteLineItemsMissingImages,
 } from "./website-order-line-items";
 import { buildWebsiteToAddress } from "./pdf-address-sanitize";
 
@@ -486,7 +487,12 @@ async function importOrdersForIntegration(
       if (existing.payment_status !== paymentStatus) {
         patches.payment_status = paymentStatus;
       }
-      if (lineItems.length > 0 && !hasWebsiteLineItems(existing.website_line_items)) {
+      if (
+        lineItems.length > 0 &&
+        (!hasWebsiteLineItems(existing.website_line_items) ||
+          (websiteLineItemsMissingImages(existing.website_line_items) &&
+            !websiteLineItemsMissingImages(lineItems)))
+      ) {
         patches.website_line_items = lineItems;
       }
 
@@ -503,7 +509,7 @@ async function importOrdersForIntegration(
         (/Web\s*#/i.test(existing.recipient_details ?? "") ||
           /(?:^|\n)---\s*(?:\n|$)/.test(existing.recipient_details ?? "") ||
           /^Items:$/m.test(existing.recipient_details ?? "") ||
-          (mobile && !/\(Mob No\s*:/i.test(existing.recipient_details ?? "")))
+          (mobile && !/\(?\s*Mob No\s*:/i.test(existing.recipient_details ?? "")))
       ) {
         patches.recipient_details = cleanTo;
       }

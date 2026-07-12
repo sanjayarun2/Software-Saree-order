@@ -49,7 +49,7 @@ export function sanitizePdfBrandText(text: string): string {
 
 export function formatMobNoLine(digits10: string): string {
   const d = digits10.replace(/\D/g, "").slice(-10);
-  return `(Mob No : ${d})`;
+  return `Mob No : ${d}`;
 }
 
 export function normalizeMobileDigits(raw: string): string | null {
@@ -143,7 +143,7 @@ export function stripWebOrderMentions(text: string): string {
  * Sanitize FROM/TO address blocks for PDF labels / stored TO text.
  * - Both: strip ® / (R)
  * - FROM: remove GSTIN
- * - TO: remove email, Web #, IN → India, phone last line as `(Mob No : …)`
+ * - TO: remove email, Web #, IN → India, phone last line as `Mob No : …`
  */
 export function sanitizePdfAddress(
   text: string,

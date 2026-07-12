@@ -37,7 +37,7 @@ function sanitizePdfBrandText(text) {
 
 function formatMobNoLine(digits10) {
   const d = digits10.replace(/\D/g, "").slice(-10);
-  return `(Mob No : ${d})`;
+  return `Mob No : ${d}`;
 }
 
 function normalizeMobileDigits(raw) {
@@ -195,7 +195,7 @@ check("TO removes email and Web #", () => {
   );
   assert.ok(!/@/.test(out));
   assert.ok(!/Web\s*#/i.test(out));
-  assert.equal(out.split("\n").pop(), "(Mob No : 9876543210)");
+  assert.equal(out.split("\n").pop(), "Mob No : 9876543210");
 });
 
 check("TO uses fallback mobile when address has none", () => {
@@ -204,7 +204,7 @@ check("TO uses fallback mobile when address has none", () => {
   });
   assert.ok(!/Web\s*#/i.test(out));
   assert.match(out, /India/);
-  assert.equal(out.split("\n").pop(), "(Mob No : 9876543210)");
+  assert.equal(out.split("\n").pop(), "Mob No : 9876543210");
 });
 
 check("Velo TO builder has no Web # / Items and ends with Mob No", () => {
@@ -216,7 +216,7 @@ check("Velo TO builder has no Web # / Items and ends with Mob No", () => {
   assert.ok(!/Web\s*#/i.test(out));
   assert.ok(!/Items:/i.test(out));
   assert.ok(out.startsWith("Anita"));
-  assert.equal(out.split("\n").pop(), "(Mob No : 9876543210)");
+  assert.equal(out.split("\n").pop(), "Mob No : 9876543210");
 });
 
 check("idempotent sanitize", () => {
@@ -248,6 +248,81 @@ check("source exports Web/Velo helpers", () => {
   );
   assert.ok(velo.includes("buildWebsiteToAddress"));
   assert.ok(!/parts\.push\(`Web #/.test(velo));
+});
+
+check("PDF fit keeps full Mob No as last line when over cap", () => {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const pdfSrc = readFileSync(resolve(__dirname, "../src/lib/pdf-utils.ts"), "utf8");
+  assert.ok(pdfSrc.includes("preserveMob"), "fitAddressLinesToColumn must preserve Mob line");
+  assert.ok(
+    pdfSrc.includes("LABEL_TO_ADDRESS_GAP_MM = 9"),
+    "FROM/TO label gap should be 9mm"
+  );
+  assert.ok(
+    pdfSrc.includes("export function fitAddressLinesToColumn"),
+    "fitAddressLinesToColumn should be exported"
+  );
+
+  // Mirror the preserve-Mob fit algorithm used in pdf-utils.
+  function softBreakLongRuns(text, chunkSize = 14) {
+    return text
+      .split(/(\s+)/)
+      .map((part) => {
+        if (part.trim().length === 0 || part.length <= chunkSize) return part;
+        const chunks = [];
+        for (let i = 0; i < part.length; i += chunkSize) chunks.push(part.slice(i, i + chunkSize));
+        return chunks.join(" ");
+      })
+      .join("");
+  }
+  function fit(wrapped, maxLines, maxW = 80) {
+    if (wrapped.length <= maxLines) return wrapped;
+    const last = wrapped[wrapped.length - 1] ?? "";
+    const preserveMob = /^\(?\s*Mob No\s*:/i.test(last.trim()) && maxLines >= 2;
+    const split = (s) => {
+      // crude width: ~chars
+      const out = [];
+      let cur = "";
+      for (const word of softBreakLongRuns(s).split(/\s+/)) {
+        const next = cur ? `${cur} ${word}` : word;
+        if (next.length > maxW && cur) {
+          out.push(cur);
+          cur = word;
+        } else cur = next;
+      }
+      if (cur) out.push(cur);
+      return out.length ? out : [s];
+    };
+    if (preserveMob) {
+      const mobLine = split(last.trim())[0] ?? last.trim();
+      const body = wrapped.slice(0, -1);
+      const bodyMax = maxLines - 1;
+      if (body.length <= bodyMax) return [...body, mobLine];
+      const head = body.slice(0, bodyMax - 1);
+      const overflowFirst = split(body.slice(bodyMax - 1).join(" "))[0];
+      return [...head, overflowFirst, mobLine];
+    }
+    return wrapped.slice(0, maxLines);
+  }
+
+  const longTo = [
+    "A. Priyanga",
+    "AMEYA FOOD COMPANY,",
+    "37, Amaravathy Nagar, 1st Street,",
+    "Chinna Thottipalayam, Coimbatore, Tamil",
+    "Nadu, 641402, India",
+    "Extra area line that forces overflow",
+    "Another overflow line",
+    "Mob No : 9876543210",
+  ];
+  const fitted = fit(longTo, 7);
+  assert.equal(fitted.length, 7);
+  assert.equal(fitted[fitted.length - 1], "Mob No : 9876543210");
+  assert.ok(!fitted.some((l) => /\(Mob$/.test(l) || /^Mob$/.test(l)), "must not truncate mid Mob");
+  assert.ok(
+    !fitted.some((l) => /India\s*\(?\s*Mob/.test(l)),
+    "must not glue India + Mob on one truncated line"
+  );
 });
 
 if (failed) {

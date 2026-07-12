@@ -593,8 +593,19 @@ const ADDRESS_PADDING = 4;   // 4mm from column border to text start
 const EDGE_SAFE_GAP = 4;     // 4mm from text end to opposite border
 const VERTICAL_OFFSET = 4;   // shift address blocks downward for balance
 const THANKS_LINE_GAP = 3;   // slightly increased gap between center lines
+/**
+ * Baseline gap from FROM:/TO: label to first address line.
+ * Slightly more than one address line-height so the header reads clearly separated.
+ */
+export const LABEL_TO_ADDRESS_GAP_MM = 9;
 /** Minimum gap between center column edge and FROM/TO text (prevents column overlap). */
 const MIN_GAP_TO_CENTER_MM = 2;
+
+const MOB_NO_LINE_RE = /^\(?\s*Mob No\s*:/i;
+
+function isMobNoLine(line: string): boolean {
+  return MOB_NO_LINE_RE.test(String(line ?? "").trim());
+}
 
 /** Remove blank lines (whitespace-only) from pasted/typed addresses before PDF render. */
 export function stripEmptyAddressLines(text: string): string {
@@ -665,8 +676,12 @@ function getBaseTypographyPt(settings: PdfRenderOptions["settings"]): {
   return { labelPt: SIZE_LABEL, addressPt: SIZE_ADDRESS, centerPt: 15 };
 }
 
-/** Wrap every line to column width, then cap line count without leaving overflow tokens. */
-function fitAddressLinesToColumn(
+/**
+ * Wrap every line to column width, then cap line count.
+ * TO labels: always keep a full `Mob No : …` as the final line — never merge/truncate
+ * into the previous address line (which produced visible "India (Mob").
+ */
+export function fitAddressLinesToColumn(
   doc: { splitTextToSize: (s: string, w: number) => string[] },
   text: string,
   maxW: number,
@@ -674,6 +689,24 @@ function fitAddressLinesToColumn(
 ): string[] {
   const wrapped = getPdfAddressLines(doc, text, maxW);
   if (wrapped.length <= maxLines) return wrapped;
+
+  const last = wrapped[wrapped.length - 1] ?? "";
+  const preserveMob = isMobNoLine(last) && maxLines >= 2;
+
+  if (preserveMob) {
+    const mobLine =
+      doc.splitTextToSize(softBreakLongRuns(last.trim()), maxW)[0] ?? last.trim();
+    const body = wrapped.slice(0, -1);
+    const bodyMax = maxLines - 1;
+    if (body.length <= bodyMax) {
+      return [...body, mobLine];
+    }
+    const head = body.slice(0, bodyMax - 1);
+    const overflowSource = softBreakLongRuns(body.slice(bodyMax - 1).join(" "));
+    const overflowFirst =
+      doc.splitTextToSize(overflowSource, maxW)[0] ?? overflowSource;
+    return [...head, overflowFirst, mobLine];
+  }
 
   const head = wrapped.slice(0, maxLines - 1);
   const tailSource = softBreakLongRuns(wrapped.slice(maxLines - 1).join(" "));
@@ -802,7 +835,7 @@ function measureOrderSectionLayout(
   const toLines = fitAddressLinesToColumn(doc, toSource, maxWTo, MAX_ADDRESS_LINES);
 
   const sectionH = SECTION_H;
-  /** Label baseline; first address line is +6 mm (default 8 → address starts at 14 mm). */
+  /** Label baseline; first address line is +LABEL_TO_ADDRESS_GAP_MM (default 8 → ~17 mm). */
   const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
   const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 8;
   const placement = options.settings?.placement ?? "bottom";
@@ -823,7 +856,7 @@ function measureOrderSectionLayout(
   );
 
   const lineHeightMm = addressSizePt * 0.5;
-  const labelToAddressGap = 6;
+  const labelToAddressGap = LABEL_TO_ADDRESS_GAP_MM;
 
   const layout = layoutBlocksInSection(
     fromYBase,
@@ -983,8 +1016,21 @@ export function normalizeAddressBlock(text: string): string {
     result.push(phoneLines[0]);
   }
 
-  // Hard cap: we never want to exceed MAX_ADDRESS_LINES logical lines; merge extras if needed.
+  // Hard cap: never exceed MAX_ADDRESS_LINES; keep phone / Mob No as its own last line.
   if (result.length > MAX_ADDRESS_LINES) {
+    const last = result[result.length - 1] ?? "";
+    const preservePhone =
+      phoneRegex.test(last) || isMobNoLine(last) || /mob\s*no/i.test(last);
+    if (preservePhone && MAX_ADDRESS_LINES >= 2) {
+      const bodyMax = MAX_ADDRESS_LINES - 1;
+      const body = result.slice(0, -1);
+      if (body.length <= bodyMax) {
+        return [...body, last].join("\n");
+      }
+      const head = body.slice(0, bodyMax - 1);
+      const tail = body.slice(bodyMax - 1).join(", ");
+      return [...head, tail, last].join("\n");
+    }
     const head = result.slice(0, MAX_ADDRESS_LINES - 1);
     const tail = result.slice(MAX_ADDRESS_LINES - 1).join(", ");
     head.push(tail);
@@ -1151,7 +1197,7 @@ function drawOrderLabel(
   const addressSize = resolved.addressSizePt;
   const textBold = options.settings?.text_bold !== false;
   const lineHeightMm = resolved.addressSizePt * 0.5;
-  const labelToAddressGap = 6;
+  const labelToAddressGap = LABEL_TO_ADDRESS_GAP_MM;
 
   const fromLines = resolved.fromLines;
   const toLines = resolved.toLines;

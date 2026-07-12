@@ -32,6 +32,8 @@ export type VeloProductListItem = {
   stock: number | null;
   isDraft: boolean;
   updatedAt: string;
+  /** Featured product photo (public URL) when shop returns it. */
+  imageUrl?: string | null;
 };
 
 export type VeloProductsAction =

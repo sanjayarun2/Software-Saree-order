@@ -3,6 +3,7 @@ import type { Order } from "./db-types";
 import {
   savePdfBlob,
   resolveOrderLabelLayout,
+  LABEL_TO_ADDRESS_GAP_MM,
   type PdfRenderOptions,
   type ResolvedLabelLayout,
 } from "./pdf-utils";
@@ -211,7 +212,7 @@ function drawPosLabel(
   const addressSize = resolved.addressSizePt;
   const textBold = options.settings?.text_bold !== false;
   const lineHeightMm = resolved.addressSizePt * 0.5;
-  const labelToAddressGap = 6;
+  const labelToAddressGap = LABEL_TO_ADDRESS_GAP_MM;
 
   const fromLines = resolved.fromLines;
   const toLines = resolved.toLines;

@@ -9,8 +9,14 @@ import {
 } from "@/lib/order-recipient-parser";
 import { isPaidWebsiteOrder } from "@/lib/order-payment-status";
 import {
+  mergeWebsiteLineItems,
   normalizeWebsiteLineItems,
 } from "@/lib/website-order-line-items";
+import {
+  enrichLineItemsWithProductImages,
+  lineItemsMissingImages,
+  rememberLoadedProductImage,
+} from "@/lib/product-image-cache";
 import {
   fetchWebsiteOrderDetailSnapshot,
 } from "@/lib/website-order-detail-fetch";
@@ -58,13 +64,15 @@ function formatBookingDate(iso: string): string {
 
 function LineItemRow({
   item,
+  userId,
   noImageLabel,
 }: {
   item: WebsiteOrderLineItem;
+  userId: string | null;
   noImageLabel: string;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const showImage = item.imageUrl && !imgFailed;
+  const showImage = Boolean(item.imageUrl?.trim()) && !imgFailed;
 
   return (
     <li className="flex gap-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/60">
@@ -77,6 +85,11 @@ function LineItemRow({
             className="h-full w-full object-cover"
             loading="lazy"
             onError={() => setImgFailed(true)}
+            onLoad={() => {
+              if (userId) {
+                void rememberLoadedProductImage(userId, item);
+              }
+            }}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] font-medium leading-tight text-slate-400">
@@ -147,14 +160,93 @@ export function OrderDetailSheet({
       return;
     }
 
+    let cancelled = false;
     const stored = normalizeWebsiteLineItems(order.website_line_items);
-    if (stored.length > 0) {
-      setLineItems(stored);
-      setLoadingItems(false);
-      return;
+    const orderId = order.id;
+    const externalId = order.external_order_id?.trim() || "";
+    const isWebsite = order.order_source === "website";
+
+    async function persistItems(items: WebsiteOrderLineItem[]) {
+      if (!userId || !orderId || !items.length) return;
+      try {
+        await updateOrder(userId, orderId, {
+          website_line_items: items,
+        });
+        onOrderUpdatedRef.current?.({
+          ...order!,
+          website_line_items: items,
+        });
+      } catch {
+        /* keep UI state even if persist fails */
+      }
     }
 
-    if (order.order_source !== "website" || !order.external_order_id || !userId) {
+    async function resolveImages(items: WebsiteOrderLineItem[]) {
+      if (!userId || !items.length || !lineItemsMissingImages(items)) {
+        return items;
+      }
+
+      let next = items;
+
+      // 1) Refresh from shop order detail when images are missing.
+      if (isWebsite && externalId) {
+        try {
+          const snapshot = await fetchWebsiteOrderDetailSnapshot(
+            userId,
+            externalId
+          );
+          if (snapshot?.lineItems?.length) {
+            next = mergeWebsiteLineItems(next, snapshot.lineItems);
+            if (!cancelled) {
+              setExtraAddressLines(snapshot.addressLines);
+              setExtraCustomerName(snapshot.customerName);
+              setExtraMobile(snapshot.customerMobile);
+            }
+          }
+        } catch {
+          /* fall through to product catalog */
+        }
+      }
+
+      // 2) Fill remaining gaps from product catalog + local image cache.
+      if (lineItemsMissingImages(next)) {
+        const enriched = await enrichLineItemsWithProductImages(userId, next);
+        next = enriched.items;
+      }
+
+      return next;
+    }
+
+    if (stored.length > 0) {
+      setLineItems(stored);
+      setLoadingItems(lineItemsMissingImages(stored));
+
+      void (async () => {
+        const resolved = await resolveImages(stored);
+        if (cancelled) return;
+        setLineItems(resolved);
+        setLoadingItems(false);
+        if (
+          lineItemsMissingImages(stored) &&
+          !lineItemsMissingImages(resolved)
+        ) {
+          await persistItems(resolved);
+        } else if (
+          resolved.some(
+            (row, i) =>
+              (row.imageUrl ?? null) !== (stored[i]?.imageUrl ?? null) ||
+              (row.productCode ?? null) !== (stored[i]?.productCode ?? null)
+          )
+        ) {
+          await persistItems(resolved);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!isWebsite || !externalId || !userId) {
       setLineItems(
         parsed.itemLines.map((line) => {
           const match = line.match(/^(.+?)\s+x(\d+)$/i);
@@ -167,33 +259,30 @@ export function OrderDetailSheet({
       return;
     }
 
-    let cancelled = false;
     setLoadingItems(true);
-    void fetchWebsiteOrderDetailSnapshot(userId, order.external_order_id)
-      .then(async (snapshot) => {
+    void (async () => {
+      try {
+        const snapshot = await fetchWebsiteOrderDetailSnapshot(
+          userId,
+          externalId
+        );
         if (cancelled) return;
         if (!snapshot) {
           setLineItems([]);
           return;
         }
-        setLineItems(snapshot.lineItems);
         setExtraAddressLines(snapshot.addressLines);
         setExtraCustomerName(snapshot.customerName);
         setExtraMobile(snapshot.customerMobile);
 
-        if (snapshot.lineItems.length > 0 && userId && order.id) {
-          await updateOrder(userId, order.id, {
-            website_line_items: snapshot.lineItems,
-          });
-          onOrderUpdatedRef.current?.({
-            ...order,
-            website_line_items: snapshot.lineItems,
-          });
-        }
-      })
-      .finally(() => {
+        const resolved = await resolveImages(snapshot.lineItems);
+        if (cancelled) return;
+        setLineItems(resolved);
+        if (resolved.length > 0) await persistItems(resolved);
+      } finally {
         if (!cancelled) setLoadingItems(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -344,7 +433,7 @@ export function OrderDetailSheet({
               <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {labels.packItems}
               </h3>
-              {loadingItems ? (
+              {loadingItems && lineItems.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">{labels.loading}</p>
               ) : lineItems.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
@@ -356,6 +445,7 @@ export function OrderDetailSheet({
                     <LineItemRow
                       key={`${item.productId ?? item.name}-${idx}`}
                       item={item}
+                      userId={userId}
                       noImageLabel={labels.noImage}
                     />
                   ))}

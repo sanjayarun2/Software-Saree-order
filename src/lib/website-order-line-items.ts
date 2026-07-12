@@ -1,6 +1,11 @@
 import type { WebsiteOrderLineItem } from "./db-types";
+import {
+  extractImageUrlFromUnknown,
+  extractProductCodeFromText,
+} from "./product-image-url";
 
 export type { WebsiteOrderLineItem };
+export { extractProductCodeFromText };
 
 export function normalizeWebsiteLineItems(
   raw: unknown
@@ -18,17 +23,17 @@ export function normalizeWebsiteLineItems(
     const unitRaw = item.unitPrice;
     const unitPrice =
       typeof unitRaw === "number" && Number.isFinite(unitRaw) ? unitRaw : null;
+    const productCodeRaw =
+      typeof item.productCode === "string" ? item.productCode.trim() : "";
+    const productCode =
+      productCodeRaw || extractProductCodeFromText(name) || null;
     out.push({
       productId:
         typeof item.productId === "string" ? item.productId.trim() || null : null,
       name,
-      productCode:
-        typeof item.productCode === "string"
-          ? item.productCode.trim() || null
-          : null,
+      productCode,
       quantity,
-      imageUrl:
-        typeof item.imageUrl === "string" ? item.imageUrl.trim() || null : null,
+      imageUrl: extractImageUrlFromUnknown(item),
       unitPrice,
     });
   }
@@ -39,6 +44,11 @@ export function hasWebsiteLineItems(raw: unknown): boolean {
   return normalizeWebsiteLineItems(raw).length > 0;
 }
 
+export function websiteLineItemsMissingImages(raw: unknown): boolean {
+  const items = normalizeWebsiteLineItems(raw);
+  return items.length > 0 && items.some((item) => !item.imageUrl?.trim());
+}
+
 export function lineItemsFromVeloApiItems(
   items: unknown
 ): WebsiteOrderLineItem[] {
@@ -47,13 +57,28 @@ export function lineItemsFromVeloApiItems(
     items.map((row) => {
       if (!row || typeof row !== "object") return row;
       const item = row as Record<string, unknown>;
+      const nestedProduct =
+        item.product && typeof item.product === "object"
+          ? (item.product as Record<string, unknown>)
+          : null;
       return {
-        productId: item.productId,
-        name: item.productName ?? item.name,
-        productCode: item.productCode,
-        quantity: item.quantity,
-        imageUrl: item.imageUrl,
-        unitPrice: item.unitPrice,
+        productId: item.productId ?? nestedProduct?.id ?? nestedProduct?.productId,
+        name:
+          item.productName ??
+          item.name ??
+          nestedProduct?.name ??
+          nestedProduct?.title,
+        productCode:
+          item.productCode ?? nestedProduct?.productCode ?? nestedProduct?.sku,
+        quantity: item.quantity ?? item.qty ?? item.count,
+        imageUrl:
+          extractImageUrlFromUnknown(item) ??
+          extractImageUrlFromUnknown(nestedProduct),
+        unitPrice: item.unitPrice ?? nestedProduct?.price,
+        image: item.image ?? nestedProduct?.image,
+        thumbnail: item.thumbnail ?? nestedProduct?.thumbnail,
+        featuredImage: item.featuredImage ?? nestedProduct?.featuredImage,
+        images: item.images ?? nestedProduct?.images,
       };
     })
   );
@@ -65,4 +90,37 @@ export function totalQuantityFromLineItems(
   if (!items.length) return 1;
   const sum = items.reduce((acc, line) => acc + line.quantity, 0);
   return sum > 0 ? sum : 1;
+}
+
+/** Merge fresher image URLs / codes from `fresh` into `base` by productId/code/name. */
+export function mergeWebsiteLineItems(
+  base: WebsiteOrderLineItem[],
+  fresh: WebsiteOrderLineItem[]
+): WebsiteOrderLineItem[] {
+  if (!fresh.length) return base;
+  if (!base.length) return fresh;
+
+  return base.map((item) => {
+    const match =
+      fresh.find(
+        (f) =>
+          (item.productId && f.productId && item.productId === f.productId) ||
+          (item.productCode &&
+            f.productCode &&
+            item.productCode === f.productCode)
+      ) ??
+      fresh.find(
+        (f) => f.name.trim().toLowerCase() === item.name.trim().toLowerCase()
+      );
+
+    if (!match) return item;
+    return {
+      ...item,
+      productId: item.productId || match.productId,
+      productCode: item.productCode || match.productCode,
+      imageUrl: item.imageUrl || match.imageUrl,
+      unitPrice: item.unitPrice ?? match.unitPrice,
+      quantity: item.quantity || match.quantity,
+    };
+  });
 }
