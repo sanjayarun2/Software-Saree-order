@@ -268,6 +268,7 @@ function ProductListTab({
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchBlockRef = useRef<HTMLDivElement>(null);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [cartExpanded, setCartExpanded] = useState(false);
   const searchPending =
     searchInput.trim() !== appliedSearch.trim();
   const shareCart = useShareCart(userId);
@@ -567,21 +568,11 @@ function ProductListTab({
                     {normalizeIsDraft(p.isDraft) ? t("Draft") : t("Published")}
                   </span>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={addingProductId === p.productId || normalizeIsDraft(p.isDraft)}
-                    onClick={() => handleAddToShareCart(p)}
-                    className="flex h-10 min-w-[2.5rem] items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-2 text-emerald-700 disabled:opacity-50 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    title={t("Add to order cart")}
-                    aria-label={t("Add to order cart")}
-                  >
-                    <span className="text-lg font-bold leading-none">+</span>
-                  </button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => onEdit(p)}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium dark:border-slate-600"
+                    className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium dark:border-slate-600"
                   >
                     {t("Edit")}
                   </button>
@@ -589,9 +580,22 @@ function ProductListTab({
                     type="button"
                     disabled={deletingId === p.productId}
                     onClick={() => void handleDelete(p.productId, p.name)}
-                    className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-600 disabled:opacity-50 dark:border-red-900"
+                    className="min-h-[44px] rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-600 disabled:opacity-50 dark:border-red-900"
                   >
                     {t("Delete")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={addingProductId === p.productId || normalizeIsDraft(p.isDraft)}
+                    onClick={() => handleAddToShareCart(p)}
+                    className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm transition active:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50"
+                    title={t("Add to order cart")}
+                    aria-label={t("Add to order cart")}
+                  >
+                    <span className="text-xl font-bold leading-none" aria-hidden>
+                      +
+                    </span>
+                    <span>{t("Add")}</span>
                   </button>
                 </div>
               </div>
@@ -625,7 +629,12 @@ function ProductListTab({
       {shareCart.lines.length > 0 ? (
         <div
           className="shrink-0 max-lg:mb-0"
-          style={{ height: shareCartSpacerHeight(shareCart.lines.length, { compact: searchFocused }) }}
+          style={{
+            height: shareCartSpacerHeight(shareCart.lines.length, {
+              compact: searchFocused,
+              expanded: cartExpanded && !searchFocused,
+            }),
+          }}
           aria-hidden
         />
       ) : null}
@@ -636,6 +645,7 @@ function ProductListTab({
         shopBaseUrl={shopBaseUrl}
         compact={searchFocused}
         totalUnits={shareCart.totalUnits}
+        onExpandedChange={setCartExpanded}
         onSetQuantity={shareCart.setQuantity}
         onRemoveLine={shareCart.removeLine}
         onClear={shareCart.clearCart}

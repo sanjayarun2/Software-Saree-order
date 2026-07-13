@@ -449,6 +449,7 @@ const TA: Record<string, string> = {
   "Share shop link": "கடை இணைப்பைப் பகிர்",
   "Publish the product before sharing shop link.": "கடை இணைப்பைப் பகிர்வதற்கு முன் புராடக்டை வெளியிடவும்.",
   "Order cart": "ஆர்டர் கார்ட்",
+  "Add": "சேர்",
   "Add to order cart": "ஆர்டர் கார்ட்டில் சேர்",
   "Added to order cart. Set quantity below and share on WhatsApp.": "ஆர்டர் கார்ட்டில் சேர்க்கப்பட்டது. அளவை அமைத்து WhatsApp-ல் பகிரவும்.",
   "Publish the product before adding to order cart.": "ஆர்டர் கார்ட்டில் சேர்ப்பதற்கு முன் புராடக்டை வெளியிடவும்.",
