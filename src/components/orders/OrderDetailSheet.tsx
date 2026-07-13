@@ -47,6 +47,7 @@ export type OrderDetailSheetProps = {
     paid: string;
     noImage: string;
     noItems: string;
+    expandPhoto: string;
   };
 };
 
@@ -66,10 +67,14 @@ function LineItemRow({
   item,
   userId,
   noImageLabel,
+  expandLabel,
+  onExpandPhoto,
 }: {
   item: WebsiteOrderLineItem;
   userId: string | null;
   noImageLabel: string;
+  expandLabel: string;
+  onExpandPhoto: (url: string, alt: string) => void;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const showImage = Boolean(item.imageUrl?.trim()) && !imgFailed;
@@ -78,20 +83,28 @@ function LineItemRow({
     <li className="flex gap-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/60">
       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-slate-800">
         {showImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.imageUrl!}
-            alt={item.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setImgFailed(true)}
-            onLoad={() => {
-              if (userId) {
-                void rememberLoadedProductImage(userId, item);
-              }
-            }}
-          />        ) : (
+          <button
+            type="button"
+            className="h-full w-full"
+            aria-label={expandLabel}
+            onClick={() => onExpandPhoto(item.imageUrl!.trim(), item.name)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.imageUrl!}
+              alt={item.name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImgFailed(true)}
+              onLoad={() => {
+                if (userId) {
+                  void rememberLoadedProductImage(userId, item);
+                }
+              }}
+            />
+          </button>
+        ) : (
           <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] font-medium leading-tight text-slate-400">
             {noImageLabel}
           </div>
@@ -114,6 +127,70 @@ function LineItemRow({
   );
 }
 
+function PhotoLightbox({
+  open,
+  src,
+  alt,
+  closeLabel,
+  onClose,
+}: {
+  open: boolean;
+  src: string;
+  alt: string;
+  closeLabel: string;
+  onClose: () => void;
+}) {
+  const shouldDismissBackdrop = useBackdropDismissGuard(open);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !src) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 p-4"
+      role="presentation"
+      onClick={(e) => {
+        if (shouldDismissBackdrop(e.target, e.currentTarget)) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={alt || closeLabel}
+        className="relative max-h-[90dvh] w-full max-w-lg"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -top-2 right-0 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow"
+          aria-label={closeLabel}
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt}
+          className="max-h-[85dvh] w-full rounded-xl object-contain bg-black"
+          referrerPolicy="no-referrer"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function OrderDetailSheet({
   open,
   order,
@@ -131,6 +208,10 @@ export function OrderDetailSheet({
   const [extraAddressLines, setExtraAddressLines] = useState<string[]>([]);
   const [extraCustomerName, setExtraCustomerName] = useState("");
   const [extraMobile, setExtraMobile] = useState("");
+  const [previewPhoto, setPreviewPhoto] = useState<{
+    src: string;
+    alt: string;
+  } | null>(null);
 
   const parsed = useMemo(
     () => parseRecipientDetails(order?.recipient_details ?? ""),
@@ -157,6 +238,7 @@ export function OrderDetailSheet({
       setExtraAddressLines([]);
       setExtraCustomerName("");
       setExtraMobile("");
+      setPreviewPhoto(null);
       return;
     }
 
@@ -462,6 +544,8 @@ export function OrderDetailSheet({
                       item={item}
                       userId={userId}
                       noImageLabel={labels.noImage}
+                      expandLabel={labels.expandPhoto}
+                      onExpandPhoto={(src, alt) => setPreviewPhoto({ src, alt })}
                     />
                   ))}
                 </ul>
@@ -487,6 +571,14 @@ export function OrderDetailSheet({
           </Link>
         </div>
       </div>
+
+      <PhotoLightbox
+        open={previewPhoto != null}
+        src={previewPhoto?.src ?? ""}
+        alt={previewPhoto?.alt ?? ""}
+        closeLabel={labels.close}
+        onClose={() => setPreviewPhoto(null)}
+      />
     </div>
   );
 }
@@ -510,5 +602,6 @@ export function orderDetailSheetLabels(t: (key: string) => string) {
     paid: t("Paid"),
     noImage: t("No photo"),
     noItems: t("No items listed for this order."),
+    expandPhoto: t("View photo"),
   };
 }

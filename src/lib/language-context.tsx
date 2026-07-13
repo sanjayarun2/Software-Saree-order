@@ -109,6 +109,7 @@ const TA: Record<string, string> = {
   "Customer": "வாடிக்கையாளர்",
   "Loading items…": "பொருட்கள் ஏற்றப்படுகின்றன…",
   "No photo": "புகைப்படம் இல்லை",
+  "View photo": "புகைப்படத்தை பார்க்க",
   "No items listed for this order.": "இந்த ஆர்டருக்கு பொருட்கள் பட்டியலிடப்படவில்லை.",
   "Show Result": "முடிவை காட்டு",
   "Booking From date": "புக்கிங்: முதல்",

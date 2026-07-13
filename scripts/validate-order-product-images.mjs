@@ -4,6 +4,9 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 function extractImageUrlFromUnknown(raw) {
   if (raw == null) return null;
@@ -204,5 +207,28 @@ const byCode = mergeWebsiteLineItems(
   ]
 );
 assert.equal(byCode[0].imageUrl, "https://cdn.example/from-catalog.webp");
+
+// Source guards: draft/archived resolve + lightbox
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const detailSheet = readFileSync(
+  resolve(root, "src/components/orders/OrderDetailSheet.tsx"),
+  "utf8"
+);
+assert.ok(detailSheet.includes("PhotoLightbox"), "packing photo lightbox missing");
+assert.ok(detailSheet.includes("onExpandPhoto"), "tap-to-expand photo missing");
+assert.ok(detailSheet.includes("expandPhoto"), "expand photo label missing");
+
+const imageCache = readFileSync(
+  resolve(root, "src/lib/product-image-cache.ts"),
+  "utf8"
+);
+assert.ok(
+  imageCache.includes('draft: "all"'),
+  "product image enrich must include drafts"
+);
+assert.ok(
+  imageCache.includes("item.productId"),
+  "product image enrich must search by productId"
+);
 
 console.log("validate-order-product-images: OK");

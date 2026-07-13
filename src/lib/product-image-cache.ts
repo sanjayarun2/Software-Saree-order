@@ -170,56 +170,81 @@ export async function enrichLineItemsWithProductImages(
       item.productCode?.trim() ||
       extractProductCodeFromText(item.name) ||
       "";
-    const search = (code || item.name || "").trim();
-    if (!search) continue;
-    try {
-      // Always refresh when resolving photos — stale product cache often lacks imageUrl.
-      const { products } = await listVeloProducts(
-        userId,
-        { search, page: 1, pageSize: 10, draft: "all" },
-        { forceRefresh: true }
-      );
-      const match =
-        products.find((p) => productMatchesLine(p, item)) ??
-        (code
-          ? products.find(
-              (p) =>
-                (p.productCode ?? "").trim().toUpperCase() ===
-                  code.toUpperCase() ||
-                (p.name ?? "").toUpperCase().includes(code.toUpperCase())
-            )
-          : undefined);
-      if (!match) continue;
-      const url =
-        extractImageUrlFromUnknown(match) ??
-        (typeof match.imageUrl === "string"
-          ? match.imageUrl.trim() || null
-          : null);
-      if (!url) continue;
-      for (const key of productLookupKeys(item)) newCacheEntries[key] = url;
-      if (match.productCode) {
-        newCacheEntries[`code:${match.productCode.trim().toUpperCase()}`] = url;
+    // Prefer id (works for draft/archived), then ST code, then name.
+    const searches = [
+      item.productId?.trim() || "",
+      code,
+      (item.name || "").trim().slice(0, 80),
+    ].filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+
+    let foundUrl: string | null = null;
+    let matchProductId: string | null = null;
+    let matchProductCode: string | null = null;
+
+    for (const search of searches) {
+      try {
+        const { products } = await listVeloProducts(
+          userId,
+          { search, page: 1, pageSize: 10, draft: "all" },
+          { forceRefresh: true }
+        );
+        const match =
+          products.find((p) => productMatchesLine(p, item)) ??
+          products.find((p) => p.productId === item.productId) ??
+          (code
+            ? products.find(
+                (p) =>
+                  (p.productCode ?? "").trim().toUpperCase() ===
+                    code.toUpperCase() ||
+                  (p.name ?? "").toUpperCase().includes(code.toUpperCase())
+              )
+            : undefined);
+        if (!match) continue;
+        const url =
+          extractImageUrlFromUnknown(match) ??
+          (typeof match.imageUrl === "string"
+            ? match.imageUrl.trim() || null
+            : null);
+        if (!url) continue;
+        foundUrl = url;
+        matchProductId = match.productId ?? null;
+        matchProductCode = match.productCode ?? null;
+        break;
+      } catch {
+        /* try next search key */
       }
-      if (match.productId) newCacheEntries[`id:${match.productId}`] = url;
-      next = next.map((row) => {
-        const sameItem =
-          row.name === item.name ||
-          (row.productId &&
-            item.productId &&
-            row.productId === item.productId) ||
-          productMatchesLine(
-            {
-              productId: row.productId ?? undefined,
-              productCode: row.productCode,
-              name: row.name,
-            },
-            item
-          );
-        return sameItem && !row.imageUrl?.trim() ? { ...row, imageUrl: url } : row;
-      });
-    } catch {
-      /* keep going */
     }
+
+    if (!foundUrl) continue;
+
+    for (const key of productLookupKeys(item)) newCacheEntries[key] = foundUrl;
+    if (matchProductCode) {
+      newCacheEntries[`code:${matchProductCode.trim().toUpperCase()}`] =
+        foundUrl;
+    }
+    if (matchProductId) newCacheEntries[`id:${matchProductId}`] = foundUrl;
+    next = next.map((row) => {
+      const sameItem =
+        row.name === item.name ||
+        (row.productId &&
+          item.productId &&
+          row.productId === item.productId) ||
+        productMatchesLine(
+          {
+            productId: row.productId ?? undefined,
+            productCode: row.productCode,
+            name: row.name,
+          },
+          item
+        );
+      return sameItem && !row.imageUrl?.trim()
+        ? {
+            ...row,
+            imageUrl: foundUrl,
+            productCode: row.productCode || matchProductCode || code || null,
+          }
+        : row;
+    });
   }
 
   if (Object.keys(newCacheEntries).length) {
