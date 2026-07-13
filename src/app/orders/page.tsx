@@ -23,6 +23,10 @@ import {
 } from "@/lib/order-service";
 import type { Order, OrderStatus } from "@/lib/db-types";
 import {
+  formatOrderDateTimeIst,
+  orderListTimestamp,
+} from "@/lib/order-datetime";
+import {
   isPaidWebsiteOrder,
   isVisibleInOrdersList,
   shouldShowPaymentBadge,
@@ -155,10 +159,14 @@ export default function OrdersPage() {
 
   const openWhatsAppForOrder = (order: Order) => {
     if (typeof window === "undefined") return;
-    const booking = new Date(order.booking_date).toLocaleDateString("en-GB");
+    const booking = formatOrderDateTimeIst(
+      order.created_at || order.booking_date
+    );
     const despatch =
       order.despatch_date != null
-        ? new Date(order.despatch_date).toLocaleDateString("en-GB")
+        ? formatOrderDateTimeIst(
+            order.despatched_at || order.updated_at || order.despatch_date
+          )
         : "Not dispatched";
     const qty =
       order.quantity != null && Number(order.quantity) >= 1
@@ -653,8 +661,8 @@ export default function OrdersPage() {
                         {order.booked_by?.trim() ? (
                           <span>{t("Booked By")} ({order.booked_by.trim()})</span>
                         ) : null}
-                        <span className="tabular-nums">
-                          {new Date(order.booking_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })}
+                        <span className="tabular-nums whitespace-nowrap">
+                          {formatOrderDateTimeIst(orderListTimestamp(order))}
                         </span>
                         {(order.quantity != null && Number(order.quantity) >= 1) && (
                           <span>{t("Qty")}: {Number(order.quantity)}</span>

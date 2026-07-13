@@ -21,6 +21,8 @@ export interface Order {
   courier_name: string;
   booking_date: string;
   despatch_date: string | null;
+  /** Full instant when marked DESPATCHED (IST display). */
+  despatched_at?: string | null;
   status: OrderStatus;
   quantity?: number | null;
   tracking_number?: string | null;

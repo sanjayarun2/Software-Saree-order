@@ -297,21 +297,31 @@ export async function updateOrderStatus(
   despatchDate: string | null,
   trackingNumber?: string | null,
 ): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const despatchedAt = status === "DESPATCHED" ? nowIso : null;
   const existing = await getLocalOrder(userId, orderId);
   if (existing) {
     const updated: Order = {
       ...existing,
       status,
       despatch_date: despatchDate,
+      despatched_at: despatchedAt,
       tracking_number: trackingNumber ?? existing.tracking_number ?? null,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
     await putOrder(userId, updated);
   }
 
   const entry: OutboxEntry = {
     id: uid(),
-    action: { type: "status", orderId, status, despatch_date: despatchDate, tracking_number: trackingNumber ?? null },
+    action: {
+      type: "status",
+      orderId,
+      status,
+      despatch_date: despatchDate,
+      despatched_at: despatchedAt,
+      tracking_number: trackingNumber ?? null,
+    },
     createdAt: Date.now(),
   };
   await pushOutbox(userId, entry);
@@ -380,6 +390,12 @@ async function processOutboxEntry(userId: string, entry: OutboxEntry): Promise<v
       const payload: Record<string, unknown> = {
         status: action.status,
         despatch_date: action.despatch_date,
+        despatched_at:
+          action.despatched_at !== undefined
+            ? action.despatched_at
+            : action.status === "DESPATCHED"
+              ? new Date().toISOString()
+              : null,
         updated_at: new Date().toISOString(),
       };
       if (action.tracking_number !== undefined) payload.tracking_number = action.tracking_number;

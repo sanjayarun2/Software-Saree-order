@@ -22,6 +22,7 @@ import {
 } from "@/lib/website-order-detail-fetch";
 import { updateOrder } from "@/lib/order-service";
 import { useBackdropDismissGuard } from "@/lib/use-backdrop-dismiss-guard";
+import { formatOrderDateTimeIst } from "@/lib/order-datetime";
 
 export type OrderDetailSheetProps = {
   open: boolean;
@@ -39,6 +40,7 @@ export type OrderDetailSheetProps = {
     address: string;
     sender: string;
     bookingDate: string;
+    despatchDate: string;
     courier: string;
     tracking: string;
     quantity: string;
@@ -52,15 +54,7 @@ export type OrderDetailSheetProps = {
 };
 
 function formatBookingDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
+  return formatOrderDateTimeIst(iso);
 }
 
 function LineItemRow({
@@ -493,10 +487,26 @@ export function OrderDetailSheet({
                       {labels.bookingDate}
                     </dt>
                     <dd className="mt-1 text-slate-800 dark:text-slate-200">
-                      {formatBookingDate(order.booking_date)}
+                      {formatBookingDate(
+                        order.created_at || order.booking_date
+                      )}
                     </dd>
                   </div>
-                  {order.quantity != null && Number(order.quantity) >= 1 ? (
+                  {order.status === "DESPATCHED" ? (
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        {labels.despatchDate}
+                      </dt>
+                      <dd className="mt-1 text-slate-800 dark:text-slate-200">
+                        {formatBookingDate(
+                          order.despatched_at ||
+                            order.updated_at ||
+                            order.despatch_date ||
+                            ""
+                        )}
+                      </dd>
+                    </div>
+                  ) : order.quantity != null && Number(order.quantity) >= 1 ? (
                     <div>
                       <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         {labels.quantity}
@@ -507,6 +517,18 @@ export function OrderDetailSheet({
                     </div>
                   ) : null}
                 </div>
+                {order.status === "DESPATCHED" &&
+                order.quantity != null &&
+                Number(order.quantity) >= 1 ? (
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      {labels.quantity}
+                    </dt>
+                    <dd className="mt-1 text-slate-800 dark:text-slate-200">
+                      {Number(order.quantity)}
+                    </dd>
+                  </div>
+                ) : null}
                 {order.courier_name ? (
                   <div>
                     <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -598,6 +620,7 @@ export function orderDetailSheetLabels(t: (key: string) => string) {
     address: t("TO (customer address)"),
     sender: t("FROM (our address)"),
     bookingDate: t("Booking date"),
+    despatchDate: t("Despatch date"),
     courier: t("Courier Name"),
     tracking: t("Tracking number"),
     quantity: t("Qty"),
