@@ -100,14 +100,18 @@ export function mergeWebsiteLineItems(
   if (!fresh.length) return base;
   if (!base.length) return fresh;
 
+  const codeOf = (item: WebsiteOrderLineItem) =>
+    (item.productCode?.trim() ||
+      extractProductCodeFromText(item.name) ||
+      "").toUpperCase();
+
   return base.map((item) => {
+    const itemCode = codeOf(item);
     const match =
       fresh.find(
         (f) =>
           (item.productId && f.productId && item.productId === f.productId) ||
-          (item.productCode &&
-            f.productCode &&
-            item.productCode === f.productCode)
+          (itemCode && codeOf(f) === itemCode)
       ) ??
       fresh.find(
         (f) => f.name.trim().toLowerCase() === item.name.trim().toLowerCase()
@@ -117,10 +121,30 @@ export function mergeWebsiteLineItems(
     return {
       ...item,
       productId: item.productId || match.productId,
-      productCode: item.productCode || match.productCode,
+      productCode: item.productCode || match.productCode || itemCode || null,
       imageUrl: item.imageUrl || match.imageUrl,
       unitPrice: item.unitPrice ?? match.unitPrice,
       quantity: item.quantity || match.quantity,
     };
   });
+}
+
+/** True when `next` has any extra image / code vs `prev`. */
+export function websiteLineItemsImproved(
+  prev: unknown,
+  next: WebsiteOrderLineItem[]
+): boolean {
+  const before = normalizeWebsiteLineItems(prev);
+  if (!before.length && next.length) return true;
+  if (!next.length) return false;
+  const merged = mergeWebsiteLineItems(before, next);
+  const beforeImgs = before.filter((i) => i.imageUrl?.trim()).length;
+  const afterImgs = merged.filter((i) => i.imageUrl?.trim()).length;
+  if (afterImgs > beforeImgs) return true;
+  return merged.some(
+    (row, i) =>
+      (row.imageUrl ?? null) !== (before[i]?.imageUrl ?? null) ||
+      (row.productCode ?? null) !== (before[i]?.productCode ?? null) ||
+      (row.productId ?? null) !== (before[i]?.productId ?? null)
+  );
 }

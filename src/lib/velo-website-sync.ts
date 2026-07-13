@@ -20,7 +20,10 @@ import type { WebsiteOrderLineItem } from "./db-types";
 import {
   hasWebsiteLineItems,
   lineItemsFromVeloApiItems,
+  mergeWebsiteLineItems,
+  normalizeWebsiteLineItems,
   totalQuantityFromLineItems,
+  websiteLineItemsImproved,
   websiteLineItemsMissingImages,
 } from "./website-order-line-items";
 import { buildWebsiteToAddress } from "./pdf-address-sanitize";
@@ -487,13 +490,22 @@ async function importOrdersForIntegration(
       if (existing.payment_status !== paymentStatus) {
         patches.payment_status = paymentStatus;
       }
-      if (
-        lineItems.length > 0 &&
-        (!hasWebsiteLineItems(existing.website_line_items) ||
-          (websiteLineItemsMissingImages(existing.website_line_items) &&
-            !websiteLineItemsMissingImages(lineItems)))
-      ) {
-        patches.website_line_items = lineItems;
+      if (lineItems.length > 0) {
+        if (!hasWebsiteLineItems(existing.website_line_items)) {
+          patches.website_line_items = lineItems;
+        } else if (
+          websiteLineItemsImproved(existing.website_line_items, lineItems)
+        ) {
+          patches.website_line_items = mergeWebsiteLineItems(
+            normalizeWebsiteLineItems(existing.website_line_items),
+            lineItems
+          );
+        } else if (
+          websiteLineItemsMissingImages(existing.website_line_items) &&
+          !websiteLineItemsMissingImages(lineItems)
+        ) {
+          patches.website_line_items = lineItems;
+        }
       }
 
       // Refresh TO: strip legacy Web # / Items and enforce Mob No last line.

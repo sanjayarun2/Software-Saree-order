@@ -271,39 +271,43 @@ export function OrderDetailSheet({
       }
 
       let next = items;
+      const pushProgress = (partial: WebsiteOrderLineItem[]) => {
+        if (cancelled) return;
+        next = partial;
+        setLineItems(partial);
+      };
 
-      // 1) Catalog first (proxy + force refresh) — reliable on phone; do not wait on order API.
-      try {
-        const enriched = await enrichLineItemsWithProductImages(userId, next);
-        next = enriched.items;
-      } catch {
-        /* continue */
-      }
+      // Catalog + shop order detail in parallel (do not block photos on either path).
+      const catalogPromise = enrichLineItemsWithProductImages(userId, next, {
+        onProgress: pushProgress,
+      }).catch(() => ({ items: next, changed: false }));
 
-      // 2) If still missing, try shop order detail (proxied, short timeout).
-      if (lineItemsMissingImages(next) && isWebsite && externalId) {
-        try {
-          const snapshot = await fetchWebsiteOrderDetailSnapshot(
-            userId,
-            externalId
-          );
-          if (snapshot?.lineItems?.length) {
-            next = mergeWebsiteLineItems(next, snapshot.lineItems);
-            if (!cancelled) {
-              setExtraAddressLines(snapshot.addressLines);
-              setExtraCustomerName(snapshot.customerName);
-              setExtraMobile(snapshot.customerMobile || fallbackMobile || "");
-            }
-            if (lineItemsMissingImages(next)) {
-              const enriched = await enrichLineItemsWithProductImages(
-                userId,
-                next
-              );
-              next = enriched.items;
-            }
-          }
-        } catch {
-          /* keep catalog result */
+      const detailPromise =
+        isWebsite && externalId
+          ? fetchWebsiteOrderDetailSnapshot(userId, externalId).catch(() => null)
+          : Promise.resolve(null);
+
+      const [catalog, snapshot] = await Promise.all([
+        catalogPromise,
+        detailPromise,
+      ]);
+
+      next = catalog.items;
+      if (!cancelled) setLineItems(next);
+
+      if (snapshot?.lineItems?.length) {
+        next = mergeWebsiteLineItems(next, snapshot.lineItems);
+        if (!cancelled) {
+          setExtraAddressLines(snapshot.addressLines);
+          setExtraCustomerName(snapshot.customerName);
+          setExtraMobile(snapshot.customerMobile || fallbackMobile || "");
+          setLineItems(next);
+        }
+        if (lineItemsMissingImages(next)) {
+          const again = await enrichLineItemsWithProductImages(userId, next, {
+            onProgress: pushProgress,
+          }).catch(() => ({ items: next, changed: false }));
+          next = again.items;
         }
       }
 

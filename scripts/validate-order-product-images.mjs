@@ -230,5 +230,31 @@ assert.ok(
   imageCache.includes("item.productId"),
   "product image enrich must search by productId"
 );
+assert.ok(
+  imageCache.includes("onProgress"),
+  "product image enrich must support progressive UI updates"
+);
+assert.ok(
+  imageCache.includes("ENRICH_CONCURRENCY"),
+  "product image enrich must resolve line items in parallel"
+);
+
+const detailSheetResolve = readFileSync(
+  resolve(root, "src/components/orders/OrderDetailSheet.tsx"),
+  "utf8"
+);
+assert.ok(
+  detailSheetResolve.includes("Promise.all"),
+  "order detail must resolve catalog + shop in parallel"
+);
+
+const syncSrc = readFileSync(
+  resolve(root, "src/lib/velo-website-sync.ts"),
+  "utf8"
+);
+assert.ok(
+  syncSrc.includes("websiteLineItemsImproved"),
+  "sync must backfill improved line-item images"
+);
 
 console.log("validate-order-product-images: OK");

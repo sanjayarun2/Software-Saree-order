@@ -1,6 +1,6 @@
 /**
  * Resolve and cache product image URLs for order line items.
- * Reuses shop/Velo product photos so order detail does not stay blank.
+ * Parallel catalog lookup (id / ST code / name), including drafts.
  */
 
 import type { WebsiteOrderLineItem } from "./db-types";
@@ -11,11 +11,13 @@ import {
   extractProductCodeFromText,
 } from "./product-image-url";
 import { createStore, get, set } from "idb-keyval";
+import type { VeloProductListItem } from "./velo-products-types";
 
 export { extractImageUrlFromUnknown, extractProductCodeFromText };
 
 const store = createStore("velo-product-image-cache", "v1");
 const memoryUrlCache = new Map<string, string>();
+const ENRICH_CONCURRENCY = 4;
 
 function cacheKey(userId: string) {
   return `urls:${userId}`;
@@ -33,6 +35,10 @@ function productLookupKeys(item: WebsiteOrderLineItem): string[] {
 
 export function lineItemsMissingImages(items: WebsiteOrderLineItem[]): boolean {
   return items.some((item) => !item.imageUrl?.trim());
+}
+
+export function countMissingImages(items: WebsiteOrderLineItem[]): number {
+  return items.filter((item) => !item.imageUrl?.trim()).length;
 }
 
 export async function readProductImageUrlCache(
@@ -79,13 +85,38 @@ function applyCachedUrls(
     if (item.imageUrl?.trim()) return item;
     for (const key of productLookupKeys(item)) {
       const url = cache[key]?.trim();
-      if (url) return { ...item, imageUrl: url };
+      if (url) {
+        return {
+          ...item,
+          imageUrl: url,
+          productCode:
+            item.productCode ||
+            extractProductCodeFromText(item.name) ||
+            null,
+        };
+      }
     }
     return item;
   });
 }
 
-function productMatchesLine(
+function normalizeNameForMatch(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\bst\d{3,}\b/gi, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function productImageUrl(p: VeloProductListItem): string | null {
+  return (
+    extractImageUrlFromUnknown(p) ??
+    (typeof p.imageUrl === "string" ? p.imageUrl.trim() || null : null)
+  );
+}
+
+export function productMatchesLine(
   p: { productId?: string; productCode?: string | null; name?: string },
   item: WebsiteOrderLineItem
 ): boolean {
@@ -102,41 +133,134 @@ function productMatchesLine(
   ) {
     return true;
   }
+  if (typeof p.name === "string" && item.name) {
+    const a = normalizeNameForMatch(p.name);
+    const b = normalizeNameForMatch(item.name);
+    if (a && b && (a === b || a.includes(b) || b.includes(a))) return true;
+  }
   return false;
 }
 
-function findInCachedProductLists(
+function collectPeekedProducts(userId: string): VeloProductListItem[] {
+  const queries = [
+    { page: 1, pageSize: 20, draft: "all" as const },
+    { page: 1, pageSize: 20, draft: "draft" as const },
+    { page: 1, pageSize: 20, draft: "published" as const },
+    { page: 2, pageSize: 20, draft: "all" as const },
+  ];
+  const byId = new Map<string, VeloProductListItem>();
+  for (const q of queries) {
+    const snap = peekVeloProductsList(userId, q);
+    for (const p of snap?.products ?? []) {
+      if (p.productId) byId.set(p.productId, p);
+    }
+  }
+  return [...byId.values()];
+}
+
+function findInPeekedProducts(
+  products: VeloProductListItem[],
+  item: WebsiteOrderLineItem
+): { url: string; product: VeloProductListItem } | null {
+  for (const p of products) {
+    if (!productMatchesLine(p, item)) continue;
+    const url = productImageUrl(p);
+    if (url) return { url, product: p };
+  }
+  return null;
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, Math.max(1, items.length)) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+async function resolveOneItemFromNetwork(
   userId: string,
   item: WebsiteOrderLineItem
-): string | null {
-  const snap = peekVeloProductsList(userId, {
-    page: 1,
-    pageSize: 20,
-    draft: "all",
-  });
-  const products = snap?.products ?? [];
-  for (const p of products) {
-    if (productMatchesLine(p, item)) {
-      return (
-        extractImageUrlFromUnknown(p) ??
-        (typeof p.imageUrl === "string" ? p.imageUrl.trim() || null : null)
+): Promise<{
+  url: string;
+  productId: string | null;
+  productCode: string | null;
+} | null> {
+  const code =
+    item.productCode?.trim() ||
+    extractProductCodeFromText(item.name) ||
+    "";
+  const searches = [
+    item.productId?.trim() || "",
+    code,
+    (item.name || "").trim().slice(0, 80),
+  ].filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+
+  for (const search of searches) {
+    try {
+      const { products } = await listVeloProducts(
+        userId,
+        { search, page: 1, pageSize: 20, draft: "all" },
+        { forceRefresh: true }
       );
+      const match =
+        products.find((p) => productMatchesLine(p, item)) ??
+        products.find((p) => p.productId === item.productId) ??
+        (code
+          ? products.find(
+              (p) =>
+                (p.productCode ?? "").trim().toUpperCase() ===
+                  code.toUpperCase() ||
+                (p.name ?? "").toUpperCase().includes(code.toUpperCase())
+            )
+          : undefined);
+      if (!match) continue;
+      const url = productImageUrl(match);
+      if (!url) continue;
+      return {
+        url,
+        productId: match.productId ?? null,
+        productCode: match.productCode || code || null,
+      };
+    } catch {
+      /* try next search key */
     }
   }
   return null;
 }
 
+export type EnrichLineItemsOptions = {
+  /** Called whenever any line item gains an image (progressive UI). */
+  onProgress?: (items: WebsiteOrderLineItem[]) => void;
+};
+
 /**
  * Fill missing imageUrl on line items using:
  * 1) local IDB URL cache
- * 2) in-memory products list cache
- * 3) Velo products list search by code/id
+ * 2) peeked products list caches (all/draft/published)
+ * 3) parallel Velo products searches by id / code / name (drafts included)
  *
  * Persists newly found URLs so later opens are instant.
  */
 export async function enrichLineItemsWithProductImages(
   userId: string,
-  items: WebsiteOrderLineItem[]
+  items: WebsiteOrderLineItem[],
+  opts: EnrichLineItemsOptions = {}
 ): Promise<{ items: WebsiteOrderLineItem[]; changed: boolean }> {
   if (!items.length) return { items, changed: false };
 
@@ -144,106 +268,114 @@ export async function enrichLineItemsWithProductImages(
   let next = applyCachedUrls(items, cache);
   const newCacheEntries: Record<string, string> = {};
 
-  const stillMissing = next.filter((i) => !i.imageUrl?.trim());
-  for (const item of stillMissing) {
-    const fromList = findInCachedProductLists(userId, item);
-    if (fromList) {
-      for (const key of productLookupKeys(item)) newCacheEntries[key] = fromList;
-      next = next.map((row) =>
-        productMatchesLine(
-          {
-            productId: row.productId ?? undefined,
-            productCode: row.productCode,
-            name: row.name,
-          },
-          item
-        ) || row === item
-          ? { ...row, imageUrl: row.imageUrl || fromList }
-          : row
-      );
-    }
+  const emit = () => opts.onProgress?.([...next]);
+
+  if (countMissingImages(next) < countMissingImages(items)) {
+    emit();
   }
 
-  const needNetwork = next.filter((i) => !i.imageUrl?.trim());
-  for (const item of needNetwork) {
-    const code =
-      item.productCode?.trim() ||
-      extractProductCodeFromText(item.name) ||
-      "";
-    // Prefer id (works for draft/archived), then ST code, then name.
-    const searches = [
-      item.productId?.trim() || "",
-      code,
-      (item.name || "").trim().slice(0, 80),
-    ].filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+  const peeked = collectPeekedProducts(userId);
+  const afterPeek = next.map((item) => {
+    if (item.imageUrl?.trim()) return item;
+    const hit = findInPeekedProducts(peeked, item);
+    if (!hit) return item;
+    for (const key of productLookupKeys(item)) {
+      newCacheEntries[key] = hit.url;
+    }
+    if (hit.product.productCode) {
+      newCacheEntries[
+        `code:${hit.product.productCode.trim().toUpperCase()}`
+      ] = hit.url;
+    }
+    if (hit.product.productId) {
+      newCacheEntries[`id:${hit.product.productId}`] = hit.url;
+    }
+    return {
+      ...item,
+      imageUrl: hit.url,
+      productCode:
+        item.productCode ||
+        hit.product.productCode ||
+        extractProductCodeFromText(item.name) ||
+        null,
+    };
+  });
+  if (afterPeek.some((row, i) => row.imageUrl !== next[i]?.imageUrl)) {
+    next = afterPeek;
+    emit();
+  }
 
-    let foundUrl: string | null = null;
-    let matchProductId: string | null = null;
-    let matchProductCode: string | null = null;
+  const needNetworkIdx = next
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !item.imageUrl?.trim());
 
-    for (const search of searches) {
-      try {
-        const { products } = await listVeloProducts(
-          userId,
-          { search, page: 1, pageSize: 10, draft: "all" },
-          { forceRefresh: true }
-        );
-        const match =
-          products.find((p) => productMatchesLine(p, item)) ??
-          products.find((p) => p.productId === item.productId) ??
-          (code
-            ? products.find(
-                (p) =>
-                  (p.productCode ?? "").trim().toUpperCase() ===
-                    code.toUpperCase() ||
-                  (p.name ?? "").toUpperCase().includes(code.toUpperCase())
-              )
-            : undefined);
-        if (!match) continue;
-        const url =
-          extractImageUrlFromUnknown(match) ??
-          (typeof match.imageUrl === "string"
-            ? match.imageUrl.trim() || null
-            : null);
-        if (!url) continue;
-        foundUrl = url;
-        matchProductId = match.productId ?? null;
-        matchProductCode = match.productCode ?? null;
-        break;
-      } catch {
-        /* try next search key */
+  if (needNetworkIdx.length) {
+    // Warm default catalog page once (helps multi-item orders).
+    try {
+      await listVeloProducts(
+        userId,
+        { page: 1, pageSize: 50, draft: "all" },
+        { forceRefresh: false }
+      );
+    } catch {
+      /* optional warm */
+    }
+
+    await mapPool(needNetworkIdx, ENRICH_CONCURRENCY, async ({ item, index }) => {
+      // Re-check in case a sibling already filled this slot via shared code.
+      if (next[index]?.imageUrl?.trim()) return null;
+      const resolved = await resolveOneItemFromNetwork(userId, item);
+      if (!resolved) return null;
+
+      for (const key of productLookupKeys(item)) {
+        newCacheEntries[key] = resolved.url;
       }
-    }
+      if (resolved.productCode) {
+        newCacheEntries[`code:${resolved.productCode.trim().toUpperCase()}`] =
+          resolved.url;
+      }
+      if (resolved.productId) {
+        newCacheEntries[`id:${resolved.productId}`] = resolved.url;
+      }
 
-    if (!foundUrl) continue;
-
-    for (const key of productLookupKeys(item)) newCacheEntries[key] = foundUrl;
-    if (matchProductCode) {
-      newCacheEntries[`code:${matchProductCode.trim().toUpperCase()}`] =
-        foundUrl;
-    }
-    if (matchProductId) newCacheEntries[`id:${matchProductId}`] = foundUrl;
-    next = next.map((row) => {
-      const sameItem =
-        row.name === item.name ||
-        (row.productId &&
-          item.productId &&
-          row.productId === item.productId) ||
-        productMatchesLine(
-          {
-            productId: row.productId ?? undefined,
-            productCode: row.productCode,
-            name: row.name,
-          },
-          item
-        );
-      return sameItem && !row.imageUrl?.trim()
-        ? {
+      next = next.map((row, i) => {
+        if (i === index) {
+          return {
             ...row,
-            imageUrl: foundUrl,
-            productCode: row.productCode || matchProductCode || code || null,
-          }
-        : row;
+            imageUrl: resolved.url,
+            productCode:
+              row.productCode ||
+              resolved.productCode ||
+              extractProductCodeFromText(row.name) ||
+              null,
+          };
+        }
+        // Same product elsewhere in this order — fill together.
+        if (
+          !row.imageUrl?.trim() &&
+          productMatchesLine(
+            {
+              productId: resolved.productId ?? undefined,
+              productCode: resolved.productCode,
+              name: item.name,
+            },
+            row
+          )
+        ) {
+          return {
+            ...row,
+            imageUrl: resolved.url,
+            productCode:
+              row.productCode ||
+              resolved.productCode ||
+              extractProductCodeFromText(row.name) ||
+              null,
+          };
+        }
+        return row;
+      });
+      emit();
+      return resolved;
     });
   }
 
@@ -252,7 +384,9 @@ export async function enrichLineItemsWithProductImages(
   }
 
   const changed = next.some(
-    (row, i) => (row.imageUrl ?? null) !== (items[i]?.imageUrl ?? null)
+    (row, i) =>
+      (row.imageUrl ?? null) !== (items[i]?.imageUrl ?? null) ||
+      (row.productCode ?? null) !== (items[i]?.productCode ?? null)
   );
   return { items: next, changed };
 }
