@@ -500,11 +500,13 @@ async function importOrdersForIntegration(
             normalizeWebsiteLineItems(existing.website_line_items),
             lineItems
           );
-        } else if (
-          websiteLineItemsMissingImages(existing.website_line_items) &&
-          !websiteLineItemsMissingImages(lineItems)
-        ) {
-          patches.website_line_items = lineItems;
+        } else if (websiteLineItemsMissingImages(existing.website_line_items)) {
+          // Always re-merge when any stored photo is missing so later shop
+          // image/code fixes are picked up even if fresh still has gaps.
+          patches.website_line_items = mergeWebsiteLineItems(
+            normalizeWebsiteLineItems(existing.website_line_items),
+            lineItems
+          );
         }
       }
 

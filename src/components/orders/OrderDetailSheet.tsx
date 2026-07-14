@@ -71,7 +71,12 @@ function LineItemRow({
   onExpandPhoto: (url: string, alt: string) => void;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const showImage = Boolean(item.imageUrl?.trim()) && !imgFailed;
+  const imageUrl = item.imageUrl?.trim() || "";
+  const showImage = Boolean(imageUrl) && !imgFailed;
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [imageUrl]);
 
   return (
     <li className="flex gap-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/60">
@@ -81,11 +86,11 @@ function LineItemRow({
             type="button"
             className="h-full w-full"
             aria-label={expandLabel}
-            onClick={() => onExpandPhoto(item.imageUrl!.trim(), item.name)}
+            onClick={() => onExpandPhoto(imageUrl, item.name)}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={item.imageUrl!}
+              src={imageUrl}
               alt={item.name}
               className="h-full w-full object-cover"
               loading="lazy"

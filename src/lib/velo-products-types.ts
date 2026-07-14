@@ -41,7 +41,8 @@ export type VeloProductsAction =
   | "upsert"
   | "bulk_upsert"
   | "delete"
-  | "meta";
+  | "meta"
+  | "resolveImages";
 
 export type VeloProductsResponse = {
   ok: boolean;

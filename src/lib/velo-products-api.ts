@@ -328,6 +328,65 @@ async function fetchVeloProductsList(
   return result;
 }
 
+/**
+ * Batch-resolve packing photos by shop product ids (draft + published).
+ * Prefer this over many list searches when order lines already carry productId.
+ */
+export async function resolveVeloProductImages(
+  userId: string,
+  productIds: string[]
+): Promise<VeloProductListItem[]> {
+  const ids = [...new Set(productIds.map((id) => id.trim()).filter(Boolean))];
+  if (!ids.length) return [];
+
+  const integration = await getPrimaryIntegration(userId);
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const res = await invokeVeloProducts(
+        integration,
+        "resolveImages",
+        newRequestId(),
+        { productIds: ids }
+      );
+      return (res.products ?? []).map(normalizeProductListItem);
+    } catch (e) {
+      lastError = e as Error;
+      const msg = (e as Error).message || "";
+      if (/unknown action|resolveImages/i.test(msg)) break;
+      if (e instanceof VeloProductsApiError && !isRetryable(0, msg)) break;
+      if (attempt < MAX_RETRIES - 1) await sleep(RETRY_BASE_MS * (attempt + 1));
+    }
+  }
+
+  // Older shop deploys may not know resolveImages — fall back to per-id list.
+  if (lastError && /unknown action|resolveImages|not found/i.test(lastError.message || "")) {
+    const out: VeloProductListItem[] = [];
+    for (const id of ids) {
+      try {
+        const { products } = await listVeloProducts(
+          userId,
+          { search: id, page: 1, pageSize: 5, draft: "all" },
+          { forceRefresh: true }
+        );
+        const match = products.find((p) => p.productId === id);
+        if (match) out.push(match);
+      } catch {
+        /* continue */
+      }
+    }
+    return out;
+  }
+
+  // Soft-fail: packing UI can still try list searches per line.
+  console.warn(
+    "[resolveVeloProductImages]",
+    lastError?.message || "failed"
+  );
+  return [];
+}
+
 export async function listVeloProducts(
   userId: string,
   opts: {

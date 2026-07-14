@@ -256,5 +256,24 @@ assert.ok(
   syncSrc.includes("websiteLineItemsImproved"),
   "sync must backfill improved line-item images"
 );
+assert.ok(
+  syncSrc.includes("websiteLineItemsMissingImages(existing.website_line_items)"),
+  "sync must re-merge whenever stored photos are missing"
+);
+
+const imageCacheSrc = readFileSync(
+  resolve(root, "src/lib/product-image-cache.ts"),
+  "utf8"
+);
+assert.ok(
+  imageCacheSrc.includes("resolveVeloProductImages"),
+  "packing enrich must batch-resolve images by productId"
+);
+
+const apiSrc = readFileSync(resolve(root, "src/lib/velo-products-api.ts"), "utf8");
+assert.ok(
+  apiSrc.includes('resolveImages'),
+  "products API must expose resolveImages"
+);
 
 console.log("validate-order-product-images: OK");
