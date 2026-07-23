@@ -7,6 +7,7 @@ import { supabase } from "./supabase";
 import { isBase64WithinUploadLimit } from "./product-image-compress";
 import {
   invalidateProductsListCache,
+  invalidateCollectionsCache,
   normalizeIsDraft,
   normalizeProductListItem,
   peekCollectionsCache,
@@ -457,10 +458,59 @@ export async function fetchVeloCollections(
   const res = await requestWithRetry(integration, "meta", requestId, {
     type: "collections",
   });
-  const items = res.collections ?? [];
+  const items = (res.collections ?? []).map((row) => ({
+    id: String(row.id),
+    label: String(row.label ?? ""),
+    slug: String(row.slug ?? ""),
+    description: row.description ?? null,
+    featuredImageId: row.featuredImageId ?? null,
+    imageUrl: row.imageUrl ?? null,
+  }));
   collectionsCache = { at: Date.now(), items };
   writeCollectionsCache(userId, items);
   return items;
+}
+
+export type VeloCollectionUpsertInput = {
+  id?: string;
+  name: string;
+  description: string;
+  featuredImageMediaId?: string;
+  imageBase64?: string;
+  imageFileName?: string;
+};
+
+export async function upsertVeloCollection(
+  userId: string,
+  data: VeloCollectionUpsertInput
+): Promise<VeloCollection> {
+  const integration = await getPrimaryIntegration(userId);
+  const requestId = newRequestId();
+  const res = await requestWithRetry(integration, "upsertCollection", requestId, {
+    id: data.id,
+    name: data.name.trim(),
+    description: data.description.trim(),
+    featuredImageMediaId: data.featuredImageMediaId?.trim() || undefined,
+    imageBase64: data.imageBase64,
+    imageFileName: data.imageFileName,
+  });
+
+  const collection = res.collection;
+  if (!collection?.id) {
+    throw new VeloProductsApiError(res.message || "Category save failed.");
+  }
+
+  collectionsCache = null;
+  invalidateCollectionsCache(userId);
+  const refreshed = await fetchVeloCollections(userId, true);
+  return refreshed.find((c) => c.id === collection.id) ?? {
+    id: String(collection.id),
+    label: String(collection.label ?? data.name),
+    slug: String(collection.slug ?? ""),
+    description: collection.description ?? data.description,
+    featuredImageId: collection.featuredImageId ?? null,
+    imageUrl: collection.imageUrl ?? null,
+  };
 }
 
 function normalizeBadge(badge: string) {

@@ -1,4 +1,4 @@
-import type { VeloProductListItem } from "./velo-products-types";
+import type { VeloCollection, VeloProductListItem } from "./velo-products-types";
 
 const CACHE_VERSION = 1;
 /** Serve from cache instantly; revalidate after this (stale-while-revalidate). */
@@ -25,7 +25,7 @@ type ListCachePayload = {
 type CollectionsCachePayload = {
   v: number;
   at: number;
-  items: { id: string; label: string; slug: string }[];
+  items: VeloCollection[];
 };
 
 export type ProductsListSnapshot = {
@@ -300,7 +300,7 @@ export function invalidateProductsListCache(userId?: string) {
 function collectionsPayloadToItems(
   entry: CollectionsCachePayload,
   allowStale: boolean
-): { id: string; label: string; slug: string }[] | null {
+): VeloCollection[] | null {
   if (entry.v !== CACHE_VERSION) return null;
   const age = Date.now() - entry.at;
   if (!allowStale && age > COLLECTIONS_STALE_MS) return null;
@@ -310,7 +310,7 @@ function collectionsPayloadToItems(
 
 export function peekCollectionsCache(
   userId: string
-): { id: string; label: string; slug: string }[] | null {
+): VeloCollection[] | null {
   const key = collectionsCacheKey(userId);
   const memory = memoryCollectionsCache.get(key);
   if (memory) {
@@ -343,7 +343,7 @@ export function peekCollectionsCache(
 
 export function readCollectionsCache(
   userId: string
-): { id: string; label: string; slug: string }[] | null {
+): VeloCollection[] | null {
   const key = collectionsCacheKey(userId);
   const memory = memoryCollectionsCache.get(key);
   if (memory) {
@@ -355,7 +355,7 @@ export function readCollectionsCache(
 
 export function writeCollectionsCache(
   userId: string,
-  items: { id: string; label: string; slug: string }[]
+  items: VeloCollection[]
 ) {
   const key = collectionsCacheKey(userId);
   const entry: CollectionsCachePayload = {

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { IconWhatsApp } from "@/components/ui/OrderIcons";
+import { CategoriesTab } from "@/components/products/CategoriesTab";
 import { BulkBatchList } from "@/components/products/BulkBatchList";
 import { ShareCartPanel, shareCartSpacerHeight } from "@/components/products/ShareCartPanel";
 import {
@@ -58,7 +59,7 @@ import {
   useBulkProductsDraft,
 } from "./bulk-products-context";
 
-type TabId = "list" | "single" | "bulk";
+type TabId = "list" | "single" | "bulk" | "categories";
 
 const MAX_BULK_FILES = 50;
 
@@ -66,6 +67,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "list", label: "Product List" },
   { id: "single", label: "Add Single Product" },
   { id: "bulk", label: "Add Bulk Products" },
+  { id: "categories", label: "Categories" },
 ];
 
 const inputCls =
@@ -79,7 +81,12 @@ export default function ProductsPage() {
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
   const tab: TabId =
-    rawTab === "single" || rawTab === "bulk" || rawTab === "list" ? rawTab : "list";
+    rawTab === "single" ||
+    rawTab === "bulk" ||
+    rawTab === "list" ||
+    rawTab === "categories"
+      ? rawTab
+      : "list";
 
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -217,6 +224,16 @@ export default function ProductsPage() {
               setListRefreshKey((k) => k + 1);
               setTab("list");
             }}
+          />
+        </div>
+        <div className={tab === "categories" ? undefined : "hidden"}>
+          <CategoriesTab
+            userId={user.id}
+            collections={collections}
+            loadingCollections={loadingCollections}
+            onRefreshCollections={() => loadCollections(true)}
+            setError={setError}
+            setInfo={setInfo}
           />
         </div>
       </div>

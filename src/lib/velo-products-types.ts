@@ -14,6 +14,9 @@ export type VeloCollection = {
   id: string;
   label: string;
   slug: string;
+  description?: string | null;
+  featuredImageId?: string | null;
+  imageUrl?: string | null;
 };
 
 export type VeloProductListItem = {
@@ -42,7 +45,8 @@ export type VeloProductsAction =
   | "bulk_upsert"
   | "delete"
   | "meta"
-  | "resolveImages";
+  | "resolveImages"
+  | "upsertCollection";
 
 export type VeloProductsResponse = {
   ok: boolean;
@@ -57,6 +61,7 @@ export type VeloProductsResponse = {
     name: string;
     isDraft: boolean;
   };
+  collection?: VeloCollection;
   collections?: VeloCollection[];
   created?: Array<
     | { id: string; productCode: string; name: string; slug: string }
