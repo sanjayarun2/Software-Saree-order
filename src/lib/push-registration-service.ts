@@ -29,8 +29,12 @@ function pushPlatform(): PushPlatform {
   return "android";
 }
 
-function openOrdersPage() {
-  requestOpenOrdersPage({ sync: true });
+function openOrdersPage(externalOrderId?: string | null) {
+  requestOpenOrdersPage({
+    sync: true,
+    forceSync: true,
+    externalOrderId: externalOrderId ?? null,
+  });
 }
 
 function orderFromPushData(data: Record<string, unknown>): ImportedWebsiteOrderSummary | null {
@@ -110,7 +114,7 @@ export async function initPushRegistration(userId: string): Promise<void> {
         if (order && readOrderAlertsEnabled() && !wasOrderRecentlyNotified(order.externalOrderId)) {
           void notifyNewWebsiteOrders([order], { fromPush: true });
         }
-        openOrdersPage();
+        openOrdersPage(order?.externalOrderId);
       }
     );
 

@@ -439,6 +439,7 @@ const TA: Record<string, string> = {
   "This product will be visible on the website.":
     "இந்த புராடக்ட் வலைத்தளத்தில் தெரியும்.",
   "Updating…": "புதுப்பிக்கிறது…",
+  "Updating orders…": "ஆர்டர்கள் புதுப்பிக்கப்படுகிறது…",
   "Uploading batch {current}/{total}": "பேட்ச் {current}/{total} அப்லோடு",
   "Uploading product {current}/{total}": "புராடக்ட் {current}/{total} அப்லோடு",
   "Creating products": "புராடக்ட்கள் உருவாகிறது",

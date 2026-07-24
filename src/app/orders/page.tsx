@@ -47,6 +47,11 @@ import {
   orderDetailSheetLabels,
 } from "@/components/orders/OrderDetailSheet";
 import { supabase } from "@/lib/supabase";
+import {
+  consumeFocusExternalOrderId,
+  getOrdersSyncUi,
+  subscribeOrdersSyncUi,
+} from "@/lib/order-sync-ui";
 
 function getAddressSummary(text: string, maxLen = 45): string {
   const first = (text || "").split(/\r?\n/)[0]?.trim() || text?.trim() || "";
@@ -78,6 +83,7 @@ export default function OrdersPage() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [listUpdating, setListUpdating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -317,13 +323,56 @@ export default function OrdersPage() {
     appliedFilters.datePreset !== "today" || appliedFilters.allOrders;
 
   useEffect(() => {
+    setListUpdating(getOrdersSyncUi().syncing);
+    return subscribeOrdersSyncUi((detail) => {
+      setListUpdating(detail.syncing);
+    });
+  }, []);
+
+  useEffect(() => {
+    const tryFocusExternalOrder = (list: Order[]) => {
+      const externalId = consumeFocusExternalOrderId();
+      if (!externalId) return;
+      const match = list.find((o) => o.external_order_id === externalId);
+      if (match) {
+        if (match.status === "DESPATCHED" && appliedFiltersRef.current.status !== "DESPATCHED") {
+          const next: OrderFilterState = {
+            ...appliedFiltersRef.current,
+            status: "DESPATCHED",
+          };
+          setAppliedFilters(next);
+          appliedFiltersRef.current = next;
+          router.replace("/orders/?tab=dispatched", { scroll: false });
+        }
+        setDetailOrder(match);
+      }
+    };
+
     const onImported = () => {
-      void fetchOrders(appliedFiltersRef.current);
-      void refreshPendingCount();
+      void (async () => {
+        await fetchOrders(appliedFiltersRef.current);
+        void refreshPendingCount();
+        // Re-read from latest state via a quick cache fetch for focus.
+        if (!user) return;
+        try {
+          const { status: st, fromDate, toDate, allOrders } = resolveOrderFilters(
+            appliedFiltersRef.current
+          );
+          const cached = await svcGetOrders(user.id, {
+            status: st,
+            fromDate,
+            toDate,
+            allOrders,
+          });
+          tryFocusExternalOrder(cached);
+        } catch {
+          /* ignore focus errors */
+        }
+      })();
     };
     window.addEventListener("velo-website-orders-imported", onImported);
     return () => window.removeEventListener("velo-website-orders-imported", onImported);
-  }, [fetchOrders, refreshPendingCount]);
+  }, [fetchOrders, refreshPendingCount, user, router]);
 
   useEffect(() => {
     if (user) {
@@ -584,6 +633,17 @@ export default function OrdersPage() {
           <p className="rounded-bento bg-red-50 p-3 text-red-700 dark:bg-red-900/30 dark:text-red-300">
             {error}
           </p>
+        )}
+
+        {listUpdating && (
+          <div
+            className="flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-200"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+            <span>{t("Updating orders…")}</span>
+          </div>
         )}
 
         {loading ? (

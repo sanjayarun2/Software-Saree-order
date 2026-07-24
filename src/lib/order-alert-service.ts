@@ -153,8 +153,12 @@ export async function requestOrderAlertPermission(): Promise<boolean> {
   }
 }
 
-function openOrdersPage() {
-  requestOpenOrdersPage({ sync: true });
+function openOrdersPage(externalOrderId?: string | null) {
+  requestOpenOrdersPage({
+    sync: true,
+    forceSync: true,
+    externalOrderId: externalOrderId ?? null,
+  });
 }
 
 async function showNativeNotification(order: ImportedWebsiteOrderSummary, title: string, body: string) {
@@ -169,7 +173,10 @@ async function showNativeNotification(order: ImportedWebsiteOrderSummary, title:
           body,
           channelId: CHANNEL_ID,
           sound: "order_cling.wav",
-          extra: { route: "/orders/" },
+          extra: {
+            route: "/orders/",
+            externalOrderId: order.externalOrderId,
+          },
         },
       ],
     });
@@ -288,11 +295,15 @@ export function initOrderAlertService(): void {
     try {
       const { LocalNotifications } = await import("@capacitor/local-notifications");
       const tap = await LocalNotifications.addListener("localNotificationActionPerformed", (event) => {
-        const route = (event.notification.extra as { route?: string } | undefined)?.route;
-        if (route?.startsWith("/orders")) {
-          requestOpenOrdersPage({ sync: true });
+        const extra = (event.notification.extra ?? {}) as {
+          route?: string;
+          externalOrderId?: string;
+        };
+        const externalOrderId = extra.externalOrderId?.trim() || null;
+        if (extra.route?.startsWith("/orders") || !extra.route) {
+          openOrdersPage(externalOrderId);
         } else {
-          openOrdersPage();
+          openOrdersPage(externalOrderId);
         }
       });
       listenerHandles.push(tap);

@@ -6,6 +6,11 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { getStatsFromCache, syncDashboardOrders, shouldSkipBackgroundDashboardSync } from "@/lib/order-service";
+import { pollVeloWebsiteOrders } from "@/lib/velo-website-sync";
+import {
+  getOrdersSyncUi,
+  subscribeOrdersSyncUi,
+} from "@/lib/order-sync-ui";
 import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import {
   getDashboardDateRange,
@@ -258,6 +263,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({ total: 0, dispatched: 0, pending: 0, ownTotal: 0, ownDispatched: 0, ownPending: 0 });
   const [prevStats, setPrevStats] = useState<DashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [refreshingStats, setRefreshingStats] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const dateDropdownRef = useRef<HTMLDivElement>(null);
@@ -299,11 +305,14 @@ export default function DashboardPage() {
       }
       setLoadingStats(false);
 
-      if (syncingRef.current) return;
-      if (shouldSkipBackgroundDashboardSync()) return;
-      syncingRef.current = true;
-      syncDashboardOrders(user.id)
-        .then(async () => {
+      const runBackgroundRefresh = async (forceWebsite: boolean) => {
+        if (syncingRef.current) return;
+        if (!forceWebsite && shouldSkipBackgroundDashboardSync()) return;
+        syncingRef.current = true;
+        setRefreshingStats(true);
+        try {
+          await pollVeloWebsiteOrders(user.id);
+          await syncDashboardOrders(user.id);
           const fresh = await getStatsFromCache(user.id, rangeFrom, rangeTo);
           setStats(fresh);
           if (prevFrom && prevTo) {
@@ -312,11 +321,15 @@ export default function DashboardPage() {
           } else {
             setPrevStats(null);
           }
-        })
-        .catch(() => {})
-        .finally(() => {
+        } catch {
+          /* keep cached stats */
+        } finally {
           syncingRef.current = false;
-        });
+          setRefreshingStats(false);
+        }
+      };
+
+      void runBackgroundRefresh(false);
     } catch (e) {
       setError((e as Error).message || "Failed to load stats");
       setStats({ total: 0, dispatched: 0, pending: 0, ownTotal: 0, ownDispatched: 0, ownPending: 0 });
@@ -338,6 +351,36 @@ export default function DashboardPage() {
       setPrevStats(null);
     }
   }, [user, period, customFrom, customTo, fetchStats]);
+
+  useEffect(() => {
+    setRefreshingStats(getOrdersSyncUi().syncing);
+    const unsub = subscribeOrdersSyncUi((detail) => {
+      setRefreshingStats(detail.syncing);
+      if (!detail.syncing && user) {
+        void getStatsFromCache(user.id, rangeFrom, rangeTo).then(setStats);
+      }
+    });
+    const onImported = () => {
+      if (!user) return;
+      void (async () => {
+        setRefreshingStats(true);
+        try {
+          await syncDashboardOrders(user.id);
+          const fresh = await getStatsFromCache(user.id, rangeFrom, rangeTo);
+          setStats(fresh);
+        } catch {
+          /* ignore */
+        } finally {
+          setRefreshingStats(false);
+        }
+      })();
+    };
+    window.addEventListener("velo-website-orders-imported", onImported);
+    return () => {
+      unsub();
+      window.removeEventListener("velo-website-orders-imported", onImported);
+    };
+  }, [user, rangeFrom, rangeTo]);
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -425,6 +468,17 @@ export default function DashboardPage() {
           <p className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
             {error}
           </p>
+        )}
+
+        {refreshingStats && !loadingStats && (
+          <div
+            className="mb-4 flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-200"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+            <span>{t("Updating orders…")}</span>
+          </div>
         )}
 
         {/* Stat Cards */}
