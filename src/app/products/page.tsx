@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { IconWhatsApp } from "@/components/ui/OrderIcons";
 import { CategoriesTab } from "@/components/products/CategoriesTab";
+import { CollectionFieldWithAdd } from "@/components/products/CreateCollectionModal";
 import { BulkBatchList } from "@/components/products/BulkBatchList";
 import { ShareCartPanel, shareCartSpacerHeight } from "@/components/products/ShareCartPanel";
 import {
@@ -203,7 +204,7 @@ export default function ProductsPage() {
             userId={user.id}
             collections={collections}
             loadingCollections={loadingCollections}
-            onRefreshCollections={() => void loadCollections(true)}
+            onRefreshCollections={() => loadCollections(true)}
             setError={setError}
             setInfo={setInfo}
             onSaved={() => {
@@ -217,7 +218,7 @@ export default function ProductsPage() {
             userId={user.id}
             collections={collections}
             loadingCollections={loadingCollections}
-            onRefreshCollections={() => void loadCollections(true)}
+            onRefreshCollections={() => loadCollections(true)}
             setError={setError}
             setInfo={setInfo}
             onDone={() => {
@@ -685,7 +686,7 @@ function ProductSingleTab({
   userId: string;
   collections: VeloCollection[];
   loadingCollections: boolean;
-  onRefreshCollections: () => void;
+  onRefreshCollections: () => void | Promise<void>;
   setError: (v: string | null) => void;
   setInfo: (v: string | null) => void;
   onSaved: () => void;
@@ -877,34 +878,17 @@ function ProductSingleTab({
             onChange={(e) => patch({ description: e.target.value })}
           />
         </label>
-        <label className="block">
-          <span className={labelCls}>{t("Collection")} *</span>
-          <div className="mt-1 flex gap-2">
-            <select
-              className={`${inputCls} mt-0 flex-1`}
-              value={form.collectionId}
-              onChange={(e) => patch({ collectionId: e.target.value })}
-            >
-              <option value="">{t("Select collection")}</option>
-              {collections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={onRefreshCollections}
-              disabled={loadingCollections}
-              className="rounded-xl border border-gray-200 px-3 text-sm dark:border-slate-600"
-            >
-              {t("Refresh")}
-            </button>
-          </div>
-          {fieldErrors.collectionId && (
-            <p className="mt-1 text-xs text-red-600">{fieldErrors.collectionId}</p>
-          )}
-        </label>
+        <CollectionFieldWithAdd
+          userId={userId}
+          collections={collections}
+          loadingCollections={loadingCollections}
+          value={form.collectionId}
+          onChange={(collectionId) => patch({ collectionId })}
+          onRefreshCollections={onRefreshCollections}
+          error={fieldErrors.collectionId}
+          inputClassName={inputCls}
+          labelClassName={labelCls}
+        />
         <label className="block">
           <span className={labelCls}>{t("Badge")}</span>
           <select
@@ -998,6 +982,7 @@ function ProductSingleTab({
 }
 
 function ProductBulkTab({
+  userId,
   collections,
   loadingCollections,
   onRefreshCollections,
@@ -1007,7 +992,7 @@ function ProductBulkTab({
   userId: string;
   collections: VeloCollection[];
   loadingCollections: boolean;
-  onRefreshCollections: () => void;
+  onRefreshCollections: () => void | Promise<void>;
   setError: (v: string | null) => void;
   setInfo: (v: string | null) => void;
   onDone: () => void;
@@ -1098,31 +1083,17 @@ function ProductBulkTab({
               onChange={(e) => patch({ description: e.target.value })}
             />
           </label>
-          <label className="block">
-            <span className={labelCls}>{t("Collection")} *</span>
-            <div className="mt-1 flex gap-2">
-              <select
-                className={`${inputCls} mt-0 flex-1`}
-                value={form.collectionId}
-                onChange={(e) => patch({ collectionId: e.target.value })}
-              >
-                <option value="">{t("Select collection")}</option>
-                {collections.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={onRefreshCollections}
-                disabled={loadingCollections}
-                className="rounded-xl border border-gray-200 px-3 text-sm dark:border-slate-600"
-              >
-                {t("Refresh")}
-              </button>
-            </div>
-          </label>
+          <CollectionFieldWithAdd
+            userId={userId}
+            collections={collections}
+            loadingCollections={loadingCollections}
+            value={form.collectionId}
+            onChange={(collectionId) => patch({ collectionId })}
+            onRefreshCollections={onRefreshCollections}
+            error={fieldErrors.collectionId}
+            inputClassName={inputCls}
+            labelClassName={labelCls}
+          />
           <label className="block">
             <span className={labelCls}>{t("Price")} *</span>
             <input className={inputCls} value={form.price} onChange={(e) => patch({ price: e.target.value })} />

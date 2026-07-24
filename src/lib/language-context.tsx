@@ -376,6 +376,8 @@ const TA: Record<string, string> = {
   Categories: "வகைகள்",
   "Create category": "வகை உருவாக்கு",
   "Edit category": "வகை எடிட்",
+  "Add new collection": "புதிய கலெக்ஷன் சேர்",
+  "Add new": "புதிதாகச் சேர்",
   "Save category": "வகை சேமி",
   "Cancel edit": "எடிட் ரத்து",
   "Category name": "வகை பெயர்",
