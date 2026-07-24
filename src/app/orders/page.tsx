@@ -33,7 +33,8 @@ import {
   shouldShowPaymentBadge,
 } from "@/lib/order-payment-status";
 import {
-  orderFiltersFromTabParam,
+  orderFiltersFromSearchParams,
+  ordersHrefFromFilters,
   dateScopeFromFilters,
   resolveOrderFilters,
   orderFiltersEqual,
@@ -70,8 +71,16 @@ export default function OrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const allParam = searchParams.get("all");
   const [appliedFilters, setAppliedFilters] = useState<OrderFilterState>(() =>
-    orderFiltersFromTabParam(tabParam)
+    orderFiltersFromSearchParams({
+      tab: tabParam,
+      from: fromParam,
+      to: toParam,
+      all: allParam,
+    })
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterApplying, setFilterApplying] = useState(false);
@@ -298,12 +307,13 @@ export default function OrdersPage() {
         setAppliedFilters(resolved);
         appliedFiltersRef.current = resolved;
         await fetchOrders(resolved);
+        router.replace(ordersHrefFromFilters(resolved), { scroll: false });
         setFilterOpen(false);
       } finally {
         setFilterApplying(false);
       }
     },
-    [fetchOrders]
+    [fetchOrders, router]
   );
 
   const handleStatusChange = React.useCallback(
@@ -313,8 +323,7 @@ export default function OrdersPage() {
       setAppliedFilters(next);
       appliedFiltersRef.current = next;
       void fetchOrders(next);
-      const tab = nextStatus === "DESPATCHED" ? "dispatched" : "pending";
-      router.replace(`/orders/?tab=${tab}`, { scroll: false });
+      router.replace(ordersHrefFromFilters(next), { scroll: false });
     },
     [fetchOrders, router]
   );
@@ -343,7 +352,7 @@ export default function OrdersPage() {
           };
           setAppliedFilters(next);
           appliedFiltersRef.current = next;
-          router.replace("/orders/?tab=dispatched", { scroll: false });
+          router.replace(ordersHrefFromFilters(next), { scroll: false });
         }
         setDetailOrder(match);
       }
@@ -412,17 +421,19 @@ export default function OrdersPage() {
     };
   }, [fetchOrders]);
 
-  // Sync status from URL when returning from edit-order or browser back; refetch list
+  // Sync filters from URL (Dashboard deep links, back/forward, edit-order return).
   useEffect(() => {
-    const urlStatus: OrderStatus = tabParam === "dispatched" ? "DESPATCHED" : "PENDING";
-    setAppliedFilters((prev) => {
-      if (prev.status === urlStatus) return prev;
-      const next = { ...prev, status: urlStatus };
-      appliedFiltersRef.current = next;
-      if (user) void fetchOrders(next);
-      return next;
+    const next = orderFiltersFromSearchParams({
+      tab: tabParam,
+      from: fromParam,
+      to: toParam,
+      all: allParam,
     });
-  }, [tabParam, user, fetchOrders]);
+    if (orderFiltersEqual(next, appliedFiltersRef.current)) return;
+    setAppliedFilters(next);
+    appliedFiltersRef.current = next;
+    if (user) void fetchOrders(next);
+  }, [tabParam, fromParam, toParam, allParam, user, fetchOrders]);
 
   const filteredOrders = React.useMemo(() => {
     let list = orders.filter((o) => o.status === status && isVisibleInOrdersList(o));

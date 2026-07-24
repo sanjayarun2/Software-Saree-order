@@ -14,6 +14,7 @@ const STORAGE_KEY = "saree_app_language";
 
 const TA: Record<string, string> = {
   "Dashboard": "முகப்புப்",
+  "Open orders": "ஆர்டர்களைத் திற",
   "Orders": "ஆர்டர்கள்",
   "Unpaid orders": "பேட் இல்லாத ஆர்டர்கள்",
   "No unpaid orders": "பேட் இல்லாத ஆர்டர்கள் இல்லை",

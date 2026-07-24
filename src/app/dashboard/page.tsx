@@ -16,6 +16,8 @@ import {
   getDashboardDateRange,
   type DashboardDatePeriod,
 } from "@/lib/dashboard-date-utils";
+import { buildOrdersListHref } from "@/lib/order-filter-utils";
+import type { OrderStatus } from "@/lib/db-types";
 
 const PERIOD_OPTIONS: { value: DashboardDatePeriod; label: string }[] = [
   { value: "today", label: "Today" },
@@ -213,6 +215,8 @@ const CARD_CONFIGS = [
     key: "total" as const,
     ownKey: "ownTotal" as const,
     label: "Total Orders",
+    /** Total is not a separate Orders tab — open Pending for the same date window. */
+    status: "PENDING" as OrderStatus,
     iconBg: "bg-primary-50 dark:bg-primary-500/20",
     iconColor: "text-primary-600 dark:text-primary-400",
     icon: (
@@ -227,6 +231,7 @@ const CARD_CONFIGS = [
     key: "dispatched" as const,
     ownKey: "ownDispatched" as const,
     label: "Dispatched",
+    status: "DESPATCHED" as OrderStatus,
     iconBg: "bg-emerald-50 dark:bg-emerald-500/20",
     iconColor: "text-emerald-600 dark:text-emerald-400",
     icon: (
@@ -242,6 +247,7 @@ const CARD_CONFIGS = [
     key: "pending" as const,
     ownKey: "ownPending" as const,
     label: "Pending",
+    status: "PENDING" as OrderStatus,
     iconBg: "bg-amber-50 dark:bg-amber-500/20",
     iconColor: "text-amber-600 dark:text-amber-400",
     icon: (
@@ -481,17 +487,26 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Stat Cards */}
+        {/* Stat Cards → Orders (matching tab + dashboard date range) */}
         <div className="flex flex-col gap-4">
           {CARD_CONFIGS.map((card) => {
             const value = stats[card.key];
             const ownValue = stats[card.ownKey];
             const prev = prevStats?.[card.key];
             const isTeamAdmin = !loadingStats && value !== ownValue;
+            const href = buildOrdersListHref({
+              status: card.status,
+              fromDate: rangeFrom,
+              toDate: rangeTo,
+            });
+            const canNavigate =
+              period !== "custom" || Boolean(customFrom && customTo);
             return (
-              <div
+              <Link
                 key={card.key}
-                className="flex items-center gap-4 rounded-2xl border border-white/20 bg-white/80 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] backdrop-blur-sm transition dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]"
+                href={canNavigate ? href : "/orders/?tab=pending"}
+                className="flex items-center gap-4 rounded-2xl border border-white/20 bg-white/80 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.06)] backdrop-blur-sm transition hover:border-primary-300/60 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] dark:hover:border-primary-700/50 dark:hover:bg-slate-800"
+                aria-label={`${t(card.label)}: ${value}. ${t("Open orders")}`}
               >
                 {/* Icon */}
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.iconBg}`}>
@@ -521,7 +536,7 @@ export default function DashboardPage() {
                 {!loadingStats && prevStats && (
                   <ChangeBadge current={value} prev={prev} />
                 )}
-              </div>
+              </Link>
             );
           })}
         </div>

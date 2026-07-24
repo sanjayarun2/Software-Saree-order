@@ -153,6 +153,92 @@ export function orderFiltersFromTabParam(tab: string | null): OrderFilterState {
   return createTodayOrderFilters(tab === "dispatched" ? "DESPATCHED" : "PENDING");
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidIsoDay(value: string): boolean {
+  if (!ISO_DAY.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return (
+    dt.getFullYear() === y &&
+    dt.getMonth() === m - 1 &&
+    dt.getDate() === d
+  );
+}
+
+/**
+ * Build /orders/?tab=&from=&to= for deep links (Dashboard → Orders).
+ * Omits invalid dates; keeps URL shareable and back-button friendly.
+ */
+export function buildOrdersListHref(opts: {
+  status?: OrderStatus;
+  fromDate?: string | null;
+  toDate?: string | null;
+  allOrders?: boolean;
+}): string {
+  const params = new URLSearchParams();
+  params.set("tab", opts.status === "DESPATCHED" ? "dispatched" : "pending");
+  if (opts.allOrders) {
+    params.set("all", "1");
+  } else {
+    const from = (opts.fromDate || "").trim();
+    const to = (opts.toDate || "").trim();
+    if (isValidIsoDay(from) && isValidIsoDay(to) && from <= to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
+  }
+  return `/orders/?${params.toString()}`;
+}
+
+/** Parse Orders list URL into filter state (tab + optional from/to or all). */
+export function orderFiltersFromSearchParams(input: {
+  tab?: string | null;
+  from?: string | null;
+  to?: string | null;
+  all?: string | null;
+}): OrderFilterState {
+  const status: OrderStatus =
+    input.tab === "dispatched" ? "DESPATCHED" : "PENDING";
+
+  if (input.all === "1" || input.all === "true") {
+    return createAllOrdersFilters(status);
+  }
+
+  const from = (input.from || "").trim();
+  const to = (input.to || "").trim();
+  if (isValidIsoDay(from) && isValidIsoDay(to) && from <= to) {
+    const today = localDateIso();
+    if (from === today && to === today) return createTodayOrderFilters(status);
+    const yesterday = shiftLocalDateIso(today, -1);
+    if (from === yesterday && to === yesterday) {
+      return createYesterdayOrderFilters(status);
+    }
+    const week = thisWeekRangeIso();
+    if (from === week.from && to === week.to) {
+      return createThisWeekOrderFilters(status);
+    }
+    const month = thisMonthRangeIso();
+    if (from === month.from && to === month.to) {
+      return createThisMonthOrderFilters(status);
+    }
+    return createRangeOrderFilters(status, from, to);
+  }
+
+  return orderFiltersFromTabParam(input.tab ?? null);
+}
+
+/** Keep tab/date query in sync when filters change inside Orders. */
+export function ordersHrefFromFilters(filters: OrderFilterState): string {
+  const resolved = resolveOrderFilters(filters);
+  return buildOrdersListHref({
+    status: resolved.status,
+    fromDate: resolved.fromDate,
+    toDate: resolved.toDate,
+    allOrders: resolved.allOrders,
+  });
+}
+
 const DD_MM_YYYY = /^(\d{2})-(\d{2})-(\d{4})$/;
 
 export function formatIsoToDdMmYyyy(iso: string): string {
