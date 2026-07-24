@@ -48,6 +48,10 @@ Deno.serve(async (req) => {
       order_id?: string;
       /** Optional: paid | unpaid | no_payment_required */
       payment_status?: string;
+      /** Optional: asc (default) | desc */
+      sort?: string;
+      /** Optional upper bound ISO for sort=desc pagination */
+      before?: string;
       test_only?: boolean;
       api_key?: string;
       api_base_url?: string;
@@ -97,6 +101,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    const sort = body.sort?.trim().toLowerCase() === "desc" ? "desc" : "";
+    const before = body.before?.trim() || "";
+    if (before && Number.isNaN(Date.parse(before))) {
+      return json({ error: "Invalid before. Use ISO datetime." }, 400);
+    }
+
     let url: string;
     if (orderId) {
       url = `${base}/api/velo/orders/${encodeURIComponent(orderId)}`;
@@ -106,6 +116,8 @@ Deno.serve(async (req) => {
         limit: String(Math.min(Math.max(body.limit ?? 50, 1), 200)),
       });
       if (paymentStatus) params.set("paymentStatus", paymentStatus);
+      if (sort) params.set("sort", sort);
+      if (before) params.set("before", before);
       url = `${base}/api/velo/orders?${params.toString()}`;
     }
 

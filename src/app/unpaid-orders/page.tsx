@@ -192,6 +192,7 @@ export default function UnpaidOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(
@@ -200,16 +201,19 @@ export default function UnpaidOrdersPage() {
       if (force) setRefreshing(true);
       else setLoading(true);
       setError(null);
+      setWarning(null);
       try {
         if (!force) {
           const cached = peekUnpaidWebsiteOrdersCache(user.id);
           if (cached) {
-            setOrders(cached);
+            setOrders(cached.orders);
+            setWarning(cached.warning);
             setLoading(false);
           }
         }
         const result = await fetchUnpaidWebsiteOrders(user.id, { force });
         setOrders(result.orders);
+        setWarning(result.warning);
         if (result.error && result.orders.length === 0) {
           setError(result.error);
         }
@@ -271,6 +275,12 @@ export default function UnpaidOrdersPage() {
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
             {error}
+          </div>
+        )}
+
+        {warning && !error && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            {warning}
           </div>
         )}
 
