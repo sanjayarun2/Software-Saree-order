@@ -106,11 +106,6 @@ export function CategoriesTab({
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = t("Category name is required.");
     if (!description.trim()) next.description = t("Description is required.");
-    const hasImage =
-      Boolean(imageBase64.trim()) ||
-      Boolean(featuredImageMediaId.trim()) ||
-      Boolean(editingId && existingImageUrl);
-    if (!hasImage) next.image = t("Category image is required.");
     setFieldErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -186,7 +181,7 @@ export function CategoriesTab({
           )}
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t("Same fields as website admin: name, description, and category image. Slug is generated automatically.")}
+          {t("Category image is optional. If empty, a product photo from this category is used after you upload products.")}
         </p>
 
         <form onSubmit={(e) => void onSubmit(e)} className="grid gap-4 sm:grid-cols-2">
@@ -218,7 +213,7 @@ export function CategoriesTab({
           </label>
 
           <div className="sm:col-span-2">
-            <span className={labelCls}>{t("Category image")} *</span>
+            <span className={labelCls}>{t("Category image")}</span>
             <input
               ref={fileRef}
               type="file"
@@ -239,9 +234,9 @@ export function CategoriesTab({
                 <span className="text-xs text-slate-500">{imageFileName}</span>
               )}
             </div>
-            {fieldErrors.image && (
-              <p className="mt-1 text-xs text-red-600">{fieldErrors.image}</p>
-            )}
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {t("Optional — leave empty to use a product photo from this category later.")}
+            </p>
             {previewSrc && (
               // eslint-disable-next-line @next/next/no-img-element
               <img

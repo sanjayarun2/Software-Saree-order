@@ -355,6 +355,10 @@ const TA: Record<string, string> = {
   "Category name is required.": "வகை பெயர் தேவை.",
   "Description is required.": "விளக்கம் தேவை.",
   "Category image is required.": "வகை படம் தேவை.",
+  "Category image is optional. If empty, a product photo from this category is used after you upload products.":
+    "வகை படம் விருப்பம். காலியாக இருந்தால், புராடக்ட் அப்லோடுக்குப் பிறகு அந்த வகையின் புராடக்ட் படம் பயன்படும்.",
+  "Optional — leave empty to use a product photo from this category later.":
+    "விருப்பம் — காலியாக விட்டால் பின்னர் இந்த வகையின் புராடக்ட் படம் பயன்படும்.",
   "Creating category…": "வகை உருவாகிறது…",
   "Updating category…": "வகை புதுப்பிக்கிறது…",
   "Change image": "படம் மாற்று",
