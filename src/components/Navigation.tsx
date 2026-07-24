@@ -18,6 +18,7 @@ const BOTTOM_NAV_ITEMS = [
 const NAV_ITEMS_DESKTOP = [
   { href: "/dashboard", label: "Home", icon: "🏠" },
   { href: "/orders", label: "Orders", icon: "📋" },
+  { href: "/unpaid-orders", label: "Unpaid orders", icon: "📞" },
   { href: "/products", label: "Products", icon: "🛍️" },
   { href: "/product-codes", label: "Product codes", icon: "🏷️" },
   { href: "/add-order", label: "Add Order", icon: "➕" },

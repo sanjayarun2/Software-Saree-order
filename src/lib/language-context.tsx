@@ -15,6 +15,24 @@ const STORAGE_KEY = "saree_app_language";
 const TA: Record<string, string> = {
   "Dashboard": "முகப்புப்",
   "Orders": "ஆர்டர்கள்",
+  "Unpaid orders": "பேட் இல்லாத ஆர்டர்கள்",
+  "Website checkouts that started but are not paid yet. Tap Call to phone the customer.":
+    "பேமெண்ட் முடியாத வெப்சைட் செக்அவுட்கள். வாடிக்கையாளரை அழைக்க Call அழுத்தவும்.",
+  "These are not added to your Orders list until payment succeeds.":
+    "பேமெண்ட் வெற்றி பெறும் வரை இவை உங்கள் ஆர்டர் பட்டியலில் சேர்க்கப்படாது.",
+  "No unpaid website orders": "பேட் இல்லாத வெப்சைட் ஆர்டர்கள் இல்லை",
+  "Showing the last 30 days from your connected shop.":
+    "இணைக்கப்பட்ட கடையிலிருந்து கடந்த 30 நாட்கள் காட்டப்படுகிறது.",
+  "Failed to load unpaid orders": "பேட் இல்லாத ஆர்டர்களை ஏற்ற முடியவில்லை",
+  "No mobile": "மொபைல் இல்லை",
+  "No mobile number on this checkout": "இந்த செக்அவுட்டில் மொபைல் எண் இல்லை",
+  "Call": "கால்",
+  "Mobile": "மொபைல்",
+  "Address": "முகவரி",
+  "Cart items": "கார்ட் பொருட்கள்",
+  "No cart items returned": "கார்ட் பொருட்கள் கிடைக்கவில்லை",
+  "item": "பொருள்",
+  "items": "பொருட்கள்",
   "Add Order": "புதிய ஆர்டர்",
   "Product Codes": "புராடக்ட் கோட்ஸ்",
   "Product codes": "புராடக்ட் கோட்ஸ்",

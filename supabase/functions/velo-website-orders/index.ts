@@ -8,6 +8,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const ALLOWED_PAYMENT_STATUSES = new Set([
+  "paid",
+  "unpaid",
+  "no_payment_required",
+]);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -40,6 +46,8 @@ Deno.serve(async (req) => {
       limit?: number;
       /** Single order id → GET /api/velo/orders/:orderId */
       order_id?: string;
+      /** Optional: paid | unpaid | no_payment_required */
+      payment_status?: string;
       test_only?: boolean;
       api_key?: string;
       api_base_url?: string;
@@ -78,11 +86,28 @@ Deno.serve(async (req) => {
 
     const base = apiBaseUrl.replace(/\/$/, "");
     const orderId = body.order_id?.trim() || "";
-    const url = orderId
-      ? `${base}/api/velo/orders/${encodeURIComponent(orderId)}`
-      : `${base}/api/velo/orders?since=${encodeURIComponent(
-          body.since || new Date(0).toISOString()
-        )}&limit=${Math.min(Math.max(body.limit ?? 50, 1), 200)}`;
+    const paymentStatus = body.payment_status?.trim().toLowerCase() || "";
+    if (paymentStatus && !ALLOWED_PAYMENT_STATUSES.has(paymentStatus)) {
+      return json(
+        {
+          error:
+            "Invalid payment_status. Use paid, unpaid, or no_payment_required.",
+        },
+        400
+      );
+    }
+
+    let url: string;
+    if (orderId) {
+      url = `${base}/api/velo/orders/${encodeURIComponent(orderId)}`;
+    } else {
+      const params = new URLSearchParams({
+        since: body.since || new Date(0).toISOString(),
+        limit: String(Math.min(Math.max(body.limit ?? 50, 1), 200)),
+      });
+      if (paymentStatus) params.set("paymentStatus", paymentStatus);
+      url = `${base}/api/velo/orders?${params.toString()}`;
+    }
 
     const veloRes = await fetch(url, {
       headers: { "x-velo-key": apiKey },
