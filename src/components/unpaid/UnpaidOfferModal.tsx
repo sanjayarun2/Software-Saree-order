@@ -8,6 +8,7 @@ import {
   clampPercentOffer,
   computeUnpaidOfferPreview,
   openUnpaidRecoveryWhatsApp,
+  readUnpaidOfferPrefs,
   unpaidItemsToShareCartLines,
   type UnpaidOfferInput,
   type UnpaidOfferMode,
@@ -38,9 +39,10 @@ export function UnpaidOfferModal({
 
   useEffect(() => {
     if (!open) return;
-    setMode("none");
-    setPercent(5);
-    setFixedAmount(100);
+    const prefs = readUnpaidOfferPrefs();
+    setMode(prefs.mode);
+    setPercent(prefs.percent);
+    setFixedAmount(prefs.fixedAmount);
     setSending(false);
     setError(null);
   }, [open, order.orderId]);
@@ -98,24 +100,15 @@ export function UnpaidOfferModal({
           id="unpaid-offer-title"
           className="text-lg font-bold text-slate-900 dark:text-slate-100"
         >
-          {t("WhatsApp cart offer")}
+          {t("WhatsApp")}
         </h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {t(
-            "Send their cart link. Optional offer is only in the message — shop prices stay unchanged."
-          )}
-        </p>
-
-        <p className="mt-3 text-sm font-medium text-slate-800 dark:text-slate-200">
+        <p className="mt-1 truncate text-sm text-slate-600 dark:text-slate-300">
           {order.customerName}
-        </p>
-        <p className="text-xs text-slate-500">
-          {shareableCount}{" "}
-          {shareableCount === 1 ? t("item") : t("items")} · {order.shopLabel}
+          <span className="text-slate-400"> · {order.shopLabel}</span>
         </p>
 
         <fieldset className="mt-4 space-y-2">
-          <legend className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <legend className="text-xs font-medium text-slate-500">
             {t("Offer")}
           </legend>
           {(
@@ -149,9 +142,7 @@ export function UnpaidOfferModal({
 
         {mode === "percent" && (
           <label className="mt-3 block text-sm">
-            <span className="text-slate-600 dark:text-slate-300">
-              {t("Discount percent")}
-            </span>
+            <span className="text-slate-600 dark:text-slate-300">%</span>
             <input
               type="number"
               min={1}
@@ -167,19 +158,14 @@ export function UnpaidOfferModal({
 
         {mode === "fixed" && (
           <label className="mt-3 block text-sm">
-            <span className="text-slate-600 dark:text-slate-300">
-              {t("Discount amount (₹)")}
-            </span>
+            <span className="text-slate-600 dark:text-slate-300">₹</span>
             <input
               type="number"
               min={1}
               value={fixedAmount}
               onChange={(e) =>
                 setFixedAmount(
-                  clampFixedOffer(
-                    Number(e.target.value),
-                    preview.originalTotal
-                  )
+                  clampFixedOffer(Number(e.target.value), preview.originalTotal)
                 )
               }
               className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 dark:border-slate-600 dark:bg-slate-900"
@@ -187,42 +173,32 @@ export function UnpaidOfferModal({
           </label>
         )}
 
-        <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-900/60">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            {t("Price preview")}
-          </p>
-          {preview.originalTotal == null ? (
-            <p className="mt-1 text-sm text-slate-500">
-              {t("Total not available for this checkout")}
-            </p>
-          ) : mode === "none" ? (
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
-              {formatMoneyAmount(preview.originalTotal, preview.currency)}
-            </p>
-          ) : (
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="text-base text-slate-400 line-through">
+        {preview.originalTotal != null && (
+          <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-900/60">
+            {mode === "none" ? (
+              <p className="text-lg font-semibold text-slate-900 dark:text-white">
                 {formatMoneyAmount(preview.originalTotal, preview.currency)}
-              </span>
-              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-                {formatMoneyAmount(
-                  preview.discountedTotal,
-                  preview.currency
-                )}
-              </span>
-              {preview.label ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
-                  {preview.label}
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-base text-slate-400 line-through">
+                  {formatMoneyAmount(preview.originalTotal, preview.currency)}
                 </span>
-              ) : null}
-            </div>
-          )}
-          <p className="mt-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-            {t(
-              "Checkout still shows shop prices. Honor this offer manually when they pay."
+                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                  {formatMoneyAmount(preview.discountedTotal, preview.currency)}
+                </span>
+                {preview.label ? (
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    {preview.label}
+                  </span>
+                ) : null}
+              </div>
             )}
-          </p>
-        </div>
+            <p className="mt-1 text-xs text-slate-500">
+              {t("1-day offer in WhatsApp only")}
+            </p>
+          </div>
+        )}
 
         {error && (
           <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
@@ -232,9 +208,7 @@ export function UnpaidOfferModal({
 
         {shareableCount === 0 && (
           <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
-            {t(
-              "No product IDs on this checkout — cannot build a cart link."
-            )}
+            {t("No cart items to share")}
           </p>
         )}
 
@@ -250,7 +224,7 @@ export function UnpaidOfferModal({
             type="button"
             onClick={onSend}
             disabled={sending || shareableCount === 0 || !order.customerMobile}
-            className="min-h-[44px] flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="min-h-[44px] flex-1 rounded-xl bg-[#25D366] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1ebe57] disabled:opacity-50"
           >
             {sending ? t("Loading") : t("Send WhatsApp")}
           </button>

@@ -4,7 +4,7 @@ import {
   buildShopCartUrl,
 } from "./shop-product-urls";
 import type { ShareCartLine } from "./share-cart-types";
-import { isUsableShopProductId } from "./shop-url-utils";
+import { isUsableShopProductId, normalizeShopBaseUrl } from "./shop-url-utils";
 import {
   digitsOnlyPhone,
   formatMoneyAmount,
@@ -29,6 +29,8 @@ export type UnpaidOfferPreview = {
   label: string | null;
 };
 
+const OFFER_PREFS_KEY = "velo_unpaid_offer_prefs_v1";
+
 export function clampPercentOffer(raw: number): number {
   const n = Math.floor(Number(raw));
   if (!Number.isFinite(n)) return 5;
@@ -42,6 +44,43 @@ export function clampFixedOffer(raw: number, maxTotal: number | null): number {
     return Math.min(n, Math.max(1, Math.floor(maxTotal - 1)));
   }
   return n;
+}
+
+/** Last WhatsApp offer choice (mode + values) for quicker next send. */
+export function readUnpaidOfferPrefs(): UnpaidOfferInput {
+  if (typeof window === "undefined") {
+    return { mode: "none", percent: 5, fixedAmount: 100 };
+  }
+  try {
+    const raw = window.localStorage.getItem(OFFER_PREFS_KEY);
+    if (!raw) return { mode: "none", percent: 5, fixedAmount: 100 };
+    const parsed = JSON.parse(raw) as Partial<UnpaidOfferInput>;
+    const mode: UnpaidOfferMode =
+      parsed.mode === "percent" || parsed.mode === "fixed" || parsed.mode === "none"
+        ? parsed.mode
+        : "none";
+    return {
+      mode,
+      percent: clampPercentOffer(parsed.percent ?? 5),
+      fixedAmount: Math.max(1, Math.round(Number(parsed.fixedAmount) || 100)),
+    };
+  } catch {
+    return { mode: "none", percent: 5, fixedAmount: 100 };
+  }
+}
+
+export function writeUnpaidOfferPrefs(offer: UnpaidOfferInput): void {
+  if (typeof window === "undefined") return;
+  try {
+    const payload: UnpaidOfferInput = {
+      mode: offer.mode,
+      percent: clampPercentOffer(offer.percent),
+      fixedAmount: Math.max(1, Math.round(Number(offer.fixedAmount) || 100)),
+    };
+    window.localStorage.setItem(OFFER_PREFS_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Prefer order.amount; else sum line unitPrice × qty when available. */
@@ -134,21 +173,43 @@ export function mobileToWhatsAppDigits(
   return digits;
 }
 
+function friendlyShopPlace(shopBaseUrl: string): string | null {
+  try {
+    const host = new URL(normalizeShopBaseUrl(shopBaseUrl)).hostname.replace(
+      /^www\./i,
+      ""
+    );
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildUnpaidRecoveryWhatsAppText(opts: {
   customerName: string;
+  brandName: string;
+  shopBaseUrl: string;
+  shopAddress?: string | null;
   lines: ShareCartLine[];
   cartUrl: string;
   preview: UnpaidOfferPreview;
 }): string {
   const name = opts.customerName.trim() || "there";
+  const brand = opts.brandName.trim() || "our shop";
+  const place =
+    (opts.shopAddress || "").trim() || friendlyShopPlace(opts.shopBaseUrl);
   const parts: string[] = [];
+
   parts.push(`Hi ${name},`);
+  parts.push("");
+  if (place) {
+    parts.push(`We are from ${brand} (${place}).`);
+  } else {
+    parts.push(`We are from ${brand}.`);
+  }
   parts.push("");
 
   if (opts.preview.label && opts.preview.originalTotal != null) {
-    parts.push(
-      "Special offer for you — only if you complete this order:"
-    );
     const was = formatMoneyAmount(
       opts.preview.originalTotal,
       opts.preview.currency
@@ -160,9 +221,15 @@ export function buildUnpaidRecoveryWhatsAppText(opts: {
             opts.preview.currency
           )
         : "—";
-    parts.push(`${opts.preview.label} (${was} → ${now}).`);
-    parts.push("");
+    parts.push(
+      `We can give you a special 1-day offer if you buy today: ${opts.preview.label} (${was} → ${now}).`
+    );
+  } else {
+    parts.push(
+      "We can give you a special 1-day offer if you complete this order today."
+    );
   }
+  parts.push("");
 
   parts.push(
     buildCustomerCartShareText({
@@ -203,8 +270,7 @@ export function openUnpaidRecoveryWhatsApp(opts: {
   if (!lines.length) {
     return {
       ok: false,
-      error:
-        "No product IDs on this checkout — cannot build a cart link. Ask the customer to reorder from the shop.",
+      error: "No cart items to share for this checkout.",
     };
   }
 
@@ -221,6 +287,8 @@ export function openUnpaidRecoveryWhatsApp(opts: {
   const preview = computeUnpaidOfferPreview(opts.order, opts.offer);
   const text = buildUnpaidRecoveryWhatsAppText({
     customerName: opts.order.customerName,
+    brandName: opts.order.shopLabel,
+    shopBaseUrl: opts.order.shopBaseUrl,
     lines,
     cartUrl,
     preview,
@@ -230,6 +298,8 @@ export function openUnpaidRecoveryWhatsApp(opts: {
   if (!url) {
     return { ok: false, error: "No valid mobile number for WhatsApp." };
   }
+
+  writeUnpaidOfferPrefs(opts.offer);
 
   if (typeof window !== "undefined") {
     window.open(url, "_blank", "noopener,noreferrer");

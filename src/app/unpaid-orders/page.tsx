@@ -2,12 +2,11 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { IconWhatsApp } from "@/components/ui/OrderIcons";
+import { IconPhone, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { UnpaidOfferModal } from "@/components/unpaid/UnpaidOfferModal";
 import { formatOrderDateTimeIst } from "@/lib/order-datetime";
 import { deferModalOpen } from "@/lib/use-backdrop-dismiss-guard";
@@ -23,11 +22,13 @@ import {
 
 function UnpaidOrderCard({
   order,
+  index,
   expanded,
   onToggle,
   onWhatsApp,
 }: {
   order: UnpaidWebsiteOrder;
+  index: number;
   expanded: boolean;
   onToggle: () => void;
   onWhatsApp: () => void;
@@ -41,171 +42,134 @@ function UnpaidOrderCard({
     unpaidItemsToShareCartLines(order.items).length > 0;
 
   return (
-    <BentoCard className="overflow-hidden border-amber-200/80 bg-amber-50/50 p-0 dark:border-amber-800/50 dark:bg-amber-950/30">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-amber-100/40 dark:hover:bg-amber-900/20"
-        aria-expanded={expanded}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-slate-900 dark:text-white">
-              {order.customerName}
-            </span>
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-              {t("Unpaid")}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {formatOrderDateTimeIst(order.createdAt)} · {order.shopLabel}
-          </p>
-          <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-            {formatMoneyAmount(order.amount, order.currency)}
-            {itemCount > 0
-              ? ` · ${itemCount} ${itemCount === 1 ? t("item") : t("items")}`
-              : ""}
-          </p>
-        </div>
-        <span
-          className={`mt-1 shrink-0 text-slate-400 transition-transform ${
-            expanded ? "rotate-180" : ""
-          }`}
-          aria-hidden
-        >
-          ▾
-        </span>
-      </button>
-
-      <div className="mx-4 mb-3 flex flex-col gap-2 sm:flex-row">
-        {tel ? (
-          <a
-            href={tel}
-            onClick={(e) => e.stopPropagation()}
-            className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 active:bg-emerald-800"
-          >
-            <span aria-hidden>📞</span>
-            {t("Call")}
-          </a>
-        ) : (
-          <p className="flex min-h-[44px] flex-1 items-center text-sm text-slate-500 dark:text-slate-400">
-            {t("No mobile number on this checkout")}
-          </p>
-        )}
+    <BentoCard className="flex flex-col gap-0 overflow-hidden border-amber-300/80 bg-amber-50/80 p-0 dark:border-amber-700/60 dark:bg-amber-950/45">
+      <div className="flex items-center justify-between gap-3 px-4 py-4">
         <button
           type="button"
-          disabled={!canWhatsApp}
-          onClick={(e) => {
-            e.stopPropagation();
-            onWhatsApp();
-          }}
-          className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1ebe57] disabled:cursor-not-allowed disabled:opacity-50"
-          title={
-            canWhatsApp
-              ? t("WhatsApp cart offer")
-              : t("No product IDs on this checkout — cannot build a cart link.")
-          }
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left"
+          aria-expanded={expanded}
         >
-          <IconWhatsApp className="h-5 w-5" />
-          {t("WhatsApp")}
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
+            {index + 1}
+          </span>
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100 lg:text-base">
+              {order.customerName}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 dark:text-slate-400">
+              <span className="tabular-nums whitespace-nowrap">
+                {formatOrderDateTimeIst(order.createdAt)}
+              </span>
+              {itemCount > 0 ? (
+                <span>
+                  {t("Qty")}: {itemCount}
+                </span>
+              ) : null}
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                {t("Unpaid")}
+              </span>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+                {t("Web")}
+              </span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              {formatMoneyAmount(order.amount, order.currency)}
+              <span className="ml-2 font-normal text-slate-500">
+                · {order.shopLabel}
+              </span>
+            </p>
+          </div>
         </button>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {tel ? (
+            <a
+              href={tel}
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-700 transition hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+              title={mobileLabel}
+              aria-label={t("Call")}
+            >
+              <IconPhone className="h-5 w-5" />
+            </a>
+          ) : null}
+          <button
+            type="button"
+            disabled={!canWhatsApp}
+            onClick={(e) => {
+              e.stopPropagation();
+              onWhatsApp();
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+            title={t("WhatsApp")}
+            aria-label={t("WhatsApp")}
+          >
+            <IconWhatsApp className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {expanded && (
         <div className="space-y-3 border-t border-amber-200/70 px-4 py-3 dark:border-amber-800/40">
-          {order.customerEmail ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                {t("Email")}
-              </p>
-              <a
-                href={`mailto:${order.customerEmail}`}
-                className="text-sm text-primary-600 underline-offset-2 hover:underline dark:text-primary-400"
-              >
-                {order.customerEmail}
-              </a>
-            </div>
-          ) : null}
-
           {order.customerMobile ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                {t("Mobile")}
-              </p>
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              <span className="text-slate-500">{t("Mobile")}: </span>
               {tel ? (
                 <a
                   href={tel}
-                  className="text-sm font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
+                  className="font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
                 >
                   {mobileLabel}
                 </a>
               ) : (
-                <p className="text-sm text-slate-800 dark:text-slate-200">
-                  {mobileLabel}
-                </p>
+                mobileLabel
               )}
-            </div>
+            </p>
           ) : null}
 
           {order.addressLines.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                {t("Address")}
-              </p>
-              <p className="whitespace-pre-line text-sm text-slate-800 dark:text-slate-200">
-                {order.addressLines.join("\n")}
-              </p>
-            </div>
+            <p className="whitespace-pre-line text-sm text-slate-800 dark:text-slate-200">
+              {order.addressLines.join("\n")}
+            </p>
           ) : null}
 
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              {t("Cart items")}
-            </p>
-            {order.items.length === 0 ? (
-              <p className="text-sm text-slate-500">{t("No cart items returned")}</p>
-            ) : (
-              <ul className="divide-y divide-amber-100 dark:divide-amber-900/40">
-                {order.items.map((item, idx) => (
-                  <li
-                    key={`${order.orderId}-${item.productId || item.name}-${idx}`}
-                    className="flex gap-3 py-2.5 first:pt-0 last:pb-0"
-                  >
-                    {item.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.imageUrl}
-                        alt=""
-                        className="h-14 w-14 shrink-0 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-xs text-slate-500 dark:bg-slate-700">
-                        —
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium leading-snug text-slate-900 dark:text-white">
-                        {item.name}
-                      </p>
-                      {item.productCode ? (
-                        <p className="text-xs text-slate-500">{item.productCode}</p>
-                      ) : null}
-                      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-                        {t("Qty")}: {item.quantity}
-                        {item.unitPrice != null
-                          ? ` · ${formatMoneyAmount(item.unitPrice, order.currency)}`
-                          : ""}
-                      </p>
+          {order.items.length > 0 ? (
+            <ul className="divide-y divide-amber-100 dark:divide-amber-900/40">
+              {order.items.map((item, idx) => (
+                <li
+                  key={`${order.orderId}-${item.productId || item.name}-${idx}`}
+                  className="flex gap-3 py-2.5 first:pt-0 last:pb-0"
+                >
+                  {item.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.imageUrl}
+                      alt=""
+                      className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-xs text-slate-500 dark:bg-slate-700">
+                      —
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            {t("Web")} #{order.orderId.slice(0, 8)}…
-          </p>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-snug text-slate-900 dark:text-white">
+                      {item.name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                      {t("Qty")}: {item.quantity}
+                      {item.unitPrice != null
+                        ? ` · ${formatMoneyAmount(item.unitPrice, order.currency)}`
+                        : ""}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">{t("No cart items")}</p>
+          )}
         </div>
       )}
     </BentoCard>
@@ -300,17 +264,10 @@ export default function UnpaidOrdersPage() {
   return (
     <ErrorBoundary>
       <div className="mx-auto max-w-2xl space-y-4 px-1 pb-8">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-              {t("Unpaid orders")}
-            </h1>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              {t(
-                "Website checkouts that started but are not paid yet. Call or WhatsApp their cart."
-              )}
-            </p>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+            {t("Unpaid orders")}
+          </h1>
           <button
             type="button"
             onClick={() => void load(true)}
@@ -320,18 +277,6 @@ export default function UnpaidOrdersPage() {
             {refreshing ? t("Loading") : t("Refresh")}
           </button>
         </div>
-
-        <p className="rounded-xl bg-slate-100/80 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/80 dark:text-slate-400">
-          {t(
-            "These are not added to your Orders list until payment succeeds."
-          )}{" "}
-          <Link
-            href="/orders/"
-            className="font-medium text-primary-600 underline-offset-2 hover:underline dark:text-primary-400"
-          >
-            {t("Orders")}
-          </Link>
-        </p>
 
         {listUpdating && (
           <div
@@ -343,7 +288,7 @@ export default function UnpaidOrdersPage() {
               className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-300 border-t-primary-600 dark:border-primary-700 dark:border-t-primary-300"
               aria-hidden
             />
-            <span>{t("Updating unpaid orders…")}</span>
+            <span>{t("Updating…")}</span>
           </div>
         )}
 
@@ -364,34 +309,31 @@ export default function UnpaidOrdersPage() {
             {t("Loading")}…
           </p>
         ) : orders.length === 0 ? (
-          <BentoCard className="px-4 py-10 text-center">
-            <p className="font-medium text-slate-800 dark:text-slate-200">
-              {t("No unpaid website orders")}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              {t("Showing the last 30 days from your connected shop.")}
+          <BentoCard>
+            <p className="text-center text-slate-500 dark:text-slate-400">
+              {t("No unpaid orders")}
             </p>
           </BentoCard>
         ) : (
-          <ul className="space-y-3">
-            {orders.map((order) => {
+          <div className="space-y-4">
+            {orders.map((order, i) => {
               const key = `${order.integrationId}:${order.orderId}`;
               return (
-                <li key={key}>
-                  <UnpaidOrderCard
-                    order={order}
-                    expanded={expandedId === key}
-                    onToggle={() =>
-                      setExpandedId((cur) => (cur === key ? null : key))
-                    }
-                    onWhatsApp={() =>
-                      deferModalOpen(() => setOfferOrder(order))
-                    }
-                  />
-                </li>
+                <UnpaidOrderCard
+                  key={key}
+                  order={order}
+                  index={i}
+                  expanded={expandedId === key}
+                  onToggle={() =>
+                    setExpandedId((cur) => (cur === key ? null : key))
+                  }
+                  onWhatsApp={() =>
+                    deferModalOpen(() => setOfferOrder(order))
+                  }
+                />
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
