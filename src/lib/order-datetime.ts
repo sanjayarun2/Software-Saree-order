@@ -77,3 +77,42 @@ export function orderListTimestamp(order: {
   }
   return order.created_at?.trim() || order.booking_date?.trim() || null;
 }
+
+/**
+ * Shop-side order instant (paid / placed), not Velo sync time.
+ * Prefer paidAt, then createdAt, then orderDate / bookedAt.
+ */
+export function resolveShopOrderInstant(fields: {
+  paidAt?: string | null;
+  createdAt?: string | null;
+  orderDate?: string | null;
+  bookedAt?: string | null;
+}): string | null {
+  for (const raw of [
+    fields.paidAt,
+    fields.createdAt,
+    fields.orderDate,
+    fields.bookedAt,
+  ]) {
+    const s = String(raw ?? "").trim();
+    if (!s) continue;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const d = new Date(`${s}T00:00:00+05:30`);
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+      continue;
+    }
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
+}
+
+/** Calendar booking_date (YYYY-MM-DD) in IST from a shop instant. */
+export function shopInstantToBookingDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ORDER_TZ_IST,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}

@@ -234,11 +234,13 @@ export async function getOrderById(
 export async function createOrder(userId: string, insert: OrderInsert): Promise<{ tempId: string }> {
   const tempId = `temp_${uid()}`;
   const now = new Date().toISOString();
+  // Website imports pass shop paid/placed time; manual creates use now.
+  const createdAt = insert.created_at?.trim() || now;
   const optimistic: Order = {
     ...insert,
     id: tempId,
     despatch_date: null,
-    created_at: now,
+    created_at: createdAt,
     updated_at: now,
   };
 
@@ -246,7 +248,14 @@ export async function createOrder(userId: string, insert: OrderInsert): Promise<
 
   const entry: OutboxEntry = {
     id: uid(),
-    action: { type: "insert", payload: insert as unknown as Record<string, unknown>, tempId },
+    action: {
+      type: "insert",
+      payload: {
+        ...(insert as unknown as Record<string, unknown>),
+        created_at: createdAt,
+      },
+      tempId,
+    },
     createdAt: Date.now(),
   };
   await pushOutbox(userId, entry);

@@ -49,4 +49,6 @@ export interface OrderInsert {
   external_order_id?: string | null;
   payment_status?: OrderPaymentStatus | null;
   website_line_items?: WebsiteOrderLineItem[] | null;
+  /** Shop placed/paid instant when importing website orders (not sync time). */
+  created_at?: string;
 }

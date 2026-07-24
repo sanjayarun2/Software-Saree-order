@@ -27,6 +27,10 @@ import {
   websiteLineItemsMissingImages,
 } from "./website-order-line-items";
 import { buildWebsiteToAddress } from "./pdf-address-sanitize";
+import {
+  resolveShopOrderInstant,
+  shopInstantToBookingDate,
+} from "./order-datetime";
 
 const EPOCH_SINCE = new Date(0).toISOString();
 const MAX_RECIPIENT_LEN = 600;
@@ -209,11 +213,13 @@ function buildRecipientDetails(order: VeloWebsiteOrderPayload, _externalId: stri
 }
 
 function resolveBookingDate(order: VeloWebsiteOrderPayload): string {
-  const raw = order.paidAt || order.createdAt || order.orderDate || order.bookedAt;
-  if (raw) {
-    const d = new Date(raw);
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  }
+  const instant = resolveShopOrderInstant({
+    paidAt: order.paidAt,
+    createdAt: order.createdAt,
+    orderDate: order.orderDate,
+    bookedAt: order.bookedAt,
+  });
+  if (instant) return shopInstantToBookingDate(instant);
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -293,6 +299,12 @@ function mapWebsiteOrderToInsert(
     order.customer?.mobile?.trim() ||
     order.customer?.phone?.trim() ||
     "";
+  const shopInstant = resolveShopOrderInstant({
+    paidAt: order.paidAt,
+    createdAt: order.createdAt,
+    orderDate: order.orderDate,
+    bookedAt: order.bookedAt,
+  });
 
   return {
     recipient_details: buildRecipientDetails(order, externalOrderId),
@@ -310,6 +322,7 @@ function mapWebsiteOrderToInsert(
     payment_status: normalizeWebsitePaymentStatus(
       order.paymentStatus ?? order.payment_status
     ),
+    ...(shopInstant ? { created_at: shopInstant } : {}),
   };
 }
 
@@ -487,6 +500,22 @@ async function importOrdersForIntegration(
     if (existing) {
       const wasPaid = isPaidOrderPayment(existing.payment_status);
       const patches: Record<string, unknown> = {};
+      const shopInstant = resolveShopOrderInstant({
+        paidAt: raw.paidAt,
+        createdAt: raw.createdAt,
+        orderDate: raw.orderDate,
+        bookedAt: raw.bookedAt,
+      });
+      if (shopInstant) {
+        const bookingDate = shopInstantToBookingDate(shopInstant);
+        if (existing.booking_date !== bookingDate) {
+          patches.booking_date = bookingDate;
+        }
+        // Prefer shop placed/paid time over Velo sync time on website orders.
+        if (existing.created_at !== shopInstant) {
+          patches.created_at = shopInstant;
+        }
+      }
       if (existing.payment_status !== paymentStatus) {
         patches.payment_status = paymentStatus;
       }
