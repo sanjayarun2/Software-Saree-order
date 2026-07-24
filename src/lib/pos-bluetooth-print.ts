@@ -19,7 +19,7 @@ export interface SavedPosPrinter {
 
 const SAVED_PRINTER_KEY = "saree_pos_saved_printer_v1";
 const PRINT_PROFILE_KEY = "saree_pos_print_profile_v1";
-/** exact = PDF image (same look, slower). fast = ESC/POS text (quicker). */
+/** exact = PDF image (same look, safer pacing). fast = same PDF look, faster BT send. */
 const PRINT_MODE_KEY = "saree_pos_print_mode_v1";
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
@@ -28,6 +28,8 @@ const PRINT_TEXT_DISPATCH_GRACE_MS = 700;
 /** Prefer zero inter-chunk delay; fall back only if a device needs slower pacing. */
 const FAST_SEND_DELAY = "0";
 const FAST_CHUNK_SIZE = "1024";
+/** Aggressive BT chunking for Fast mode (same PDF look, faster wire). */
+const ULTRA_FAST_CHUNK_SIZE = "4096";
 const FALLBACK_SEND_DELAY = "40";
 const FALLBACK_CHUNK_SIZE = "512";
 /** Feed before ESC/POS cut (0 = cut immediately after last dots; no extra blank). */
@@ -38,7 +40,7 @@ const POS_PAPER_WIDTH_MM = 74.25;
 const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
 const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
 
-/** Exact PDF look (slower) vs fast ESC/POS text (Android). */
+/** Exact PDF look (safer) vs same PDF look with faster Bluetooth send (Android). */
 export type PosPrintMode = "exact" | "fast";
 
 export function getPosPrintMode(): PosPrintMode {
@@ -416,8 +418,10 @@ export async function warmPosPrinterSession(): Promise<PrintResult> {
 function buildPdfPayload(
   printer: PrinterCandidate,
   pdfBase64: string,
-  profile: Partial<RememberedPrintProfile> & { id: string }
+  profile: Partial<RememberedPrintProfile> & { id: string },
+  opts?: { fastMode?: boolean }
 ): Record<string, unknown> {
+  const fastMode = Boolean(opts?.fastMode);
   return {
     type: "bluetooth",
     id: profile.id,
@@ -425,10 +429,14 @@ function buildPdfPayload(
     pdfBase64,
     action: "printCut",
     cut: true,
+    fastMode,
     mmFeedPaper: POS_CUT_FEED_MM,
-    initializeBeforeSend: true,
+    // Exact: reset once. Fast: skip heavy re-init between jobs when profile is warm.
+    initializeBeforeSend: !fastMode,
     sendDelay: profile.sendDelay ?? FAST_SEND_DELAY,
-    chunkSize: profile.chunkSize ?? FAST_CHUNK_SIZE,
+    chunkSize:
+      profile.chunkSize ??
+      (fastMode ? ULTRA_FAST_CHUNK_SIZE : FAST_CHUNK_SIZE),
     useEscPosAsterik: profile.useEscPosAsterik ?? false,
     printerDpi: 203,
     printerWidthMM: POS_PAPER_WIDTH_MM,
@@ -455,7 +463,10 @@ function buildTextPayload(
   } as Parameters<typeof ESCPOSPlugin.printFormattedText>[0];
 }
 
-function pdfProfileCandidates(printer: PrinterCandidate): RememberedPrintProfile[] {
+function pdfProfileCandidates(
+  printer: PrinterCandidate,
+  fastMode: boolean
+): RememberedPrintProfile[] {
   const ids = Array.from(
     new Set(
       [printer.address, printer.key, printer.name, "first"].filter(
@@ -463,11 +474,43 @@ function pdfProfileCandidates(printer: PrinterCandidate): RememberedPrintProfile
       )
     )
   );
-  const combos: Array<Pick<RememberedPrintProfile, "sendDelay" | "chunkSize" | "useEscPosAsterik">> = [
-    { sendDelay: FAST_SEND_DELAY, chunkSize: FAST_CHUNK_SIZE, useEscPosAsterik: false },
-    { sendDelay: FALLBACK_SEND_DELAY, chunkSize: FALLBACK_CHUNK_SIZE, useEscPosAsterik: false },
-    { sendDelay: FALLBACK_SEND_DELAY, chunkSize: FALLBACK_CHUNK_SIZE, useEscPosAsterik: true },
-  ];
+  const combos: Array<
+    Pick<RememberedPrintProfile, "sendDelay" | "chunkSize" | "useEscPosAsterik">
+  > = fastMode
+    ? [
+        {
+          sendDelay: FAST_SEND_DELAY,
+          chunkSize: ULTRA_FAST_CHUNK_SIZE,
+          useEscPosAsterik: false,
+        },
+        {
+          sendDelay: FAST_SEND_DELAY,
+          chunkSize: FAST_CHUNK_SIZE,
+          useEscPosAsterik: false,
+        },
+        {
+          sendDelay: FALLBACK_SEND_DELAY,
+          chunkSize: FALLBACK_CHUNK_SIZE,
+          useEscPosAsterik: true,
+        },
+      ]
+    : [
+        {
+          sendDelay: FAST_SEND_DELAY,
+          chunkSize: FAST_CHUNK_SIZE,
+          useEscPosAsterik: false,
+        },
+        {
+          sendDelay: FALLBACK_SEND_DELAY,
+          chunkSize: FALLBACK_CHUNK_SIZE,
+          useEscPosAsterik: false,
+        },
+        {
+          sendDelay: FALLBACK_SEND_DELAY,
+          chunkSize: FALLBACK_CHUNK_SIZE,
+          useEscPosAsterik: true,
+        },
+      ];
   const out: RememberedPrintProfile[] = [];
   for (const id of ids) {
     for (const c of combos) {
@@ -482,7 +525,7 @@ function pdfProfileCandidates(printer: PrinterCandidate): RememberedPrintProfile
 }
 
 function textProfileCandidates(printer: PrinterCandidate): RememberedPrintProfile[] {
-  return pdfProfileCandidates(printer);
+  return pdfProfileCandidates(printer, false);
 }
 
 async function dispatchPrint(
@@ -568,23 +611,27 @@ async function printPdfFast(
   plugin: typeof ESCPOSPlugin,
   printer: PrinterCandidate,
   pdfBase64: string,
-  remembered: RememberedPrintProfile | null
+  remembered: RememberedPrintProfile | null,
+  fastMode: boolean
 ): Promise<void> {
   const tried = new Set<string>();
   const queue: RememberedPrintProfile[] = [];
   if (remembered) queue.push(remembered);
-  for (const p of pdfProfileCandidates(printer)) queue.push(p);
+  for (const p of pdfProfileCandidates(printer, fastMode)) queue.push(p);
 
   let lastError: unknown = null;
   for (const profile of queue) {
-    const key = `${profile.id}|${profile.sendDelay}|${profile.chunkSize}|${profile.useEscPosAsterik}`;
+    const key = `${profile.id}|${profile.sendDelay}|${profile.chunkSize}|${profile.useEscPosAsterik}|${fastMode}`;
     if (tried.has(key)) continue;
     tried.add(key);
     try {
-      addPrinterLog("print.pdf", "Trying PDF profile", profile);
-      await dispatchPdfPrint(plugin, buildPdfPayload(printer, pdfBase64, profile));
+      addPrinterLog("print.pdf", "Trying PDF profile", { ...profile, fastMode });
+      await dispatchPdfPrint(
+        plugin,
+        buildPdfPayload(printer, pdfBase64, profile, { fastMode })
+      );
       writeRememberedProfile("pdf", profile);
-      addPrinterLog("print.pdf", "PDF profile succeeded", profile);
+      addPrinterLog("print.pdf", "PDF profile succeeded", { ...profile, fastMode });
       return;
     } catch (e) {
       lastError = e;
@@ -854,10 +901,14 @@ export async function printOrdersViaBluetooth(
   }
 }
 
-export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<PrintResult> {
+export async function printPdfBase64ViaBluetooth(
+  pdfBase64: string,
+  opts?: { fastMode?: boolean }
+): Promise<PrintResult> {
   if (!Capacitor.isNativePlatform()) {
     return { success: false, error: "Bluetooth printing is only available in the Android app." };
   }
+  const fastMode = Boolean(opts?.fastMode);
   try {
     return await enqueuePrint(async () => {
       let session = await ensurePrinterSession();
@@ -874,6 +925,7 @@ export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<Pri
         address: session.printer.address,
         hasProfile: Boolean(session.pdfProfile),
         pdfBase64Length: pdfBase64.length,
+        fastMode,
       });
 
       try {
@@ -881,7 +933,8 @@ export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<Pri
           session.plugin,
           session.printer,
           pdfBase64,
-          session.pdfProfile
+          session.pdfProfile,
+          fastMode
         );
       } catch (firstErr) {
         addPrinterLog(
@@ -891,7 +944,13 @@ export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<Pri
           "error"
         );
         session = await ensurePrinterSession({ forceRescan: true });
-        await printPdfFast(session.plugin, session.printer, pdfBase64, null);
+        await printPdfFast(
+          session.plugin,
+          session.printer,
+          pdfBase64,
+          null,
+          fastMode
+        );
       }
       return { success: true };
     });

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
@@ -20,15 +20,38 @@ import {
   type UnpaidWebsiteOrder,
 } from "@/lib/unpaid-website-orders";
 
+const inputCls =
+  "mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800";
+const labelCls = "text-sm font-medium text-slate-700 dark:text-slate-300";
+
+function orderKey(order: UnpaidWebsiteOrder): string {
+  return `${order.integrationId}:${order.orderId}`;
+}
+
+function matchesUnpaidSearch(order: UnpaidWebsiteOrder, q: string): boolean {
+  if (!q) return true;
+  const hay = [
+    order.customerName,
+    order.customerMobile,
+    order.customerEmail,
+    order.orderId,
+    order.shopLabel,
+    ...order.addressLines,
+    ...order.items.map((i) => i.name),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
 function UnpaidOrderCard({
   order,
-  index,
   expanded,
   onToggle,
   onWhatsApp,
 }: {
   order: UnpaidWebsiteOrder;
-  index: number;
   expanded: boolean;
   onToggle: () => void;
   onWhatsApp: () => void;
@@ -42,56 +65,46 @@ function UnpaidOrderCard({
     unpaidItemsToShareCartLines(order.items).length > 0;
 
   return (
-    <BentoCard className="flex flex-col gap-0 overflow-hidden border-amber-300/80 bg-amber-50/80 p-0 dark:border-amber-700/60 dark:bg-amber-950/45">
-      <div className="flex items-center justify-between gap-3 px-4 py-4">
+    <BentoCard className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <button
           type="button"
           onClick={onToggle}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left"
+          className="min-w-0 flex-1 cursor-pointer text-left"
           aria-expanded={expanded}
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-semibold text-primary-600 dark:bg-primary-900/50 dark:text-primary-300">
-            {index + 1}
-          </span>
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100 lg:text-base">
-              {order.customerName}
-            </p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 dark:text-slate-400">
-              <span className="tabular-nums whitespace-nowrap">
-                {formatOrderDateTimeIst(order.createdAt)}
-              </span>
-              {itemCount > 0 ? (
-                <span>
-                  {t("Qty")}: {itemCount}
-                </span>
-              ) : null}
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                {t("Unpaid")}
-              </span>
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
-                {t("Web")}
-              </span>
-            </div>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-              {formatMoneyAmount(order.amount, order.currency)}
-              <span className="ml-2 font-normal text-slate-500">
-                · {order.shopLabel}
-              </span>
-            </p>
+          <p className="font-semibold text-slate-900 dark:text-slate-100">
+            {order.customerName}
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {formatOrderDateTimeIst(order.createdAt)}
+            {itemCount > 0 ? ` · ${t("Qty")}: ${itemCount}` : ""}
+            {order.shopLabel ? ` · ${order.shopLabel}` : ""}
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+            {formatMoneyAmount(order.amount, order.currency)}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+              {t("Unpaid")}
+            </span>
+            <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+              {t("Web")}
+            </span>
           </div>
         </button>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {tel ? (
             <a
               href={tel}
               onClick={(e) => e.stopPropagation()}
-              className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-emerald-100 text-emerald-700 transition hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-600 dark:text-slate-200"
               title={mobileLabel}
               aria-label={t("Call")}
             >
-              <IconPhone className="h-5 w-5" />
+              <IconPhone className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              {t("Call")}
             </a>
           ) : null}
           <button
@@ -101,17 +114,18 @@ function UnpaidOrderCard({
               e.stopPropagation();
               onWhatsApp();
             }}
-            className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-green-100 text-green-600 transition hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             title={t("WhatsApp")}
             aria-label={t("WhatsApp")}
           >
-            <IconWhatsApp className="h-5 w-5" />
+            <IconWhatsApp className="h-4 w-4 shrink-0" />
+            {t("WhatsApp")}
           </button>
         </div>
       </div>
 
-      {expanded && (
-        <div className="space-y-3 border-t border-amber-200/70 px-4 py-3 dark:border-amber-800/40">
+      {expanded ? (
+        <div className="mt-4 space-y-3 border-t border-slate-200/80 pt-3 dark:border-slate-700/80">
           {order.customerMobile ? (
             <p className="text-sm text-slate-700 dark:text-slate-300">
               <span className="text-slate-500">{t("Mobile")}: </span>
@@ -135,7 +149,7 @@ function UnpaidOrderCard({
           ) : null}
 
           {order.items.length > 0 ? (
-            <ul className="divide-y divide-amber-100 dark:divide-amber-900/40">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {order.items.map((item, idx) => (
                 <li
                   key={`${order.orderId}-${item.productId || item.name}-${idx}`}
@@ -171,7 +185,7 @@ function UnpaidOrderCard({
             <p className="text-sm text-slate-500">{t("No cart items")}</p>
           )}
         </div>
-      )}
+      ) : null}
     </BentoCard>
   );
 }
@@ -180,6 +194,8 @@ export default function UnpaidOrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
+  const searchBlockRef = useRef<HTMLDivElement>(null);
+
   const [orders, setOrders] = useState<UnpaidWebsiteOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -188,6 +204,11 @@ export default function UnpaidOrdersPage() {
   const [warning, setWarning] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offerOrder, setOfferOrder] = useState<UnpaidWebsiteOrder | null>(null);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [shopFilter, setShopFilter] = useState("all");
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const applyResult = useCallback(
     (result: {
@@ -261,68 +282,160 @@ export default function UnpaidOrdersPage() {
     if (user) void load(false);
   }, [user, load]);
 
+  const shopOptions = useMemo(() => {
+    const labels = Array.from(
+      new Set(
+        orders
+          .map((o) => o.shopLabel?.trim())
+          .filter((v): v is string => Boolean(v))
+      )
+    ).sort((a, b) => a.localeCompare(b));
+    return labels;
+  }, [orders]);
+
+  useEffect(() => {
+    if (shopFilter !== "all" && !shopOptions.includes(shopFilter)) {
+      setShopFilter("all");
+    }
+  }, [shopFilter, shopOptions]);
+
+  const filteredOrders = useMemo(() => {
+    const q = appliedSearch.trim().toLowerCase();
+    return orders.filter((order) => {
+      if (shopFilter !== "all" && order.shopLabel !== shopFilter) return false;
+      return matchesUnpaidSearch(order, q);
+    });
+  }, [orders, appliedSearch, shopFilter]);
+
+  const applySearchNow = () => {
+    setAppliedSearch(searchInput.trim());
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
   return (
     <ErrorBoundary>
-      <div className="mx-auto max-w-2xl space-y-4 px-1 pb-8">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 pb-28 lg:px-10 lg:py-6 lg:pb-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 lg:text-2xl">
             {t("Unpaid orders")}
           </h1>
-          <button
-            type="button"
-            onClick={() => void load(true)}
-            disabled={refreshing || loading}
-            className="shrink-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-          >
-            {refreshing ? t("Loading") : t("Refresh")}
-          </button>
         </div>
 
-        {listUpdating && (
+        {(error || warning) && (
           <div
-            className="flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-200"
-            role="status"
-            aria-live="polite"
+            className={`rounded-xl border px-4 py-3 text-sm ${
+              error
+                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+            }`}
           >
-            <span
-              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-300 border-t-primary-600 dark:border-primary-700 dark:border-t-primary-300"
-              aria-hidden
-            />
-            <span>{t("Updating…")}</span>
+            {error || warning}
           </div>
         )}
 
-        {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-            {error}
-          </div>
-        )}
-
-        {warning && !error && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            {warning}
-          </div>
-        )}
+        <div
+          ref={searchBlockRef}
+          className={searchFocused ? "sticky top-0 z-40" : undefined}
+        >
+          <BentoCard
+            className={`p-4 ${
+              searchFocused
+                ? "shadow-md ring-1 ring-primary-200/60 dark:ring-primary-800/40"
+                : ""
+            }`}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className={labelCls}>{t("Search")}</span>
+                <input
+                  className={inputCls}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onFocus={() => {
+                    setSearchFocused(true);
+                    requestAnimationFrame(() => {
+                      searchBlockRef.current?.scrollIntoView({
+                        block: "start",
+                        behavior: "smooth",
+                      });
+                    });
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => setSearchFocused(false), 250);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") applySearchNow();
+                  }}
+                  placeholder={t("Name, mobile, or order id")}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="block">
+                <span className={labelCls}>{t("Shop")}</span>
+                <select
+                  className={inputCls}
+                  value={shopFilter}
+                  onChange={(e) => setShopFilter(e.target.value)}
+                >
+                  <option value="all">{t("All")}</option>
+                  {shopOptions.map((shop) => (
+                    <option key={shop} value={shop}>
+                      {shop}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => applySearchNow()}
+                className="min-h-[44px] rounded-xl bg-primary-500 px-4 text-sm font-semibold text-white"
+              >
+                {t("Search")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void load(true)}
+                disabled={refreshing || loading}
+                className="min-h-[44px] rounded-xl border border-gray-200 px-4 text-sm font-medium disabled:opacity-50 dark:border-slate-600"
+              >
+                {refreshing ? t("Loading") : t("Refresh")}
+              </button>
+              {(listUpdating || refreshing) && orders.length > 0 ? (
+                <span className="text-xs text-slate-500">{t("Updating…")}</span>
+              ) : null}
+            </div>
+          </BentoCard>
+        </div>
 
         {loading && orders.length === 0 ? (
-          <p className="py-10 text-center text-sm text-slate-500">
-            {t("Loading")}…
-          </p>
-        ) : orders.length === 0 ? (
-          <BentoCard>
-            <p className="text-center text-slate-500 dark:text-slate-400">
-              {t("No unpaid orders")}
-            </p>
+          <div className="flex justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <BentoCard className="p-6 text-center text-sm text-slate-500">
+            {orders.length === 0
+              ? t("No unpaid orders")
+              : t("No unpaid orders match your search.")}
           </BentoCard>
         ) : (
-          <div className="space-y-4">
-            {orders.map((order, i) => {
-              const key = `${order.integrationId}:${order.orderId}`;
+          <div className="space-y-3">
+            {filteredOrders.map((order) => {
+              const key = orderKey(order);
               return (
                 <UnpaidOrderCard
                   key={key}
                   order={order}
-                  index={i}
                   expanded={expandedId === key}
                   onToggle={() =>
                     setExpandedId((cur) => (cur === key ? null : key))

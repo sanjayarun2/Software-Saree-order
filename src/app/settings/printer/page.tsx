@@ -54,7 +54,7 @@ export default function PrinterSetupPage() {
     setPrintModeState(mode);
     setInfo(
       mode === "fast"
-        ? t("Print mode: Fast text (Android). Quicker, layout may differ slightly.")
+        ? t("Print mode: Fast PDF send (Android). Same label look, quicker Bluetooth.")
         : t("Print mode: Exact PDF look. Same label, slower on Bluetooth.")
     );
   };
@@ -265,17 +265,17 @@ export default function PrinterSetupPage() {
               }`}
             >
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {t("Fast text (POS)")}
+                {t("Fast PDF (same look)")}
               </p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {t("Quick ESC/POS text. Layout may differ slightly.")}
+                {t("Same label PDF. Quicker Bluetooth send.")}
               </p>
             </button>
           </div>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             {t("Current:")}{" "}
             <span className="font-medium text-slate-700 dark:text-slate-200">
-              {printMode === "fast" ? t("Fast text (POS)") : t("Exact look (PDF)")}
+              {printMode === "fast" ? t("Fast PDF (same look)") : t("Exact look (PDF)")}
             </span>
           </p>
         </div>

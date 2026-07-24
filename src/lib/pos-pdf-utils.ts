@@ -11,7 +11,6 @@ import {
 import { sanitizePdfBrandText } from "./pdf-address-sanitize";
 import {
   getPosPrintMode,
-  printOrdersViaBluetooth,
   printPdfBase64ViaBluetooth,
 } from "./pos-bluetooth-print";
 import { addPrinterLog } from "./printer-debug-log";
@@ -530,6 +529,7 @@ export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcom
   }
   try {
     const printMode = getPosPrintMode();
+    const fastMode = printMode === "fast";
 
     // Web / desktop: always exact PDF via system print dialog.
     if (!Capacitor.isNativePlatform()) {
@@ -543,18 +543,11 @@ export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcom
       return { channel: mode, mode: "exact" };
     }
 
-    // Android fast mode: ESC/POS text (TO → brand → FROM) + cut.
-    if (printMode === "fast") {
-      addPrinterLog("orders.print", "Using fast text print mode");
-      const result = await printOrdersViaBluetooth(orders, true);
-      if (!result.success) {
-        throw new Error(result.error ?? "POS printer not connected");
-      }
-      return { channel: "bluetooth-fast", mode: "fast" };
-    }
-
-    // Android exact mode: PDF raster (same look as label PDF).
-    addPrinterLog("orders.print", "Using exact PDF print mode");
+    // Android: same PDF label look. Fast = accelerated BT send; Exact = safer pacing.
+    addPrinterLog(
+      "orders.print",
+      fastMode ? "Using fast PDF print mode (same look)" : "Using exact PDF print mode"
+    );
     const userId = orders[0].user_id;
     const renderOptions = await fetchPosRenderOptions(userId);
     const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
@@ -574,13 +567,16 @@ export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcom
       r.readAsDataURL(blob);
     });
 
-    const directResult = await printPdfBase64ViaBluetooth(base64);
+    const directResult = await printPdfBase64ViaBluetooth(base64, { fastMode });
     if (!directResult.success) {
       addPrinterLog("orders.print", "PDF direct print failed", directResult.error, "error");
       throw new Error(directResult.error ?? "POS printer not connected");
     }
-    addPrinterLog("orders.print", "PDF direct print sent");
-    return { channel: "bluetooth", mode: "exact" };
+    addPrinterLog("orders.print", "PDF direct print sent", { fastMode });
+    return {
+      channel: fastMode ? "bluetooth-fast" : "bluetooth",
+      mode: fastMode ? "fast" : "exact",
+    };
   } catch (e) {
     console.error("[POS-PDF] printOrdersPosPdf failed:", e);
     throw e;

@@ -1,5 +1,5 @@
 diff --git a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
-index 4f0c81d..9307a8a 100644
+index 4f0c81d..d65d4f1 100644
 --- a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
 +++ b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
 @@ -4,6 +4,10 @@ import android.Manifest;
@@ -29,7 +29,7 @@ index 4f0c81d..9307a8a 100644
  
  @CapacitorPlugin(
          name = "ESCPOSPlugin",
-@@ -256,6 +263,106 @@ public class ESCPOSPlugin extends Plugin {
+@@ -256,6 +263,144 @@ public class ESCPOSPlugin extends Plugin {
          }
      }
  
@@ -70,9 +70,22 @@ index 4f0c81d..9307a8a 100644
 +                }
 +            }
 +
++            boolean fastMode = call.getBoolean("fastMode", false);
++            if (fastMode) {
++                // Aggressive BT pacing for Fast mode (same PDF look).
++                data.put("sendDelay", "0");
++                if (data.optInt("chunkSize", 0) <= 0) {
++                    data.put("chunkSize", "4096");
++                }
++            }
++
 +            EscPosPrinter printer = this.getPrinter(data);
 +            printer.useEscAsteriskCommand(data.getBoolean("useEscPosAsterik"));
-+            printer.setChunkSize(data.optInt("chunkSize",0));
++            int chunkSize = data.optInt("chunkSize", 0);
++            if (fastMode && chunkSize <= 0) {
++                chunkSize = 4096;
++            }
++            printer.setChunkSize(chunkSize);
 +
 +            String cleanBase64 = pdfBase64.contains(",") ? pdfBase64.substring(pdfBase64.indexOf(",") + 1) : pdfBase64;
 +            byte[] pdfBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT);
@@ -93,6 +106,10 @@ index 4f0c81d..9307a8a 100644
 +            // Slice the page into horizontal bands <= 255px so each band keeps full width scale.
 +            final int maxStripHeightPx = 255;
 +
++            // Phase 1: rasterize + hex-encode every strip first (same look).
++            // Phase 2: send strips (Fast batches one page per write for speed).
++            java.util.ArrayList<String> stripLines = new java.util.ArrayList<>();
++            java.util.ArrayList<Boolean> pageEnds = new java.util.ArrayList<>();
 +            for (int i = 0; i < renderer.getPageCount(); i++) {
 +                PdfRenderer.Page page = renderer.openPage(i);
 +                float ratio = (float) targetWidthPx / (float) page.getWidth();
@@ -109,15 +126,8 @@ index 4f0c81d..9307a8a 100644
 +                    Bitmap strip = Bitmap.createBitmap(bitmap, 0, y, bmpW, stripH);
 +                    // false = monochrome dither; sharper on thermal than gradient
 +                    String hex = PrinterTextParserImg.bitmapToHexadecimalString(printer, strip, false);
-+                    boolean lastStripOfPage = (y + stripH >= bmpH);
-+                    int feedAfter = lastStripOfPage ? dotsFeedPaper : 0;
-+                    String imgLine = "<img>" + hex + "</img>";
-+                    // Cut after each label page (feed + ESC/POS cut). Mid-page strips only print.
-+                    if (lastStripOfPage && cutAfterPage) {
-+                        printer.printFormattedTextAndCut(imgLine, feedAfter);
-+                    } else {
-+                        printer.printFormattedText(imgLine, feedAfter);
-+                    }
++                    stripLines.add("<img>" + hex + "</img>");
++                    pageEnds.add(Boolean.valueOf(y + stripH >= bmpH));
 +                    strip.recycle();
 +                }
 +                bitmap.recycle();
@@ -127,6 +137,34 @@ index 4f0c81d..9307a8a 100644
 +            pfd.close();
 +            //noinspection ResultOfMethodCallIgnored
 +            tempPdf.delete();
++
++            if (fastMode) {
++                StringBuilder batch = new StringBuilder();
++                for (int s = 0; s < stripLines.size(); s++) {
++                    if (batch.length() > 0) batch.append("\n");
++                    batch.append(stripLines.get(s));
++                    boolean lastStripOfPage = pageEnds.get(s);
++                    if (lastStripOfPage) {
++                        if (cutAfterPage) {
++                            printer.printFormattedTextAndCut(batch.toString(), dotsFeedPaper);
++                        } else {
++                            printer.printFormattedText(batch.toString(), dotsFeedPaper);
++                        }
++                        batch.setLength(0);
++                    }
++                }
++            } else {
++                for (int s = 0; s < stripLines.size(); s++) {
++                    boolean lastStripOfPage = pageEnds.get(s);
++                    int feedAfter = lastStripOfPage ? dotsFeedPaper : 0;
++                    String imgLine = stripLines.get(s);
++                    if (lastStripOfPage && cutAfterPage) {
++                        printer.printFormattedTextAndCut(imgLine, feedAfter);
++                    } else {
++                        printer.printFormattedText(imgLine, feedAfter);
++                    }
++                }
++            }
 +            call.resolve();
 +        } catch (Exception ex) {
 +            call.reject(ex.getMessage(), "COD07");
@@ -136,3 +174,27 @@ index 4f0c81d..9307a8a 100644
      @PluginMethod
      public void logCat(PluginCall call)  {
          try
+@@ -399,6 +544,10 @@ public class ESCPOSPlugin extends Plugin {
+             DeviceConnection connection = this.connections.get(hashKey);
+             if (connection != null) {
+                 if (connection.isConnected()) {
++                    try {
++                        // Keep pacing in sync when switching Exact ↔ Fast on a warm session.
++                        connection.getClass().getMethod("setSendDelay", int.class).invoke(connection, sendDelay);
++                    } catch (Exception ignored) {}
+                     return connection;
+                 } else {
+                     this.connections.remove(hashKey);
+@@ -411,7 +560,11 @@ public class ESCPOSPlugin extends Plugin {
+                 throw new JSONException("Missing permission for bluetooth");
+             }
+             if (id.equals("first")) {
+-                return BluetoothPrintersConnections.selectFirstPaired();
++                BluetoothConnection first = BluetoothPrintersConnections.selectFirstPaired();
++                if (first != null) {
++                    first.setSendDelay(sendDelay);
++                }
++                return first;
+             }
+             BluetoothConnections printerConnections = new BluetoothConnections();
+             for (BluetoothConnection bluetoothConnection : printerConnections.getList()) {

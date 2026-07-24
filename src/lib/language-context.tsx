@@ -17,6 +17,11 @@ const TA: Record<string, string> = {
   "Orders": "ஆர்டர்கள்",
   "Unpaid orders": "பேட் இல்லாத ஆர்டர்கள்",
   "No unpaid orders": "பேட் இல்லாத ஆர்டர்கள் இல்லை",
+  "No unpaid orders match your search.":
+    "தேடலுக்கு ஏற்ற பேட் இல்லாத ஆர்டர்கள் இல்லை.",
+  "Name, mobile, or order id": "பெயர், மொபைல் அல்லது ஆர்டர் ஐடி",
+  "Search": "தேடல்",
+  "Shop": "கடை",
   "Failed to load unpaid orders": "பேட் இல்லாத ஆர்டர்களை ஏற்ற முடியவில்லை",
   "No mobile": "மொபைல் இல்லை",
   "Call": "கால்",
@@ -188,12 +193,12 @@ const TA: Record<string, string> = {
   "Exact look (PDF)": "சரியான தோற்றம் (PDF)",
   "Same as label PDF. Slower over Bluetooth.":
     "லேபிள் PDF போலவே. Bluetooth-ல் மெதுவாக இருக்கும்.",
-  "Fast text (POS)": "வேக உரை (POS)",
-  "Quick ESC/POS text. Layout may differ slightly.":
-    "விரைவான ESC/POS உரை. தோற்றம் சிறிது மாறலாம்.",
+  "Fast PDF (same look)": "வேக PDF (அதே தோற்றம்)",
+  "Same label PDF. Quicker Bluetooth send.":
+    "அதே லேபிள் PDF. Bluetooth அனுப்புதல் விரைவு.",
   "Current:": "தற்போது:",
-  "Print mode: Fast text (Android). Quicker, layout may differ slightly.":
-    "அச்சு முறை: வேக உரை (Android). விரைவு; தோற்றம் சிறிது மாறலாம்.",
+  "Print mode: Fast PDF send (Android). Same label look, quicker Bluetooth.":
+    "அச்சு முறை: வேக PDF அனுப்புதல் (Android). அதே லேபிள் தோற்றம்; Bluetooth விரைவு.",
   "Print mode: Exact PDF look. Same label, slower on Bluetooth.":
     "அச்சு முறை: Exact PDF. அதே லேபிள்; Bluetooth-ல் மெதுவு.",
   "API Settings": "API செட்டிங்ஸ்",
