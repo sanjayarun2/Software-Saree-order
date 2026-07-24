@@ -1003,7 +1003,14 @@ export default function OrdersPage() {
             } else {
               setPrinting(true);
               try {
-                await printOrdersPosPdf(ordersForPdfAndPrint);
+                const outcome = await printOrdersPosPdf(ordersForPdfAndPrint);
+                if (outcome.channel === "download") {
+                  alert(
+                    t(
+                      "Popup blocked. POS PDF downloaded — open it and press Ctrl+P / Cmd+P to print."
+                    )
+                  );
+                }
               } catch (e) {
                 const errorMsg =
                   e instanceof PdfAddressTooLongError

@@ -375,28 +375,109 @@ async function renderOrdersToPosPdfDoc(
   return doc;
 }
 
-function printPdfBlobInBrowser(blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.src = url;
-  iframe.onload = () => {
+function revokeLater(url: string, ms = 120_000): void {
+  window.setTimeout(() => {
     try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } finally {
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        iframe.remove();
-      }, 1500);
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
     }
-  };
-  document.body.appendChild(iframe);
+  }, ms);
+}
+
+/**
+ * Reliable browser POS print:
+ * 1) Open PDF tab (jsPDF autoPrint OpenAction triggers dialog when supported)
+ * 2) If popup blocked → temporary iframe print
+ * 3) Last resort → download PDF so user can print manually
+ */
+async function printPdfBlobInBrowser(
+  blob: Blob,
+  filename: string
+): Promise<"browser" | "download"> {
+  const url = URL.createObjectURL(blob);
+
+  // 1) Prefer a real tab — Chrome/Edge PDF viewer honors autoPrint OpenAction.
+  const printTab = window.open(url, "_blank");
+  if (printTab) {
+    try {
+      printTab.focus();
+    } catch {
+      /* ignore */
+    }
+    revokeLater(url);
+    addPrinterLog("orders.print", "Opened POS PDF print tab");
+    return "browser";
+  }
+
+  // 2) Popup blocked — iframe print (must not be 0×0; browsers block that).
+  const iframeOk = await new Promise<boolean>((resolve) => {
+    const iframe = document.createElement("iframe");
+    iframe.title = "POS label print";
+    iframe.setAttribute("aria-hidden", "true");
+    Object.assign(iframe.style, {
+      position: "fixed",
+      right: "0",
+      bottom: "0",
+      width: "8px",
+      height: "8px",
+      opacity: "0.01",
+      border: "0",
+      pointerEvents: "none",
+      zIndex: "-1",
+    });
+    iframe.src = url;
+
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(ok);
+      window.setTimeout(() => {
+        try {
+          iframe.remove();
+        } catch {
+          /* ignore */
+        }
+      }, 60_000);
+    };
+
+    const timeout = window.setTimeout(() => finish(false), 6_000);
+    iframe.onload = () => {
+      window.setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          finish(true);
+        } catch {
+          finish(false);
+        }
+      }, 400);
+    };
+    iframe.onerror = () => finish(false);
+    document.body.appendChild(iframe);
+  });
+
+  if (iframeOk) {
+    revokeLater(url);
+    addPrinterLog("orders.print", "POS PDF printed via iframe fallback");
+    return "browser";
+  }
+
+  // 3) Download so print is still possible.
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    /* ignore */
+  }
+  await savePdfBlob(blob, filename);
+  addPrinterLog(
+    "orders.print",
+    "Popup blocked; downloaded POS PDF for manual print",
+    filename
+  );
+  return "download";
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -431,23 +512,32 @@ export async function downloadOrdersPosPdf(orders: Order[]) {
   }
 }
 
-export async function printOrdersPosPdf(orders: Order[]) {
-  if (typeof window === "undefined") return;
-  if (orders.length === 0) return;
+export type PosPrintOutcome = {
+  channel: "bluetooth" | "browser" | "download";
+};
+
+export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcome> {
+  if (typeof window === "undefined") {
+    return { channel: "download" };
+  }
+  if (orders.length === 0) {
+    return { channel: "download" };
+  }
   try {
     const userId = orders[0].user_id;
     const renderOptions = await fetchPosRenderOptions(userId);
     const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
-    const blob = doc.output("blob");
+    const filename = buildTimestampedFilename("SareeOrders_POS");
 
-    // Web / desktop: system print dialog (USB, network, or OS-installed POS driver).
-    // Android app: direct Bluetooth ESC/POS (with cut).
+    // Web / desktop: system print dialog via PDF (USB / network / OS POS driver).
     if (!Capacitor.isNativePlatform()) {
-      addPrinterLog("orders.print", "Web POS print via browser dialog");
-      printPdfBlobInBrowser(blob);
-      return;
+      doc.autoPrint({ variant: "non-conform" });
+      const blob = doc.output("blob");
+      const mode = await printPdfBlobInBrowser(blob, filename);
+      return { channel: mode };
     }
 
+    const blob = doc.output("blob");
     const base64 = await new Promise<string>((resolve, reject) => {
       const r = new FileReader();
       r.onloadend = () => {
@@ -469,6 +559,7 @@ export async function printOrdersPosPdf(orders: Order[]) {
       throw new Error(directResult.error ?? "POS printer not connected");
     }
     addPrinterLog("orders.print", "PDF direct print sent");
+    return { channel: "bluetooth" };
   } catch (e) {
     console.error("[POS-PDF] printOrdersPosPdf failed:", e);
     throw e;
