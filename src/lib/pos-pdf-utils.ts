@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { Capacitor } from "@capacitor/core";
 import type { Order } from "./db-types";
 import {
   savePdfBlob,
@@ -438,6 +439,15 @@ export async function printOrdersPosPdf(orders: Order[]) {
     const renderOptions = await fetchPosRenderOptions(userId);
     const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
     const blob = doc.output("blob");
+
+    // Web / desktop: system print dialog (USB, network, or OS-installed POS driver).
+    // Android app: direct Bluetooth ESC/POS (with cut).
+    if (!Capacitor.isNativePlatform()) {
+      addPrinterLog("orders.print", "Web POS print via browser dialog");
+      printPdfBlobInBrowser(blob);
+      return;
+    }
+
     const base64 = await new Promise<string>((resolve, reject) => {
       const r = new FileReader();
       r.onloadend = () => {
