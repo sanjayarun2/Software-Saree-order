@@ -7,7 +7,11 @@ import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { IconWhatsApp } from "@/components/ui/OrderIcons";
+import { UnpaidOfferModal } from "@/components/unpaid/UnpaidOfferModal";
 import { formatOrderDateTimeIst } from "@/lib/order-datetime";
+import { deferModalOpen } from "@/lib/use-backdrop-dismiss-guard";
+import { unpaidItemsToShareCartLines } from "@/lib/unpaid-offer";
 import {
   fetchUnpaidWebsiteOrders,
   formatMobileDisplay,
@@ -21,15 +25,20 @@ function UnpaidOrderCard({
   order,
   expanded,
   onToggle,
+  onWhatsApp,
 }: {
   order: UnpaidWebsiteOrder;
   expanded: boolean;
   onToggle: () => void;
+  onWhatsApp: () => void;
 }) {
   const { t } = useLanguage();
   const tel = mobileToTelHref(order.customerMobile);
   const mobileLabel = formatMobileDisplay(order.customerMobile) || t("No mobile");
   const itemCount = order.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+  const canWhatsApp =
+    Boolean(order.customerMobile?.trim()) &&
+    unpaidItemsToShareCartLines(order.items).length > 0;
 
   return (
     <BentoCard className="overflow-hidden border-amber-200/80 bg-amber-50/50 p-0 dark:border-amber-800/50 dark:bg-amber-950/30">
@@ -68,20 +77,39 @@ function UnpaidOrderCard({
         </span>
       </button>
 
-      {tel ? (
-        <a
-          href={tel}
-          onClick={(e) => e.stopPropagation()}
-          className="mx-4 mb-3 flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 active:bg-emerald-800"
+      <div className="mx-4 mb-3 flex flex-col gap-2 sm:flex-row">
+        {tel ? (
+          <a
+            href={tel}
+            onClick={(e) => e.stopPropagation()}
+            className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 active:bg-emerald-800"
+          >
+            <span aria-hidden>📞</span>
+            {t("Call")}
+          </a>
+        ) : (
+          <p className="flex min-h-[44px] flex-1 items-center text-sm text-slate-500 dark:text-slate-400">
+            {t("No mobile number on this checkout")}
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={!canWhatsApp}
+          onClick={(e) => {
+            e.stopPropagation();
+            onWhatsApp();
+          }}
+          className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1ebe57] disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            canWhatsApp
+              ? t("WhatsApp cart offer")
+              : t("No product IDs on this checkout — cannot build a cart link.")
+          }
         >
-          <span aria-hidden>📞</span>
-          {t("Call")} {mobileLabel}
-        </a>
-      ) : (
-        <p className="mx-4 mb-3 text-sm text-slate-500 dark:text-slate-400">
-          {t("No mobile number on this checkout")}
-        </p>
-      )}
+          <IconWhatsApp className="h-5 w-5" />
+          {t("WhatsApp")}
+        </button>
+      </div>
 
       {expanded && (
         <div className="space-y-3 border-t border-amber-200/70 px-4 py-3 dark:border-amber-800/40">
@@ -194,6 +222,7 @@ export default function UnpaidOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [offerOrder, setOfferOrder] = useState<UnpaidWebsiteOrder | null>(null);
 
   const load = useCallback(
     async (force: boolean) => {
@@ -246,7 +275,7 @@ export default function UnpaidOrdersPage() {
             </h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
               {t(
-                "Website checkouts that started but are not paid yet. Tap Call to phone the customer."
+                "Website checkouts that started but are not paid yet. Call or WhatsApp their cart."
               )}
             </p>
           </div>
@@ -309,6 +338,9 @@ export default function UnpaidOrdersPage() {
                     onToggle={() =>
                       setExpandedId((cur) => (cur === key ? null : key))
                     }
+                    onWhatsApp={() =>
+                      deferModalOpen(() => setOfferOrder(order))
+                    }
                   />
                 </li>
               );
@@ -316,6 +348,14 @@ export default function UnpaidOrdersPage() {
           </ul>
         )}
       </div>
+
+      {offerOrder ? (
+        <UnpaidOfferModal
+          order={offerOrder}
+          open
+          onClose={() => setOfferOrder(null)}
+        />
+      ) : null}
     </ErrorBoundary>
   );
 }
