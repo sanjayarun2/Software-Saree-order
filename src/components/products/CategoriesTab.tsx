@@ -1,23 +1,16 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { BentoCard } from "@/components/ui/BentoCard";
-import {
-  startUploadProgressTicker,
-  UploadProgressOverlay,
-} from "@/components/products/UploadProgressOverlay";
+import { CategoryFormModal } from "@/components/products/CategoryFormModal";
+import { UploadProgressOverlay } from "@/components/products/UploadProgressOverlay";
 import { useLanguage } from "@/lib/language-context";
-import { compressImageFile, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
+import { deferModalOpen } from "@/lib/use-backdrop-dismiss-guard";
 import {
   deleteVeloCollection,
-  upsertVeloCollection,
   VeloProductsApiError,
 } from "@/lib/velo-products-api";
 import type { VeloCollection } from "@/lib/velo-products-types";
-
-const inputCls =
-  "mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800";
-const labelCls = "text-sm font-medium text-slate-700 dark:text-slate-300";
 
 type CategoriesTabProps = {
   userId: string;
@@ -37,122 +30,31 @@ export function CategoriesTab({
   setInfo,
 }: CategoriesTabProps) {
   const { t } = useLanguage();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [featuredImageMediaId, setFeaturedImageMediaId] = useState("");
-  const [imageBase64, setImageBase64] = useState("");
-  const [imageFileName, setImageFileName] = useState("");
-  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
-  const [uploadLabel, setUploadLabel] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<VeloCollection | null>(
+    null
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletePercent, setDeletePercent] = useState(0);
   const [deleteLabel, setDeleteLabel] = useState("");
 
-  const resetForm = () => {
-    setEditingId(null);
-    setName("");
-    setDescription("");
-    setFeaturedImageMediaId("");
-    setImageBase64("");
-    setImageFileName("");
-    setExistingImageUrl(null);
-    setFieldErrors({});
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
-  const startEdit = (item: VeloCollection) => {
-    setEditingId(item.id);
-    setName(item.label);
-    setDescription(item.description || "");
-    setFeaturedImageMediaId(item.featuredImageId || "");
-    setImageBase64("");
-    setImageFileName("");
-    setExistingImageUrl(item.imageUrl || null);
-    setFieldErrors({});
+  const openCreate = () => {
     setError(null);
     setInfo(null);
-    if (fileRef.current) fileRef.current.value = "";
+    setEditingCategory(null);
+    deferModalOpen(() => setFormOpen(true));
   };
 
-  const onPickImage = async (files: FileList | null) => {
-    if (!files?.[0]) return;
-    setError(null);
-    setUploadBusy(true);
-    setUploadLabel(t("Preparing image…"));
-    setUploadProgress(8);
-    const stopTicker = startUploadProgressTicker(setUploadProgress, 8, 38, 2500);
-    try {
-      const compressed = await compressImageFile(files[0], SINGLE_UPLOAD_PROFILE);
-      stopTicker();
-      setUploadProgress(100);
-      setImageBase64(compressed.base64);
-      setImageFileName(compressed.fileName);
-      setFeaturedImageMediaId("");
-      setExistingImageUrl(null);
-      await new Promise((r) => setTimeout(r, 350));
-    } catch (e) {
-      stopTicker();
-      setError((e as Error).message);
-    } finally {
-      setUploadBusy(false);
-      setUploadProgress(0);
-      setUploadLabel("");
-    }
-  };
-
-  const validate = () => {
-    const next: Record<string, string> = {};
-    if (!name.trim()) next.name = t("Category name is required.");
-    if (!description.trim()) next.description = t("Description is required.");
-    setFieldErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const openEdit = (item: VeloCollection) => {
     setError(null);
     setInfo(null);
-    if (!validate()) return;
+    setEditingCategory(item);
+    deferModalOpen(() => setFormOpen(true));
+  };
 
-    setSubmitting(true);
-    setUploadBusy(true);
-    setUploadLabel(editingId ? t("Updating category…") : t("Creating category…"));
-    setUploadProgress(20);
-    const stopTicker = startUploadProgressTicker(setUploadProgress, 20, 85, 8000);
-    try {
-      await upsertVeloCollection(userId, {
-        id: editingId || undefined,
-        name,
-        description,
-        featuredImageMediaId: featuredImageMediaId || undefined,
-        imageBase64: imageBase64 || undefined,
-        imageFileName: imageFileName || undefined,
-      });
-      stopTicker();
-      setUploadProgress(100);
-      await onRefreshCollections();
-      setInfo(editingId ? t("Category updated.") : t("Category created."));
-      resetForm();
-      await new Promise((r) => setTimeout(r, 250));
-    } catch (err) {
-      stopTicker();
-      const message =
-        err instanceof VeloProductsApiError
-          ? err.message
-          : (err as Error).message || t("Category save failed.");
-      setError(message);
-    } finally {
-      setSubmitting(false);
-      setUploadBusy(false);
-      setUploadProgress(0);
-      setUploadLabel("");
-    }
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditingCategory(null);
   };
 
   const onDelete = async (item: VeloCollection) => {
@@ -178,7 +80,7 @@ export function CategoriesTab({
         );
       });
       await onRefreshCollections();
-      if (editingId === item.id) resetForm();
+      if (editingCategory?.id === item.id) closeForm();
       const archivedNote =
         result.archivedCount > 0
           ? ` ${result.archivedCount} ${t("with order history were archived.")}`
@@ -197,113 +99,13 @@ export function CategoriesTab({
     }
   };
 
-  const previewSrc = imageBase64
-    ? imageBase64.startsWith("data:")
-      ? imageBase64
-      : `data:image/jpeg;base64,${imageBase64}`
-    : existingImageUrl;
-
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-4">
       <UploadProgressOverlay
-        open={uploadBusy || Boolean(deletingId)}
-        label={deletingId ? deleteLabel || t("Deleting category…") : uploadLabel}
-        progress={deletingId ? deletePercent : uploadProgress}
+        open={Boolean(deletingId)}
+        label={deleteLabel || t("Deleting category…")}
+        progress={deletePercent}
       />
-
-      <BentoCard className="space-y-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {editingId ? t("Edit category") : t("Create category")}
-          </h2>
-          {editingId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="text-sm font-medium text-primary-600 dark:text-primary-400"
-            >
-              {t("Cancel edit")}
-            </button>
-          )}
-        </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t("Category image is optional. If empty, a product photo from this category is used after you upload products.")}
-        </p>
-
-        <form onSubmit={(e) => void onSubmit(e)} className="grid gap-4 sm:grid-cols-2">
-          <label className="block sm:col-span-2">
-            <span className={labelCls}>{t("Category name")} *</span>
-            <input
-              className={inputCls}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={submitting}
-              autoComplete="off"
-            />
-            {fieldErrors.name && (
-              <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>
-            )}
-          </label>
-
-          <label className="block sm:col-span-2">
-            <span className={labelCls}>{t("Description")} *</span>
-            <textarea
-              className={`${inputCls} min-h-[96px]`}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={submitting}
-            />
-            {fieldErrors.description && (
-              <p className="mt-1 text-xs text-red-600">{fieldErrors.description}</p>
-            )}
-          </label>
-
-          <div className="sm:col-span-2">
-            <span className={labelCls}>{t("Category image")}</span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => void onPickImage(e.target.files)}
-            />
-            <div className="mt-1 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                disabled={submitting || uploadBusy}
-                onClick={() => fileRef.current?.click()}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-              >
-                {previewSrc ? t("Change image") : t("Choose image")}
-              </button>
-              {imageFileName && (
-                <span className="text-xs text-slate-500">{imageFileName}</span>
-              )}
-            </div>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {t("Optional — leave empty to use a product photo from this category later.")}
-            </p>
-            {previewSrc && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={previewSrc}
-                alt=""
-                className="mt-3 h-36 w-36 rounded-xl object-cover"
-              />
-            )}
-          </div>
-
-          <div className="sm:col-span-2">
-            <button
-              type="submit"
-              disabled={submitting || uploadBusy}
-              className="rounded-xl bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {editingId ? t("Save category") : t("Create category")}
-            </button>
-          </div>
-        </form>
-      </BentoCard>
 
       <BentoCard className="space-y-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -321,9 +123,22 @@ export function CategoriesTab({
         </div>
 
         {loadingCollections && collections.length === 0 ? (
-          <p className="text-sm text-slate-500">{t("Loading…")}</p>
+          <div className="flex justify-center py-10">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+          </div>
         ) : collections.length === 0 ? (
-          <p className="text-sm text-slate-500">{t("No categories yet.")}</p>
+          <div className="space-y-3 py-6 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t("No categories yet.")}
+            </p>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="min-h-[44px] rounded-xl bg-primary-500 px-4 text-sm font-semibold text-white"
+            >
+              {t("New category")}
+            </button>
+          </div>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-slate-700">
             {collections.map((item) => (
@@ -356,17 +171,17 @@ export function CategoriesTab({
                 <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
-                    onClick={() => startEdit(item)}
-                    disabled={Boolean(deletingId) || submitting}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                    onClick={() => openEdit(item)}
+                    disabled={Boolean(deletingId)}
+                    className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
                   >
                     {t("Edit")}
                   </button>
                   <button
                     type="button"
                     onClick={() => void onDelete(item)}
-                    disabled={Boolean(deletingId) || submitting}
-                    className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50 dark:border-red-900 dark:text-red-300"
+                    disabled={Boolean(deletingId)}
+                    className="min-h-[44px] rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50 dark:border-red-900 dark:text-red-300"
                   >
                     {deletingId === item.id ? t("Deleting…") : t("Delete")}
                   </button>
@@ -376,6 +191,37 @@ export function CategoriesTab({
           </ul>
         )}
       </BentoCard>
+
+      {/* FAB: list-first create pattern; clear of mobile bottom nav */}
+      {!formOpen && collections.length > 0 ? (
+        <div className="pointer-events-none fixed bottom-24 right-4 z-50 md:bottom-8 md:right-8">
+          <button
+            type="button"
+            onClick={openCreate}
+            disabled={Boolean(deletingId)}
+            className="pointer-events-auto inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-primary-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-primary-600 active:bg-primary-600 disabled:opacity-50"
+            aria-label={t("New category")}
+          >
+            <span className="text-xl font-bold leading-none" aria-hidden>
+              +
+            </span>
+            {t("New category")}
+          </button>
+        </div>
+      ) : null}
+
+      <CategoryFormModal
+        open={formOpen}
+        userId={userId}
+        category={editingCategory}
+        onClose={closeForm}
+        onSaved={async () => {
+          await onRefreshCollections();
+          setInfo(
+            editingCategory ? t("Category updated.") : t("Category created.")
+          );
+        }}
+      />
     </div>
   );
 }

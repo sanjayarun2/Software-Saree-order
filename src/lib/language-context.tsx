@@ -147,6 +147,8 @@ const TA: Record<string, string> = {
   "Move to Pending": "நிலுவைக்கு மாற்று",
   "Print": "பிரிண்ட்",
   "Printing…": "பிரிண்ட் ஆகிறது…",
+  "Sending to printer. Please wait…":
+    "பிரிண்டருக்கு அனுப்பப்படுகிறது. தயவுசெய்து காத்திருக்கவும்…",
   "Popup blocked. POS PDF downloaded — open it and press Ctrl+P / Cmd+P to print.":
     "பாப்அப் தடுக்கப்பட்டது. POS PDF பதிவிறக்கம் செய்யப்பட்டது — திறந்து Ctrl+P / Cmd+P அழுத்தி அச்சிடவும்.",
   "If download didn't start, tap here and long‑press to save.": "டவுன்லோட் துவங்கவில்லை என்றால், இங்கே தட்டி நீண்ட நேரம் அழுத்தி சேமிக்கவும்.",
@@ -380,6 +382,7 @@ const TA: Record<string, string> = {
   "Add Bulk Products": "பல புராடக்ட் சேர்",
   Categories: "வகைகள்",
   "Create category": "வகை உருவாக்கு",
+  "New category": "புதிய வகை",
   "Edit category": "வகை எடிட்",
   "Add new collection": "புதிய கலெக்ஷன் சேர்",
   "Add new": "புதிதாகச் சேர்",

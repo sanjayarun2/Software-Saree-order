@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconEdit, IconDispatch, IconUndo, IconPdf, IconPrint, IconTrash, IconWhatsApp } from "@/components/ui/OrderIcons";
 import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
 import FormatSelectionModal from "@/components/ui/FormatSelectionModal";
+import { PrintingStatusOverlay } from "@/components/ui/PrintingStatusOverlay";
 import { deferModalOpen } from "@/lib/use-backdrop-dismiss-guard";
 import { downloadOrdersPdf, PdfAddressTooLongError } from "@/lib/pdf-utils";
 import { downloadOrdersPosPdf, printOrdersPosPdf } from "@/lib/pos-pdf-utils";
@@ -1037,6 +1038,8 @@ export default function OrdersPage() {
         onClose={() => setScannerOpen(false)}
         onResult={(text) => setTrackingNumber(text)}
       />
+
+      <PrintingStatusOverlay open={printing} />
     </ErrorBoundary>
   );
 }
