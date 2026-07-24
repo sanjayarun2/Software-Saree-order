@@ -19,6 +19,8 @@ export interface SavedPosPrinter {
 
 const SAVED_PRINTER_KEY = "saree_pos_saved_printer_v1";
 const PRINT_PROFILE_KEY = "saree_pos_print_profile_v1";
+/** exact = PDF image (same look, slower). fast = ESC/POS text (quicker). */
+const PRINT_MODE_KEY = "saree_pos_print_mode_v1";
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
 /** Text plugin often never resolves on success — short no-reject window = dispatched. */
@@ -35,9 +37,31 @@ const PRINTER_CHARS_PER_LINE = 32; // plugin uses printerNbrCharactersPerLine=32
 const POS_PAPER_WIDTH_MM = 74.25;
 const PREFERRED_PRINTER_NAME = "KPC307-UEWB-63DA";
 const PREFERRED_PRINTER_ADDRESS = "00:29:F3:4F:63:DA";
-const AGENT_DEBUG_INGEST_URL =
-  "http://127.0.0.1:7242/ingest/ee5546e0-5de3-43aa-a6c6-7022a2b471d7";
-const AGENT_RUN_ID = `pos_match_pre_${Date.now()}`;
+
+/** Exact PDF look (slower) vs fast ESC/POS text (Android). */
+export type PosPrintMode = "exact" | "fast";
+
+export function getPosPrintMode(): PosPrintMode {
+  if (typeof window === "undefined") return "exact";
+  try {
+    const raw = window.localStorage.getItem(PRINT_MODE_KEY);
+    if (raw === "fast" || raw === "exact") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "exact";
+}
+
+export function setPosPrintMode(mode: PosPrintMode): void {
+  if (typeof window === "undefined") return;
+  if (mode !== "exact" && mode !== "fast") return;
+  try {
+    window.localStorage.setItem(PRINT_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+  addPrinterLog("print.mode", `Print mode set to ${mode}`);
+}
 
 type PrinterInfoLike = {
   address?: string;
@@ -669,7 +693,11 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
   }
 }
 
-function formatOrderForEscPos(order: Order, normalize: boolean): string {
+function formatOrderForEscPos(
+  order: Order,
+  normalize: boolean,
+  centerBrandLines: string[] = ["[C]<b>Saree Orders</b>"]
+): string {
   const from = prepareAddressForPdf(order.sender_details ?? "", normalize, "from");
   const to = prepareAddressForPdf(
     order.recipient_details ?? "",
@@ -707,62 +735,50 @@ function formatOrderForEscPos(order: Order, normalize: boolean): string {
   const wrappedFrom = (from || "").split("\n").map((l) => wrapLine(l)).join("\n");
   const wrappedTo = (to || "").split("\n").map((l) => wrapLine(l)).join("\n");
 
-  // POS PDF address block is only: FROM | logo/text | TO
-  // So for POS Bluetooth printing we keep the same: remove courier/qty and print a centered logo placeholder.
+  // Match POS strip order as printed on roll: TO (top) → brand → FROM (bottom).
+  const brand =
+    centerBrandLines.length > 0
+      ? centerBrandLines
+      : ["[C]<b>Saree Orders</b>"];
+
   const lines: string[] = [
-    SEPARATOR,
-    "[L]<b>FROM:</b>",
-    `[L]${wrappedFrom.replace(/\n/g, "\n[L]")}`,
-    "",
-    "[C]Thank you for your purchase",
-    "[C]Warm wishes from Saree Orders",
-    "",
     SEPARATOR,
     "[L]<b>TO:</b>",
     `[L]${wrappedTo.replace(/\n/g, "\n[L]")}`,
+    "",
+    ...brand,
+    "",
+    SEPARATOR,
+    "[L]<b>FROM:</b>",
+    `[L]${wrappedFrom.replace(/\n/g, "\n[L]")}`,
     "",
     SEPARATOR,
     "",
   ];
 
-  const printableLines = lines
-    .map((l) => l.replace(/\[(L|C|R)\]/g, "").replace(/<[^>]+>/g, ""))
-    .filter((l) => l.trim().length > 0);
-  const maxPrintableLineLen = printableLines.reduce((m, l) => Math.max(m, l.length), 0);
-  const centerLines = lines.filter((l) => l.startsWith("[C]")).length;
-  const leftLines = lines.filter((l) => l.startsWith("[L]")).length;
-
-  // #region agent log POS formatted text
-  fetch(AGENT_DEBUG_INGEST_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "9bc241",
-    },
-    body: JSON.stringify({
-      sessionId: "9bc241",
-      runId: AGENT_RUN_ID,
-      hypothesisId: "B_pos_text_layout",
-      location: "src/lib/pos-bluetooth-print.ts",
-      message: "Built POS formatted text for one order",
-      data: {
-        normalize,
-        rawFromLen: (order.sender_details ?? "").length,
-        rawToLen: (order.recipient_details ?? "").length,
-        normalizedFromLineCount: (from || "").split("\n").filter(Boolean).length,
-        normalizedToLineCount: (to || "").split("\n").filter(Boolean).length,
-        formattedLineCount: lines.length,
-        maxPrintableLineLen,
-        centerLines,
-        leftLines,
-        separatorCount: lines.filter((l) => l === SEPARATOR).length,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   return lines.join("\n");
+}
+
+async function resolveFastCenterBrand(userId: string): Promise<string[]> {
+  try {
+    const { getPdfSettings } = await import("./pdf-settings-supabase");
+    const { sanitizePdfBrandText } = await import("./pdf-address-sanitize");
+    const settings = await getPdfSettings(userId);
+    if (settings?.content_type === "text") {
+      const text = sanitizePdfBrandText(settings.custom_text ?? "").trim();
+      if (text) {
+        return text
+          .split(/\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(0, 4)
+          .map((l) => `[C]<b>${l}</b>`);
+      }
+    }
+  } catch {
+    /* ignore — use default */
+  }
+  return ["[C]<b>Saree Orders</b>"];
 }
 
 export async function printOrdersViaBluetooth(
@@ -780,17 +796,19 @@ export async function printOrdersViaBluetooth(
   try {
     return await enqueuePrint(async () => {
       let session = await ensurePrinterSession();
-      addPrinterLog("orders.print", "Selected printer", {
+      const userId = orders[0]?.user_id ?? "";
+      const brand = userId ? await resolveFastCenterBrand(userId) : ["[C]<b>Saree Orders</b>"];
+      addPrinterLog("orders.print", "Fast text print via session", {
         key: session.printer.key,
         name: session.printer.name,
         address: session.printer.address,
         orders: orders.length,
-        reusedSession: true,
+        mode: "fast",
       });
 
       try {
         for (const order of orders) {
-          const text = formatOrderForEscPos(order, normalize);
+          const text = formatOrderForEscPos(order, normalize, brand);
           await printTextFast(
             session.plugin,
             session.printer,
@@ -807,7 +825,7 @@ export async function printOrdersViaBluetooth(
         );
         session = await ensurePrinterSession({ forceRescan: true });
         for (const order of orders) {
-          const text = formatOrderForEscPos(order, normalize);
+          const text = formatOrderForEscPos(order, normalize, brand);
           await printTextFast(session.plugin, session.printer, text, null);
         }
       }

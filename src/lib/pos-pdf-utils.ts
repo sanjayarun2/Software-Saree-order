@@ -9,7 +9,11 @@ import {
   type ResolvedLabelLayout,
 } from "./pdf-utils";
 import { sanitizePdfBrandText } from "./pdf-address-sanitize";
-import { printPdfBase64ViaBluetooth } from "./pos-bluetooth-print";
+import {
+  getPosPrintMode,
+  printOrdersViaBluetooth,
+  printPdfBase64ViaBluetooth,
+} from "./pos-bluetooth-print";
 import { addPrinterLog } from "./printer-debug-log";
 
 // ─── Constants mirrored exactly from A4 pdf-utils.ts ────────────────────────
@@ -513,7 +517,8 @@ export async function downloadOrdersPosPdf(orders: Order[]) {
 }
 
 export type PosPrintOutcome = {
-  channel: "bluetooth" | "browser" | "download";
+  channel: "bluetooth" | "bluetooth-fast" | "browser" | "download";
+  mode?: "exact" | "fast";
 };
 
 export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcome> {
@@ -524,19 +529,35 @@ export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcom
     return { channel: "download" };
   }
   try {
-    const userId = orders[0].user_id;
-    const renderOptions = await fetchPosRenderOptions(userId);
-    const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
-    const filename = buildTimestampedFilename("SareeOrders_POS");
+    const printMode = getPosPrintMode();
 
-    // Web / desktop: system print dialog via PDF (USB / network / OS POS driver).
+    // Web / desktop: always exact PDF via system print dialog.
     if (!Capacitor.isNativePlatform()) {
+      const userId = orders[0].user_id;
+      const renderOptions = await fetchPosRenderOptions(userId);
+      const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
+      const filename = buildTimestampedFilename("SareeOrders_POS");
       doc.autoPrint({ variant: "non-conform" });
       const blob = doc.output("blob");
       const mode = await printPdfBlobInBrowser(blob, filename);
-      return { channel: mode };
+      return { channel: mode, mode: "exact" };
     }
 
+    // Android fast mode: ESC/POS text (TO → brand → FROM) + cut.
+    if (printMode === "fast") {
+      addPrinterLog("orders.print", "Using fast text print mode");
+      const result = await printOrdersViaBluetooth(orders, true);
+      if (!result.success) {
+        throw new Error(result.error ?? "POS printer not connected");
+      }
+      return { channel: "bluetooth-fast", mode: "fast" };
+    }
+
+    // Android exact mode: PDF raster (same look as label PDF).
+    addPrinterLog("orders.print", "Using exact PDF print mode");
+    const userId = orders[0].user_id;
+    const renderOptions = await fetchPosRenderOptions(userId);
+    const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
     const blob = doc.output("blob");
     const base64 = await new Promise<string>((resolve, reject) => {
       const r = new FileReader();
@@ -559,7 +580,7 @@ export async function printOrdersPosPdf(orders: Order[]): Promise<PosPrintOutcom
       throw new Error(directResult.error ?? "POS printer not connected");
     }
     addPrinterLog("orders.print", "PDF direct print sent");
-    return { channel: "bluetooth" };
+    return { channel: "bluetooth", mode: "exact" };
   } catch (e) {
     console.error("[POS-PDF] printOrdersPosPdf failed:", e);
     throw e;

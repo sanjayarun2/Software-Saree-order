@@ -203,6 +203,20 @@ const TA: Record<string, string> = {
   "No workers yet": "பணியாளர் யாரும் இல்லை",
   "PDF Settings": "PDF செட்டிங்ஸ்",
   "Printer Setup": "பிரிண்டர் செட்டப்",
+  "POS print mode": "POS அச்சு முறை",
+  "Choose how Android prints labels. Web always uses Exact PDF for system printers.":
+    "Android எப்படி லேபிளை அச்சிடும் என்பதை தேர்வு செய்யவும். வலையில் எப்போதும் Exact PDF பயன்படும்.",
+  "Exact look (PDF)": "சரியான தோற்றம் (PDF)",
+  "Same as label PDF. Slower over Bluetooth.":
+    "லேபிள் PDF போலவே. Bluetooth-ல் மெதுவாக இருக்கும்.",
+  "Fast text (POS)": "வேக உரை (POS)",
+  "Quick ESC/POS text. Layout may differ slightly.":
+    "விரைவான ESC/POS உரை. தோற்றம் சிறிது மாறலாம்.",
+  "Current:": "தற்போது:",
+  "Print mode: Fast text (Android). Quicker, layout may differ slightly.":
+    "அச்சு முறை: வேக உரை (Android). விரைவு; தோற்றம் சிறிது மாறலாம்.",
+  "Print mode: Exact PDF look. Same label, slower on Bluetooth.":
+    "அச்சு முறை: Exact PDF. அதே லேபிள்; Bluetooth-ல் மெதுவு.",
   "API Settings": "API செட்டிங்ஸ்",
   "Velo API Key": "Velo API கீ",
   "API Base URL": "API Base URL",

@@ -7,11 +7,14 @@ import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   clearSavedPosPrinter,
+  getPosPrintMode,
   getSavedPosPrinter,
   listBluetoothPrinters,
   savePosPrinter,
+  setPosPrintMode,
   testSavedPosPrinter,
   warmPosPrinterSession,
+  type PosPrintMode,
   type SavedPosPrinter,
 } from "@/lib/pos-bluetooth-print";
 import { useLanguage } from "@/lib/language-context";
@@ -22,6 +25,7 @@ export default function PrinterSetupPage() {
   const router = useRouter();
 
   const [saved, setSaved] = useState<SavedPosPrinter | null>(null);
+  const [printMode, setPrintModeState] = useState<PosPrintMode>("exact");
   const [printers, setPrinters] = useState<SavedPosPrinter[]>([]);
   const [scanning, setScanning] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -37,12 +41,23 @@ export default function PrinterSetupPage() {
 
   useEffect(() => {
     setSaved(getSavedPosPrinter());
+    setPrintModeState(getPosPrintMode());
   }, []);
 
   const isAndroidNative = useMemo(
     () => typeof window !== "undefined" && Capacitor.isNativePlatform(),
     []
   );
+
+  const applyPrintMode = (mode: PosPrintMode) => {
+    setPosPrintMode(mode);
+    setPrintModeState(mode);
+    setInfo(
+      mode === "fast"
+        ? t("Print mode: Fast text (Android). Quicker, layout may differ slightly.")
+        : t("Print mode: Exact PDF look. Same label, slower on Bluetooth.")
+    );
+  };
 
   const scanPrinters = async () => {
     setError(null);
@@ -212,6 +227,57 @@ export default function PrinterSetupPage() {
               {info}
             </div>
           ) : null}
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t("POS print mode")}
+          </h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {t(
+              "Choose how Android prints labels. Web always uses Exact PDF for system printers."
+            )}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => applyPrintMode("exact")}
+              className={`rounded-xl border px-3 py-3 text-left transition ${
+                printMode === "exact"
+                  ? "border-primary-500 bg-primary-50 dark:border-primary-400 dark:bg-primary-950/40"
+                  : "border-gray-200 bg-white hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600"
+              }`}
+            >
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("Exact look (PDF)")}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t("Same as label PDF. Slower over Bluetooth.")}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPrintMode("fast")}
+              className={`rounded-xl border px-3 py-3 text-left transition ${
+                printMode === "fast"
+                  ? "border-primary-500 bg-primary-50 dark:border-primary-400 dark:bg-primary-950/40"
+                  : "border-gray-200 bg-white hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600"
+              }`}
+            >
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("Fast text (POS)")}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t("Quick ESC/POS text. Layout may differ slightly.")}
+              </p>
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {t("Current:")}{" "}
+            <span className="font-medium text-slate-700 dark:text-slate-200">
+              {printMode === "fast" ? t("Fast text (POS)") : t("Exact look (PDF)")}
+            </span>
+          </p>
         </div>
 
         {printers.length > 0 ? (
