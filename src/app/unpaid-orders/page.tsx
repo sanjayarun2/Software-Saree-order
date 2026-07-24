@@ -219,42 +219,74 @@ export default function UnpaidOrdersPage() {
   const [orders, setOrders] = useState<UnpaidWebsiteOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [listUpdating, setListUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offerOrder, setOfferOrder] = useState<UnpaidWebsiteOrder | null>(null);
 
+  const applyResult = useCallback(
+    (result: {
+      orders: UnpaidWebsiteOrder[];
+      error: string | null;
+      warning: string | null;
+    }) => {
+      setOrders(result.orders);
+      setWarning(result.warning);
+      if (result.error && result.orders.length === 0) {
+        setError(result.error);
+      } else {
+        setError(null);
+      }
+    },
+    []
+  );
+
   const load = useCallback(
     async (force: boolean) => {
       if (!user) return;
-      if (force) setRefreshing(true);
-      else setLoading(true);
       setError(null);
-      setWarning(null);
-      try {
-        if (!force) {
-          const cached = peekUnpaidWebsiteOrdersCache(user.id);
-          if (cached) {
-            setOrders(cached.orders);
-            setWarning(cached.warning);
-            setLoading(false);
-          }
+
+      if (force) {
+        setRefreshing(true);
+        setListUpdating(false);
+      } else {
+        const cached = peekUnpaidWebsiteOrdersCache(user.id);
+        if (cached) {
+          setOrders(cached.orders);
+          setWarning(cached.warning);
+          setLoading(false);
+          setListUpdating(cached.isStale);
+        } else {
+          setLoading(true);
         }
-        const result = await fetchUnpaidWebsiteOrders(user.id, { force });
-        setOrders(result.orders);
-        setWarning(result.warning);
-        if (result.error && result.orders.length === 0) {
-          setError(result.error);
+      }
+
+      try {
+        const result = await fetchUnpaidWebsiteOrders(user.id, {
+          force,
+          onFresh: (fresh) => {
+            applyResult(fresh);
+            setListUpdating(false);
+            setRefreshing(false);
+          },
+        });
+        applyResult(result);
+        if (result.revalidating) {
+          setListUpdating(true);
+        } else {
+          setListUpdating(false);
+          setRefreshing(false);
         }
       } catch (e) {
         setError((e as Error).message || t("Failed to load unpaid orders"));
-        setOrders([]);
+        setListUpdating(false);
+        setRefreshing(false);
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
     },
-    [user, t]
+    [user, t, applyResult]
   );
 
   useEffect(() => {
@@ -300,6 +332,20 @@ export default function UnpaidOrdersPage() {
             {t("Orders")}
           </Link>
         </p>
+
+        {listUpdating && (
+          <div
+            className="flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-200"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-300 border-t-primary-600 dark:border-primary-700 dark:border-t-primary-300"
+              aria-hidden
+            />
+            <span>{t("Updating unpaid orders…")}</span>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">

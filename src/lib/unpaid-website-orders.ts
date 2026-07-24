@@ -4,6 +4,10 @@ import {
 } from "./api-settings-supabase";
 import type { WebsiteOrderLineItem } from "./db-types";
 import { normalizeWebsitePaymentStatus } from "./order-payment-status";
+import {
+  peekUnpaidWebsiteOrdersCache,
+  writeUnpaidWebsiteOrdersCache,
+} from "./unpaid-orders-cache";
 import { normalizeShopBaseUrl } from "./shop-url-utils";
 import { supabase } from "./supabase";
 import { lineItemsFromVeloApiItems } from "./website-order-line-items";
@@ -13,7 +17,6 @@ const LOOKBACK_DAYS = 30;
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 5;
 const MAX_ORDERS = 300;
-const CACHE_TTL_MS = 45_000;
 
 export type UnpaidWebsiteOrder = {
   orderId: string;
@@ -65,14 +68,18 @@ type ShopListResponse = {
   message?: string;
 };
 
-type CacheEntry = {
-  at: number;
-  userId: string;
+type FetchResult = {
   orders: UnpaidWebsiteOrder[];
+  error: string | null;
   warning: string | null;
+  fromCache: boolean;
+  /** True when a background shop refresh is in flight. */
+  revalidating?: boolean;
 };
 
-let memoryCache: CacheEntry | null = null;
+const revalidateInFlight = new Map<string, Promise<FetchResult>>();
+const lastNetworkAt = new Map<string, number>();
+const REVALIDATE_COOLDOWN_MS = 8_000;
 
 function lookbackSinceIso(): string {
   const d = new Date();
@@ -383,40 +390,26 @@ function dedupeOrders(orders: UnpaidWebsiteOrder[]): UnpaidWebsiteOrder[] {
   return out;
 }
 
-export function peekUnpaidWebsiteOrdersCache(
+export { peekUnpaidWebsiteOrdersCache } from "./unpaid-orders-cache";
+
+async function fetchUnpaidWebsiteOrdersNetwork(
   userId: string
-): { orders: UnpaidWebsiteOrder[]; warning: string | null } | null {
-  if (!memoryCache || memoryCache.userId !== userId) return null;
-  if (Date.now() - memoryCache.at > CACHE_TTL_MS) return null;
-  return { orders: memoryCache.orders, warning: memoryCache.warning };
-}
-
-/** Live unpaid website checkouts — never written to local orders table. */
-export async function fetchUnpaidWebsiteOrders(
-  userId: string,
-  opts?: { force?: boolean }
-): Promise<{
-  orders: UnpaidWebsiteOrder[];
-  error: string | null;
-  warning: string | null;
-}> {
-  if (!opts?.force) {
-    const cached = peekUnpaidWebsiteOrdersCache(userId);
-    if (cached) {
-      return { orders: cached.orders, error: null, warning: cached.warning };
-    }
-  }
-
+): Promise<FetchResult> {
   const integrations = uniqueShopIntegrations(
     await getEnabledApiIntegrations(userId)
   );
   if (!integrations.length) {
-    return {
+    const result: FetchResult = {
       orders: [],
       error:
         "Connect a website API key in Settings → API to see unpaid orders.",
       warning: null,
+      fromCache: false,
+      revalidating: false,
     };
+    writeUnpaidWebsiteOrdersCache(userId, [], null);
+    lastNetworkAt.set(userId, Date.now());
+    return result;
   }
 
   const errors: string[] = [];
@@ -443,7 +436,112 @@ export async function fetchUnpaidWebsiteOrders(
   const error =
     orders.length === 0 && errors.length > 0 ? errors.join(" · ") : null;
 
-  memoryCache = { at: Date.now(), userId, orders, warning };
+  lastNetworkAt.set(userId, Date.now());
 
-  return { orders, error, warning };
+  // Don't wipe a good local list when every shop request fails.
+  if (error) {
+    const prev = peekUnpaidWebsiteOrdersCache(userId);
+    if (prev && prev.orders.length > 0) {
+      return {
+        orders: prev.orders,
+        error: null,
+        warning: error,
+        fromCache: true,
+        revalidating: false,
+      };
+    }
+  }
+
+  writeUnpaidWebsiteOrdersCache(userId, orders, warning);
+
+  return { orders, error, warning, fromCache: false, revalidating: false };
+}
+
+function scheduleRevalidate(
+  userId: string,
+  onFresh?: (result: FetchResult) => void
+): boolean {
+  const existing = revalidateInFlight.get(userId);
+  if (existing) {
+    void existing.then((r) => onFresh?.(r));
+    return true;
+  }
+
+  const last = lastNetworkAt.get(userId) ?? 0;
+  if (Date.now() - last < REVALIDATE_COOLDOWN_MS) {
+    return false;
+  }
+
+  const promise = fetchUnpaidWebsiteOrdersNetwork(userId)
+    .then((result) => {
+      onFresh?.(result);
+      return result;
+    })
+    .finally(() => {
+      if (revalidateInFlight.get(userId) === promise) {
+        revalidateInFlight.delete(userId);
+      }
+    });
+
+  revalidateInFlight.set(userId, promise);
+  return true;
+}
+
+/**
+ * Stale-while-revalidate for unpaid checkouts (not the paid orders table).
+ * Returns durable cache instantly when present; refreshes from shop in background.
+ */
+export async function fetchUnpaidWebsiteOrders(
+  userId: string,
+  opts?: {
+    force?: boolean;
+    onFresh?: (result: {
+      orders: UnpaidWebsiteOrder[];
+      error: string | null;
+      warning: string | null;
+      fromCache: boolean;
+    }) => void;
+  }
+): Promise<FetchResult> {
+  const force = Boolean(opts?.force);
+  const onFresh = opts?.onFresh;
+
+  if (!force) {
+    const cached = peekUnpaidWebsiteOrdersCache(userId);
+    if (cached) {
+      // Fresh: serve instantly. Stale: serve + background refresh (SWR).
+      if (!cached.isStale) {
+        return {
+          orders: cached.orders,
+          error: null,
+          warning: cached.warning,
+          fromCache: true,
+          revalidating: false,
+        };
+      }
+      const revalidating = scheduleRevalidate(userId, onFresh);
+      return {
+        orders: cached.orders,
+        error: null,
+        warning: cached.warning,
+        fromCache: true,
+        revalidating,
+      };
+    }
+  }
+
+  const inFlight = revalidateInFlight.get(userId);
+  if (inFlight && !force) {
+    return inFlight.then((result) => ({ ...result, revalidating: false }));
+  }
+
+  const promise = fetchUnpaidWebsiteOrdersNetwork(userId).finally(() => {
+    if (revalidateInFlight.get(userId) === promise) {
+      revalidateInFlight.delete(userId);
+    }
+  });
+  revalidateInFlight.set(userId, promise);
+  const result = await promise;
+  onFresh?.(result);
+  return { ...result, revalidating: false };
 }

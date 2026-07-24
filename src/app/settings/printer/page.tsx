@@ -11,6 +11,7 @@ import {
   listBluetoothPrinters,
   savePosPrinter,
   testSavedPosPrinter,
+  warmPosPrinterSession,
   type SavedPosPrinter,
 } from "@/lib/pos-bluetooth-print";
 import { useLanguage } from "@/lib/language-context";
@@ -80,6 +81,13 @@ export default function PrinterSetupPage() {
       savePosPrinter(withDriver);
       setSaved(withDriver);
       setInfo(`Saved printer: ${withDriver.name || withDriver.address || withDriver.id}`);
+      void warmPosPrinterSession().then((warm) => {
+        if (warm.success) {
+          setInfo(
+            `Saved printer: ${withDriver.name || withDriver.address || withDriver.id}. Ready for fast print.`
+          );
+        }
+      });
     } catch {
       setError("Could not save printer preference.");
     } finally {
@@ -118,6 +126,7 @@ export default function PrinterSetupPage() {
     savePosPrinter(manual);
     setSaved(manual);
     setInfo(`Saved manual printer: ${manual.name} (${address})`);
+    void warmPosPrinterSession();
     setManualName("");
     setManualAddress("");
   };

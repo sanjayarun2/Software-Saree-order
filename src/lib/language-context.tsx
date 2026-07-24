@@ -26,6 +26,7 @@ const TA: Record<string, string> = {
   "Showing the last 30 days from your connected shop.":
     "இணைக்கப்பட்ட கடையிலிருந்து கடந்த 30 நாட்கள் காட்டப்படுகிறது.",
   "Failed to load unpaid orders": "பேட் இல்லாத ஆர்டர்களை ஏற்ற முடியவில்லை",
+  "Updating unpaid orders…": "பேட் இல்லாத ஆர்டர்கள் புதுப்பிக்கப்படுகிறது…",
   "No mobile": "மொபைல் இல்லை",
   "No mobile number on this checkout": "இந்த செக்அவுட்டில் மொபைல் எண் இல்லை",
   "Call": "கால்",

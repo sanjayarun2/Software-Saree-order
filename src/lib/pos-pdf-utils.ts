@@ -163,6 +163,36 @@ async function getImageAspectRatio(base64: string): Promise<number | null> {
   });
 }
 
+/** Match POS text (`angle: 90` = 90° CCW) so logo aligns with FROM/TO on the strip. */
+async function rotateImageBase64Ccw90(base64: string): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth || 1;
+        const h = img.naturalHeight || 1;
+        const canvas = document.createElement("canvas");
+        canvas.width = h;
+        canvas.height = w;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.translate(0, w);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = base64;
+  });
+}
+
 // ─── POS label drawing ──────────────────────────────────────────────────────
 //
 // GOAL: Take one A4 address block and rotate it 90° clockwise onto POS paper
@@ -293,11 +323,8 @@ function drawPosLabel(
     const drawW = fitW * zoom;
     const drawH = fitH * zoom;
 
-    // Logo addImage doesn't rotate. In POS coordinates:
-    // A4 logo horizontal center (a4CenterX) → POS vertical center (posY)
-    // A4 logo vertical center (thanksCenterA4Y) → POS horizontal center (posX)
-    // A4 logo width (horizontal span) maps to POS height (vertical span)
-    // A4 logo height (vertical span) maps to POS width (horizontal span)
+    // Logo is pre-rotated 90° CCW (see renderOrdersToPosPdfDoc) to match text angle:90.
+    // A4 logo width → POS height; A4 logo height → POS width.
     const imgCenterPosX = posX(thanksCenterA4Y);
     const imgCenterPosY = logoCenterPosY;
     const imgX = imgCenterPosX - drawH / 2;
@@ -325,13 +352,24 @@ function drawPosLabel(
   });
 }
 
-function renderOrdersToPosPdfDoc(orders: Order[], renderOptions: PdfRenderOptions): jsPDF {
+async function renderOrdersToPosPdfDoc(
+  orders: Order[],
+  renderOptions: PdfRenderOptions
+): Promise<jsPDF> {
+  const contentType = renderOptions.settings?.content_type ?? "logo";
+  let logoBase64 = renderOptions.logoBase64;
+  if (contentType !== "text" && logoBase64) {
+    const rotated = await rotateImageBase64Ccw90(logoBase64);
+    if (rotated) logoBase64 = rotated;
+  }
+  const options: PdfRenderOptions = { ...renderOptions, logoBase64 };
+
   const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
   const d = doc as unknown as Parameters<typeof resolveOrderLabelLayout>[0];
   for (let i = 0; i < orders.length; i++) {
     if (i > 0) doc.addPage([POS_PAGE_W, POS_PAGE_H], "p");
-    const resolved = resolveOrderLabelLayout(d, orders[i], renderOptions);
-    drawPosLabel(doc, orders[i], renderOptions, resolved);
+    const resolved = resolveOrderLabelLayout(d, orders[i], options);
+    drawPosLabel(doc, orders[i], options, resolved);
   }
   return doc;
 }
@@ -366,10 +404,7 @@ export async function downloadOrderPosPdf(order: Order) {
   if (typeof window === "undefined") return;
   try {
     const renderOptions = await fetchPosRenderOptions(order.user_id);
-    const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
-    const d = doc as unknown as Parameters<typeof resolveOrderLabelLayout>[0];
-    const resolved = resolveOrderLabelLayout(d, order, renderOptions);
-    drawPosLabel(doc, order, renderOptions, resolved);
+    const doc = await renderOrdersToPosPdfDoc([order], renderOptions);
     const filename = buildTimestampedFilename("SareeOrder_POS");
     const blob = doc.output("blob");
     await savePdfBlob(blob, filename);
@@ -385,7 +420,7 @@ export async function downloadOrdersPosPdf(orders: Order[]) {
   try {
     const userId = orders[0].user_id;
     const renderOptions = await fetchPosRenderOptions(userId);
-    const doc = renderOrdersToPosPdfDoc(orders, renderOptions);
+    const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
     const filename = buildTimestampedFilename("SareeOrders_POS");
     const blob = doc.output("blob");
     await savePdfBlob(blob, filename);
@@ -401,7 +436,7 @@ export async function printOrdersPosPdf(orders: Order[]) {
   try {
     const userId = orders[0].user_id;
     const renderOptions = await fetchPosRenderOptions(userId);
-    const doc = renderOrdersToPosPdfDoc(orders, renderOptions);
+    const doc = await renderOrdersToPosPdfDoc(orders, renderOptions);
     const blob = doc.output("blob");
     const base64 = await new Promise<string>((resolve, reject) => {
       const r = new FileReader();

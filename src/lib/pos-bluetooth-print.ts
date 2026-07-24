@@ -18,11 +18,18 @@ export interface SavedPosPrinter {
 }
 
 const SAVED_PRINTER_KEY = "saree_pos_saved_printer_v1";
-const PLUGIN_LOAD_TIMEOUT_MS = 20_000; // slow/cold Android starts can exceed 5s
+const PRINT_PROFILE_KEY = "saree_pos_print_profile_v1";
 const PRINT_TIMEOUT_MS = 25_000; // allow slower BT stacks on some Android devices
 const PRINTER_DISCOVERY_TIMEOUT_MS = 12_000;
-const PRINT_DISPATCH_GRACE_MS = 3_500;
-const POS_ADDRESS_LINE_FEED_MM = "6"; // mirror A4 address line height (SIZE_ADDRESS(12) * 0.5 = 6mm)
+/** Text plugin often never resolves on success — short no-reject window = dispatched. */
+const PRINT_TEXT_DISPATCH_GRACE_MS = 700;
+/** Prefer zero inter-chunk delay; fall back only if a device needs slower pacing. */
+const FAST_SEND_DELAY = "0";
+const FAST_CHUNK_SIZE = "1024";
+const FALLBACK_SEND_DELAY = "40";
+const FALLBACK_CHUNK_SIZE = "512";
+/** Feed before ESC/POS cut (0 = cut immediately after last dots; no extra blank). */
+const POS_CUT_FEED_MM = "0";
 const PRINTER_CHARS_PER_LINE = 32; // plugin uses printerNbrCharactersPerLine=32 by default
 /** Must match POS PDF page width in pos-pdf-utils (SECTION_H / POS_PAGE_W = 74.25mm). */
 const POS_PAPER_WIDTH_MM = 74.25;
@@ -49,6 +56,25 @@ type PrinterCandidate = {
   type: string;
 };
 
+type RememberedPrintProfile = {
+  id: string;
+  address?: string;
+  sendDelay: string;
+  chunkSize: string;
+  useEscPosAsterik: boolean;
+};
+
+type PrinterSession = {
+  plugin: typeof ESCPOSPlugin;
+  printer: PrinterCandidate;
+  pdfProfile: RememberedPrintProfile | null;
+  textProfile: RememberedPrintProfile | null;
+};
+
+let printerSession: PrinterSession | null = null;
+let sessionLoadInFlight: Promise<PrinterSession> | null = null;
+let printQueue: Promise<void> = Promise.resolve();
+
 function readSavedPrinter(): SavedPosPrinter | null {
   if (typeof window === "undefined") return null;
   try {
@@ -59,6 +85,42 @@ function readSavedPrinter(): SavedPosPrinter | null {
     return parsed;
   } catch {
     return null;
+  }
+}
+
+function readRememberedProfiles(): {
+  pdf: RememberedPrintProfile | null;
+  text: RememberedPrintProfile | null;
+} {
+  if (typeof window === "undefined") return { pdf: null, text: null };
+  try {
+    const raw = window.localStorage.getItem(PRINT_PROFILE_KEY);
+    if (!raw) return { pdf: null, text: null };
+    const parsed = JSON.parse(raw) as {
+      pdf?: RememberedPrintProfile | null;
+      text?: RememberedPrintProfile | null;
+    };
+    return { pdf: parsed.pdf ?? null, text: parsed.text ?? null };
+  } catch {
+    return { pdf: null, text: null };
+  }
+}
+
+function writeRememberedProfile(
+  kind: "pdf" | "text",
+  profile: RememberedPrintProfile
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = readRememberedProfiles();
+    const next = { ...current, [kind]: profile };
+    window.localStorage.setItem(PRINT_PROFILE_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+  if (printerSession) {
+    if (kind === "pdf") printerSession.pdfProfile = profile;
+    else printerSession.textProfile = profile;
   }
 }
 
@@ -75,11 +137,37 @@ export function savePosPrinter(printer: SavedPosPrinter): void {
     driver: "escpos",
   };
   window.localStorage.setItem(SAVED_PRINTER_KEY, JSON.stringify(normalized));
+  // Saved target changed — drop session so next print binds to the new device.
+  printerSession = null;
 }
 
 export function clearSavedPosPrinter(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(SAVED_PRINTER_KEY);
+  window.localStorage.removeItem(PRINT_PROFILE_KEY);
+  printerSession = null;
+}
+
+function candidateFromSaved(saved: SavedPosPrinter): PrinterCandidate {
+  const address = (saved.address || saved.id || "").trim();
+  const name = (saved.name || "").trim();
+  const key = address || name || saved.id;
+  return {
+    key,
+    address,
+    name: name || address || saved.id,
+    bondState: "BOND_BONDED",
+    type: "bluetooth",
+  };
+}
+
+function enqueuePrint<T>(job: () => Promise<T>): Promise<T> {
+  const run = printQueue.then(job, job);
+  printQueue = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -182,7 +270,9 @@ function pickBestPrinter(printers: PrinterCandidate[]): PrinterCandidate | null 
       (p) =>
         p.key.toLowerCase() === saved.id.toLowerCase() ||
         p.address.toLowerCase() === saved.id.toLowerCase() ||
-        p.name.toLowerCase() === saved.id.toLowerCase()
+        p.name.toLowerCase() === saved.id.toLowerCase() ||
+        (saved.address &&
+          p.address.toLowerCase() === saved.address.toLowerCase())
     );
     if (savedMatch) return savedMatch;
   }
@@ -213,101 +303,174 @@ function pickBestPrinter(printers: PrinterCandidate[]): PrinterCandidate | null 
   return printers[0];
 }
 
-async function printWithVariants(
-  plugin: typeof ESCPOSPlugin,
+/**
+ * Load plugin + printer once per app session.
+ * Uses saved printer address immediately (no BT scan) when available.
+ */
+async function ensurePrinterSession(opts?: {
+  forceRescan?: boolean;
+}): Promise<PrinterSession> {
+  const forceRescan = Boolean(opts?.forceRescan);
+  if (printerSession && !forceRescan) {
+    return printerSession;
+  }
+  if (sessionLoadInFlight && !forceRescan) {
+    return sessionLoadInFlight;
+  }
+
+  const load = (async (): Promise<PrinterSession> => {
+    const { plugin } = await loadPluginRobust();
+    const remembered = readRememberedProfiles();
+    const saved = readSavedPrinter();
+
+    let printer: PrinterCandidate | null = null;
+    if (!forceRescan && saved && (saved.address || saved.id)) {
+      printer = candidateFromSaved(saved);
+      addPrinterLog("session.load", "Using saved printer (skip scan)", {
+        key: printer.key,
+        address: printer.address,
+        name: printer.name,
+      });
+    } else {
+      addPrinterLog("session.load", forceRescan ? "Forced rescan" : "No saved printer; scanning");
+      const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
+      const entries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
+      printer = pickBestPrinter(entries);
+      if (printer && !saved) {
+        savePosPrinter({
+          id: printer.address || printer.key,
+          address: printer.address,
+          name: printer.name,
+          type: "bluetooth",
+          driver: "escpos",
+        });
+      }
+    }
+
+    if (!printer) {
+      throw new Error("No usable Bluetooth printer found.");
+    }
+
+    const next: PrinterSession = {
+      plugin,
+      printer,
+      pdfProfile: remembered.pdf,
+      textProfile: remembered.text,
+    };
+    printerSession = next;
+    addPrinterLog("session.load", "Printer session ready", {
+      key: next.printer.key,
+      address: next.printer.address,
+      hasPdfProfile: Boolean(next.pdfProfile),
+      hasTextProfile: Boolean(next.textProfile),
+    });
+    return next;
+  })();
+
+  sessionLoadInFlight = load;
+  try {
+    return await load;
+  } finally {
+    if (sessionLoadInFlight === load) sessionLoadInFlight = null;
+  }
+}
+
+/** Optional warm-up from Printer Setup so the first order print is already hot. */
+export async function warmPosPrinterSession(): Promise<PrintResult> {
+  if (!Capacitor.isNativePlatform()) {
+    return { success: false, error: "Printer warm-up is only available in the Android app." };
+  }
+  try {
+    await ensurePrinterSession();
+    return { success: true };
+  } catch (e: any) {
+    printerSession = null;
+    return { success: false, error: e?.message ?? String(e) };
+  }
+}
+
+function buildPdfPayload(
   printer: PrinterCandidate,
-  text: string
-): Promise<void> {
-  const idCandidates = ["first", printer.key, printer.address, printer.name].filter(Boolean);
-  const typeCandidates = [printer.type, "bluetooth"].filter(Boolean);
+  pdfBase64: string,
+  profile: Partial<RememberedPrintProfile> & { id: string }
+): Record<string, unknown> {
+  return {
+    type: "bluetooth",
+    id: profile.id,
+    address: profile.address ?? (printer.address || undefined),
+    pdfBase64,
+    action: "printCut",
+    cut: true,
+    mmFeedPaper: POS_CUT_FEED_MM,
+    initializeBeforeSend: true,
+    sendDelay: profile.sendDelay ?? FAST_SEND_DELAY,
+    chunkSize: profile.chunkSize ?? FAST_CHUNK_SIZE,
+    useEscPosAsterik: profile.useEscPosAsterik ?? false,
+    printerDpi: 203,
+    printerWidthMM: POS_PAPER_WIDTH_MM,
+    printerNbrCharactersPerLine: 48,
+  };
+}
 
-  const variants = idCandidates.flatMap((id) =>
-    typeCandidates.flatMap((type) => [
-      {
-        type,
-        id,
-        text,
-        mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
-        initializeBeforeSend: true,
-        sendDelay: "30",
-        chunkSize: "512",
-      },
-      {
-        type,
-        id,
-        text,
-        address: printer.address || undefined,
-        mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
-        initializeBeforeSend: true,
-        useEscPosAsterik: true,
-        sendDelay: "60",
-        chunkSize: "256",
-      },
-    ])
+function buildTextPayload(
+  printer: PrinterCandidate,
+  text: string,
+  profile: Partial<RememberedPrintProfile> & { id: string }
+): Parameters<typeof ESCPOSPlugin.printFormattedText>[0] {
+  return {
+    type: "bluetooth",
+    id: profile.id,
+    address: profile.address ?? (printer.address || undefined),
+    text,
+    action: "printCut",
+    mmFeedPaper: POS_CUT_FEED_MM,
+    initializeBeforeSend: true,
+    sendDelay: profile.sendDelay ?? FAST_SEND_DELAY,
+    chunkSize: profile.chunkSize ?? FAST_CHUNK_SIZE,
+    useEscPosAsterik: profile.useEscPosAsterik ?? false,
+  } as Parameters<typeof ESCPOSPlugin.printFormattedText>[0];
+}
+
+function pdfProfileCandidates(printer: PrinterCandidate): RememberedPrintProfile[] {
+  const ids = Array.from(
+    new Set(
+      [printer.address, printer.key, printer.name, "first"].filter(
+        (v): v is string => Boolean(v && String(v).trim())
+      )
+    )
   );
-
-  let lastError: unknown = null;
-  for (const payload of variants) {
-    try {
-      addPrinterLog("print.variant", "Trying print payload", {
-        id: payload.id,
-        type: payload.type,
-        sendDelay: payload.sendDelay,
-        chunkSize: payload.chunkSize,
-        useEscPosAsterik: payload.useEscPosAsterik ?? false,
+  const combos: Array<Pick<RememberedPrintProfile, "sendDelay" | "chunkSize" | "useEscPosAsterik">> = [
+    { sendDelay: FAST_SEND_DELAY, chunkSize: FAST_CHUNK_SIZE, useEscPosAsterik: false },
+    { sendDelay: FALLBACK_SEND_DELAY, chunkSize: FALLBACK_CHUNK_SIZE, useEscPosAsterik: false },
+    { sendDelay: FALLBACK_SEND_DELAY, chunkSize: FALLBACK_CHUNK_SIZE, useEscPosAsterik: true },
+  ];
+  const out: RememberedPrintProfile[] = [];
+  for (const id of ids) {
+    for (const c of combos) {
+      out.push({
+        id,
+        address: printer.address || undefined,
+        ...c,
       });
-
-      // #region agent log POS print payload
-      fetch(AGENT_DEBUG_INGEST_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "9bc241",
-        },
-        body: JSON.stringify({
-          sessionId: "9bc241",
-          runId: AGENT_RUN_ID,
-          hypothesisId: "C_pos_mmfeed_variant",
-          location: "src/lib/pos-bluetooth-print.ts",
-          message: "Trying printFormattedText payload",
-          data: {
-            printerKey: printer.key,
-            printerAddress: printer.address,
-            variantId: payload.id,
-            type: payload.type,
-            mmFeedPaper: payload.mmFeedPaper,
-            sendDelay: payload.sendDelay,
-            chunkSize: payload.chunkSize,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-
-      await dispatchPrint(plugin, payload);
-      addPrinterLog("print.variant", "Print payload succeeded", {
-        id: payload.id,
-        type: payload.type,
-      });
-      return;
-    } catch (e) {
-      lastError = e;
-      addPrinterLog("print.variant", "Print payload failed", String(e), "error");
     }
   }
-  throw lastError ?? new Error("All print variants failed");
+  return out;
+}
+
+function textProfileCandidates(printer: PrinterCandidate): RememberedPrintProfile[] {
+  return pdfProfileCandidates(printer);
 }
 
 async function dispatchPrint(
   plugin: typeof ESCPOSPlugin,
   payload: Parameters<typeof ESCPOSPlugin.printFormattedText>[0]
 ): Promise<void> {
-  // Plugin quirk: Android implementation rejects on error, but does not resolve on success.
-  // We treat "no reject within grace period" as dispatched successfully.
+  // Plugin quirk: Android rejects on error, but often does not resolve on success.
   let rejectedError: unknown = null;
   let resolved = false;
 
-  const op = plugin.printFormattedText(payload)
+  const op = plugin
+    .printFormattedText(payload)
     .then(() => {
       resolved = true;
     })
@@ -315,15 +478,10 @@ async function dispatchPrint(
       rejectedError = e;
     });
 
-  const grace = withTimeout(
-    new Promise<void>((resolve) => {
-      setTimeout(resolve, PRINT_DISPATCH_GRACE_MS);
-    }),
-    PRINT_TIMEOUT_MS,
-    "Printing"
-  );
-
-  await Promise.race([op, grace]);
+  await Promise.race([
+    op,
+    new Promise<void>((resolve) => setTimeout(resolve, PRINT_TEXT_DISPATCH_GRACE_MS)),
+  ]);
 
   if (rejectedError) {
     addPrinterLog("print.dispatch", "Plugin rejected print", String(rejectedError), "error");
@@ -333,119 +491,86 @@ async function dispatchPrint(
     addPrinterLog("print.dispatch", "Plugin resolved print");
     return;
   }
-  // If still pending after grace and no rejection, treat as sent to printer.
-  addPrinterLog("print.dispatch", "Plugin did not reject; treated as dispatched");
+  addPrinterLog("print.dispatch", "No reject within grace; treated as dispatched");
 }
 
 async function dispatchPdfPrint(
   plugin: typeof ESCPOSPlugin,
   payload: Record<string, unknown>
 ): Promise<void> {
-  let rejectedError: unknown = null;
-  let resolved = false;
-  const op = (plugin as any).printPdfBase64(payload)
-    .then(() => {
-      resolved = true;
-    })
-    .catch((e: unknown) => {
-      rejectedError = e;
-    });
-
-  const grace = withTimeout(
-    new Promise<void>((resolve) => setTimeout(resolve, PRINT_DISPATCH_GRACE_MS)),
+  // printPdfBase64 resolves on success — await it (no artificial 3.5s grace).
+  await withTimeout(
+    (plugin as any).printPdfBase64(payload) as Promise<void>,
     PRINT_TIMEOUT_MS,
     "Printing PDF"
   );
-
-  await Promise.race([op, grace]);
-  if (rejectedError) throw rejectedError;
-  if (resolved) return;
 }
 
-async function printPdfWithVariants(
+async function printTextFast(
   plugin: typeof ESCPOSPlugin,
   printer: PrinterCandidate,
-  pdfBase64: string
+  text: string,
+  remembered: RememberedPrintProfile | null
 ): Promise<void> {
-  const idCandidates = ["first", printer.key, printer.address, printer.name].filter(Boolean);
-  const uniqueIds = Array.from(new Set(idCandidates));
-
-  const variants = uniqueIds.flatMap((id) => [
-    {
-      type: "bluetooth", // force plugin transport type; scanned `type` can be numeric like "3"
-      id,
-      address: printer.address || undefined,
-      pdfBase64,
-      mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
-      initializeBeforeSend: true,
-      sendDelay: "40",
-      chunkSize: "512",
-      printerDpi: 203,
-      printerWidthMM: POS_PAPER_WIDTH_MM,
-      printerNbrCharactersPerLine: 48,
-    },
-    {
-      type: "bluetooth",
-      id,
-      pdfBase64,
-      mmFeedPaper: POS_ADDRESS_LINE_FEED_MM,
-      initializeBeforeSend: true,
-      useEscPosAsterik: true,
-      sendDelay: "60",
-      chunkSize: "256",
-      printerDpi: 203,
-      printerWidthMM: POS_PAPER_WIDTH_MM,
-      printerNbrCharactersPerLine: 48,
-    },
-  ]);
+  const tried = new Set<string>();
+  const queue: RememberedPrintProfile[] = [];
+  if (remembered) queue.push(remembered);
+  for (const p of textProfileCandidates(printer)) queue.push(p);
 
   let lastError: unknown = null;
-  for (const payload of variants) {
+  for (const profile of queue) {
+    const key = `${profile.id}|${profile.sendDelay}|${profile.chunkSize}|${profile.useEscPosAsterik}`;
+    if (tried.has(key)) continue;
+    tried.add(key);
     try {
-      addPrinterLog("print.pdf.variant", "Trying PDF print payload", {
-        id: payload.id,
-        type: payload.type,
-        address: payload.address ?? null,
-        sendDelay: payload.sendDelay,
-        chunkSize: payload.chunkSize,
-        useEscPosAsterik: payload.useEscPosAsterik ?? false,
-      });
-
-      // #region agent log PDF variant attempt
-      fetch(AGENT_DEBUG_INGEST_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
-        body: JSON.stringify({
-          sessionId: "9bc241",
-          runId: AGENT_RUN_ID,
-          hypothesisId: "F_pdf_variant_fallback",
-          location: "src/lib/pos-bluetooth-print.ts",
-          message: "Trying printPdfBase64 variant",
-          data: {
-            id: payload.id,
-            type: payload.type,
-            address: payload.address ?? null,
-            sendDelay: payload.sendDelay,
-            chunkSize: payload.chunkSize,
-            useEscPosAsterik: payload.useEscPosAsterik ?? false,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-
-      await dispatchPdfPrint(plugin, payload);
-      addPrinterLog("print.pdf.variant", "PDF print payload succeeded", {
-        id: payload.id,
-        type: payload.type,
-      });
+      addPrinterLog("print.text", "Trying text profile", profile);
+      await dispatchPrint(plugin, buildTextPayload(printer, text, profile));
+      writeRememberedProfile("text", profile);
+      addPrinterLog("print.text", "Text profile succeeded", profile);
       return;
     } catch (e) {
       lastError = e;
-      addPrinterLog("print.pdf.variant", "PDF print payload failed", String(e), "error");
+      addPrinterLog("print.text", "Text profile failed", String(e), "error");
+      // Saved/direct id failed — invalidate session so next attempt can rescan.
+      if (remembered && profile === remembered) {
+        printerSession = null;
+      }
     }
   }
-  throw lastError ?? new Error("All PDF print variants failed");
+  throw lastError ?? new Error("All text print profiles failed");
+}
+
+async function printPdfFast(
+  plugin: typeof ESCPOSPlugin,
+  printer: PrinterCandidate,
+  pdfBase64: string,
+  remembered: RememberedPrintProfile | null
+): Promise<void> {
+  const tried = new Set<string>();
+  const queue: RememberedPrintProfile[] = [];
+  if (remembered) queue.push(remembered);
+  for (const p of pdfProfileCandidates(printer)) queue.push(p);
+
+  let lastError: unknown = null;
+  for (const profile of queue) {
+    const key = `${profile.id}|${profile.sendDelay}|${profile.chunkSize}|${profile.useEscPosAsterik}`;
+    if (tried.has(key)) continue;
+    tried.add(key);
+    try {
+      addPrinterLog("print.pdf", "Trying PDF profile", profile);
+      await dispatchPdfPrint(plugin, buildPdfPayload(printer, pdfBase64, profile));
+      writeRememberedProfile("pdf", profile);
+      addPrinterLog("print.pdf", "PDF profile succeeded", profile);
+      return;
+    } catch (e) {
+      lastError = e;
+      addPrinterLog("print.pdf", "PDF profile failed", String(e), "error");
+      if (remembered && profile === remembered) {
+        printerSession = null;
+      }
+    }
+  }
+  throw lastError ?? new Error("All PDF print profiles failed");
 }
 
 export async function listBluetoothPrinters(): Promise<{ success: boolean; printers: SavedPosPrinter[]; error?: string }> {
@@ -497,42 +622,50 @@ export async function testSavedPosPrinter(): Promise<PrintResult> {
     };
   }
   try {
-    const { plugin } = await loadPluginRobust();
-    // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
-    addPrinterLog("printer.test", "Skipping bluetoothIsEnabled pre-check");
+    return await enqueuePrint(async () => {
+      const session = await ensurePrinterSession();
+      const testText = [
+        "[C]<b>Saree Order App</b>",
+        "[C]POS Printer Test",
+        "[L]Printer: " + (session.printer.name || "Unknown"),
+        "[L]Address: " + (session.printer.address || "N/A"),
+        "[L]Status: Connected",
+        "",
+        "------------------------------",
+        "",
+      ].join("\n");
 
-    const printersObj = await discoverBluetoothPrintersWithPermission(plugin);
-    const printerEntries = normalizePrinters(printersObj as Record<string, PrinterInfoLike>);
-    const printer = pickBestPrinter(printerEntries);
-    if (!printer) {
-      addPrinterLog("printer.test", "No usable printer found", undefined, "error");
-      return { success: false, error: "No usable Bluetooth printer found." };
-    }
-    addPrinterLog("printer.test", "Using printer", {
-      key: printer.key,
-      name: printer.name,
-      address: printer.address,
-      bondState: printer.bondState,
-      type: printer.type,
+      await printTextFast(
+        session.plugin,
+        session.printer,
+        testText,
+        session.textProfile
+      );
+      addPrinterLog("printer.test", "Test print sent");
+      return { success: true };
     });
-
-    const testText = [
-      "[C]<b>Saree Order App</b>",
-      "[C]POS Printer Test",
-      "[L]Printer: " + (printer.name || "Unknown"),
-      "[L]Address: " + (printer.address || "N/A"),
-      "[L]Status: Connected",
-      "",
-      "------------------------------",
-      "",
-    ].join("\n");
-
-    await printWithVariants(plugin, printer, testText);
-    addPrinterLog("printer.test", "Test print sent");
-    return { success: true };
   } catch (e: any) {
     addPrinterLog("printer.test", "Test print failed", e?.message ?? String(e), "error");
-    return { success: false, error: e?.message ?? String(e) };
+    // First failure with saved-only session: rescan once then retry once.
+    try {
+      return await enqueuePrint(async () => {
+        const session = await ensurePrinterSession({ forceRescan: true });
+        const testText = [
+          "[C]<b>Saree Order App</b>",
+          "[C]POS Printer Test",
+          "[L]Printer: " + (session.printer.name || "Unknown"),
+          "[L]Address: " + (session.printer.address || "N/A"),
+          "[L]Status: Connected",
+          "",
+          "------------------------------",
+          "",
+        ].join("\n");
+        await printTextFast(session.plugin, session.printer, testText, null);
+        return { success: true };
+      });
+    } catch (e2: any) {
+      return { success: false, error: e2?.message ?? e?.message ?? String(e) };
+    }
   }
 }
 
@@ -645,68 +778,42 @@ export async function printOrdersViaBluetooth(
   }
 
   try {
-    const { plugin } = await loadPluginRobust();
-    // Skip bluetoothIsEnabled() pre-check; this can hang on some Android stacks.
-    addPrinterLog("orders.print", "Skipping bluetoothIsEnabled pre-check");
+    return await enqueuePrint(async () => {
+      let session = await ensurePrinterSession();
+      addPrinterLog("orders.print", "Selected printer", {
+        key: session.printer.key,
+        name: session.printer.name,
+        address: session.printer.address,
+        orders: orders.length,
+        reusedSession: true,
+      });
 
-    const printers = await discoverBluetoothPrintersWithPermission(plugin);
-    const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
-    if (!printerEntries.length) {
-      addPrinterLog("orders.print", "No paired printers found", undefined, "error");
-      return {
-        success: false,
-        error: "No paired Bluetooth printers found. Please pair your POS printer first.",
-      };
-    }
+      try {
+        for (const order of orders) {
+          const text = formatOrderForEscPos(order, normalize);
+          await printTextFast(
+            session.plugin,
+            session.printer,
+            text,
+            session.textProfile
+          );
+        }
+      } catch (firstErr) {
+        addPrinterLog(
+          "orders.print",
+          "Fast path failed; rescanning once",
+          String(firstErr),
+          "error"
+        );
+        session = await ensurePrinterSession({ forceRescan: true });
+        for (const order of orders) {
+          const text = formatOrderForEscPos(order, normalize);
+          await printTextFast(session.plugin, session.printer, text, null);
+        }
+      }
 
-    const printer = pickBestPrinter(printerEntries);
-    if (!printer) {
-      addPrinterLog("orders.print", "No usable printer", undefined, "error");
-      return {
-        success: false,
-        error: "No usable Bluetooth printer found.",
-      };
-    }
-    addPrinterLog("orders.print", "Selected printer", {
-      key: printer.key,
-      name: printer.name,
-      address: printer.address,
-      bondState: printer.bondState,
-      type: printer.type,
-      orders: orders.length,
+      return { success: true };
     });
-
-    // #region agent log POS selected printer
-    fetch(AGENT_DEBUG_INGEST_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "9bc241",
-      },
-      body: JSON.stringify({
-        sessionId: "9bc241",
-        runId: AGENT_RUN_ID,
-        hypothesisId: "A_pos_printer_selection",
-        location: "src/lib/pos-bluetooth-print.ts",
-        message: "Selected printer for POS print",
-        data: {
-          printerKey: printer.key,
-          printerName: printer.name,
-          printerAddress: printer.address,
-          bondState: printer.bondState,
-          ordersCount: orders.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
-    for (const order of orders) {
-      const text = formatOrderForEscPos(order, normalize);
-      await printWithVariants(plugin, printer, text);
-    }
-
-    return { success: true };
   } catch (e: any) {
     const msg = e?.message ?? String(e);
     addPrinterLog("orders.print", "Print failed", msg, "error");
@@ -734,68 +841,42 @@ export async function printPdfBase64ViaBluetooth(pdfBase64: string): Promise<Pri
     return { success: false, error: "Bluetooth printing is only available in the Android app." };
   }
   try {
-    // #region agent log PDF direct print entry
-    fetch(AGENT_DEBUG_INGEST_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
-      body: JSON.stringify({
-        sessionId: "9bc241",
-        runId: AGENT_RUN_ID,
-        hypothesisId: "D_pdf_raster_entry",
-        location: "src/lib/pos-bluetooth-print.ts",
-        message: "Starting printPdfBase64ViaBluetooth",
-        data: { pdfBase64Length: pdfBase64.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    return await enqueuePrint(async () => {
+      let session = await ensurePrinterSession();
+      if (typeof (session.plugin as any).printPdfBase64 !== "function") {
+        return {
+          success: false,
+          error:
+            "Printer plugin not updated in this build. Please install the latest APK with native plugin patch.",
+        };
+      }
 
-    const { plugin } = await loadPluginRobust();
-    const printers = await discoverBluetoothPrintersWithPermission(plugin);
-    const printerEntries = normalizePrinters(printers as Record<string, PrinterInfoLike>);
-    if (!printerEntries.length) {
-      return {
-        success: false,
-        error: "No paired Bluetooth printers found. Please pair your POS printer first.",
-      };
-    }
-    const printer = pickBestPrinter(printerEntries);
-    if (!printer) {
-      return { success: false, error: "No usable Bluetooth printer found." };
-    }
-    if (typeof (plugin as any).printPdfBase64 !== "function") {
-      return {
-        success: false,
-        error:
-          "Printer plugin not updated in this build. Please install the latest APK with native plugin patch.",
-      };
-    }
+      addPrinterLog("orders.print", "PDF print via session", {
+        key: session.printer.key,
+        address: session.printer.address,
+        hasProfile: Boolean(session.pdfProfile),
+        pdfBase64Length: pdfBase64.length,
+      });
 
-    // #region agent log PDF direct print payload
-    fetch(AGENT_DEBUG_INGEST_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9bc241" },
-      body: JSON.stringify({
-        sessionId: "9bc241",
-        runId: AGENT_RUN_ID,
-        hypothesisId: "E_pdf_raster_payload",
-        location: "src/lib/pos-bluetooth-print.ts",
-        message: "Dispatching printPdfBase64 payload",
-        data: {
-          printerKey: printer.key,
-          printerName: printer.name,
-          printerAddress: printer.address,
-          forcedTransportType: "bluetooth",
-          pluginMethodPresent: typeof (plugin as any).printPdfBase64 === "function",
-          idCandidates: ["first", printer.key, printer.address, printer.name].filter(Boolean),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
-    await printPdfWithVariants(plugin, printer, pdfBase64);
-    return { success: true };
+      try {
+        await printPdfFast(
+          session.plugin,
+          session.printer,
+          pdfBase64,
+          session.pdfProfile
+        );
+      } catch (firstErr) {
+        addPrinterLog(
+          "orders.print",
+          "PDF fast path failed; rescanning once",
+          String(firstErr),
+          "error"
+        );
+        session = await ensurePrinterSession({ forceRescan: true });
+        await printPdfFast(session.plugin, session.printer, pdfBase64, null);
+      }
+      return { success: true };
+    });
   } catch (e: any) {
     const msg = e?.message ?? String(e);
     return { success: false, error: `Printing failed: ${msg}` };
