@@ -9,6 +9,7 @@ import {
 import { useLanguage } from "@/lib/language-context";
 import { compressImageFile, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
 import {
+  deleteVeloCollection,
   upsertVeloCollection,
   VeloProductsApiError,
 } from "@/lib/velo-products-api";
@@ -49,6 +50,9 @@ export function CategoriesTab({
   const [uploadLabel, setUploadLabel] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletePercent, setDeletePercent] = useState(0);
+  const [deleteLabel, setDeleteLabel] = useState("");
 
   const resetForm = () => {
     setEditingId(null);
@@ -151,6 +155,48 @@ export function CategoriesTab({
     }
   };
 
+  const onDelete = async (item: VeloCollection) => {
+    const ok = window.confirm(
+      t(
+        "Delete this category? Products in it will be removed or archived (same as website admin). This cannot be undone."
+      )
+    );
+    if (!ok) return;
+
+    setError(null);
+    setInfo(null);
+    setDeletingId(item.id);
+    setDeletePercent(5);
+    setDeleteLabel(t("Deleting category…"));
+    try {
+      const result = await deleteVeloCollection(userId, item.id, (p) => {
+        setDeletePercent(p.percent);
+        setDeleteLabel(
+          p.done
+            ? t("Category deleted.")
+            : t("Removing products in category…")
+        );
+      });
+      await onRefreshCollections();
+      if (editingId === item.id) resetForm();
+      const archivedNote =
+        result.archivedCount > 0
+          ? ` ${result.archivedCount} ${t("with order history were archived.")}`
+          : "";
+      setInfo(`${t("Category deleted.")}${archivedNote}`);
+    } catch (err) {
+      const message =
+        err instanceof VeloProductsApiError
+          ? err.message
+          : (err as Error).message || t("Category delete failed.");
+      setError(message);
+    } finally {
+      setDeletingId(null);
+      setDeletePercent(0);
+      setDeleteLabel("");
+    }
+  };
+
   const previewSrc = imageBase64
     ? imageBase64.startsWith("data:")
       ? imageBase64
@@ -160,9 +206,9 @@ export function CategoriesTab({
   return (
     <div className="space-y-4">
       <UploadProgressOverlay
-        open={uploadBusy}
-        label={uploadLabel}
-        progress={uploadProgress}
+        open={uploadBusy || Boolean(deletingId)}
+        label={deletingId ? deleteLabel || t("Deleting category…") : uploadLabel}
+        progress={deletingId ? deletePercent : uploadProgress}
       />
 
       <BentoCard className="space-y-4 p-4">
@@ -307,13 +353,24 @@ export function CategoriesTab({
                     </p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => startEdit(item)}
-                  className="shrink-0 rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:text-slate-200"
-                >
-                  {t("Edit")}
-                </button>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(item)}
+                    disabled={Boolean(deletingId) || submitting}
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                  >
+                    {t("Edit")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onDelete(item)}
+                    disabled={Boolean(deletingId) || submitting}
+                    className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50 dark:border-red-900 dark:text-red-300"
+                  >
+                    {deletingId === item.id ? t("Deleting…") : t("Delete")}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

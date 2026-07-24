@@ -513,6 +513,88 @@ export async function upsertVeloCollection(
   };
 }
 
+export type VeloCollectionDeleteProgress = {
+  deletedCount: number;
+  archivedCount: number;
+  remaining: number;
+  percent: number;
+  done: boolean;
+  message: string;
+};
+
+/**
+ * Same as website admin: loop batch delete/archive products in category,
+ * then remove category when empty.
+ */
+export async function deleteVeloCollection(
+  userId: string,
+  collectionId: string,
+  onProgress?: (p: VeloCollectionDeleteProgress) => void
+): Promise<VeloCollectionDeleteProgress> {
+  const integration = await getPrimaryIntegration(userId);
+  let deletedCount = 0;
+  let archivedCount = 0;
+  let totalHint = 0;
+  let guard = 0;
+
+  while (guard < 200) {
+    guard += 1;
+    const requestId = newRequestId();
+    const res = await requestWithRetry(
+      integration,
+      "deleteCollection",
+      requestId,
+      { id: collectionId, batchSize: 3 }
+    );
+
+    if (!res.ok) {
+      throw new VeloProductsApiError(res.message || "Category delete failed.");
+    }
+
+    const batchDeleted = res.deletedIds?.length ?? 0;
+    const batchArchived = res.archivedIds?.length ?? 0;
+    deletedCount += batchDeleted;
+    archivedCount += batchArchived;
+    const remaining = Number(res.remaining ?? 0);
+    const processed = deletedCount + archivedCount;
+    if (totalHint === 0) totalHint = Math.max(processed + remaining, 1);
+    const done = Boolean(res.done || res.collectionDeleted);
+    const percent = done
+      ? 100
+      : Math.min(99, Math.round((processed / totalHint) * 100));
+
+    const progress: VeloCollectionDeleteProgress = {
+      deletedCount,
+      archivedCount,
+      remaining,
+      percent,
+      done,
+      message: done
+        ? "Category deleted."
+        : remaining > 0
+          ? `Removing products… ${remaining} left`
+          : "Finishing category delete…",
+    };
+    onProgress?.(progress);
+
+    if (done) {
+      collectionsCache = null;
+      invalidateCollectionsCache(userId);
+      await fetchVeloCollections(userId, true);
+      return progress;
+    }
+
+    if (batchDeleted + batchArchived === 0 && remaining > 0) {
+      throw new VeloProductsApiError(
+        res.message ||
+          "Could not remove remaining products in this category. Products with order history are archived; retry or delete from website admin."
+      );
+    }
+  }
+
+  throw new VeloProductsApiError("Category delete timed out. Please retry.");
+}
+
 function normalizeBadge(badge: string) {
   return badge === "none" ? null : badge;
 }

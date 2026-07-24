@@ -46,7 +46,8 @@ export type VeloProductsAction =
   | "delete"
   | "meta"
   | "resolveImages"
-  | "upsertCollection";
+  | "upsertCollection"
+  | "deleteCollection";
 
 export type VeloProductsResponse = {
   ok: boolean;
@@ -63,6 +64,13 @@ export type VeloProductsResponse = {
   };
   collection?: VeloCollection;
   collections?: VeloCollection[];
+  deletedId?: string;
+  deletedIds?: string[];
+  archivedIds?: string[];
+  blocked?: Array<{ id: string; reason: string }>;
+  remaining?: number;
+  done?: boolean;
+  collectionDeleted?: boolean;
   created?: Array<
     | { id: string; productCode: string; name: string; slug: string }
     | {

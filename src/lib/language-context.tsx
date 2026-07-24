@@ -355,6 +355,14 @@ const TA: Record<string, string> = {
   "Category name is required.": "வகை பெயர் தேவை.",
   "Description is required.": "விளக்கம் தேவை.",
   "Category image is required.": "வகை படம் தேவை.",
+  "Deleting category…": "வகை நீக்கப்படுகிறது…",
+  "Deleting…": "நீக்குகிறது…",
+  "Category deleted.": "வகை நீக்கப்பட்டது.",
+  "Category delete failed.": "வகை நீக்கம் தோல்வி.",
+  "Removing products in category…": "வகையில் உள்ள புராடக்ட்கள் நீக்கப்படுகிறது…",
+  "with order history were archived.": "ஆர்டர் வரலாறு உள்ளவை காப்பகப்படுத்தப்பட்டன.",
+  "Delete this category? Products in it will be removed or archived (same as website admin). This cannot be undone.":
+    "இந்த வகையை நீக்கவா? உள்ளே உள்ள புராடக்ட்கள் நீக்கப்படும் அல்லது காப்பகப்படுத்தப்படும் (வலைத்தள அட்மின் போல). இதை மாற்ற முடியாது.",
   "Category image is optional. If empty, a product photo from this category is used after you upload products.":
     "வகை படம் விருப்பம். காலியாக இருந்தால், புராடக்ட் அப்லோடுக்குப் பிறகு அந்த வகையின் புராடக்ட் படம் பயன்படும்.",
   "Optional — leave empty to use a product photo from this category later.":
