@@ -8,6 +8,7 @@ import {
   sanitizePdfBrandText,
   type PdfAddressRole,
 } from "./pdf-address-sanitize";
+import { resolveFromAddressForLabel } from "./default-from-address";
 
 /** Options passed from fetchPdfSettingsForRendering; used for centre block and vertical position. */
 export type PdfRenderOptions = {
@@ -816,7 +817,11 @@ function measureOrderSectionLayout(
   centerTextSizePt: number
 ): { fits: boolean; layout: SectionVerticalLayout; centerBlockHalfH: number } {
   const shouldNormalize = options.settings?.normalize_addresses === true;
-  const fromSource = prepareAddressForPdf(order.sender_details ?? "", shouldNormalize, "from");
+  const fromSource = prepareAddressForPdf(
+    resolveFromAddressForLabel(order.sender_details, order.user_id),
+    shouldNormalize,
+    "from"
+  );
   const toSource = prepareAddressForPdf(
     order.recipient_details ?? "",
     shouldNormalize,

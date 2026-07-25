@@ -10,6 +10,13 @@ import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTe
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useToast } from "@/lib/toast-context";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
+import {
+  readDefaultFromAddress,
+  seedDefaultFromAddressIfEmpty,
+  writeDefaultFromAddress,
+  hydrateDefaultFromAddress,
+  flushDefaultFromAddress,
+} from "@/lib/default-from-address";
 import { usePersistentField } from "@/lib/usePersistentField";
 import { createOrder as svcCreateOrder, getSuggestions as svcGetSuggestions } from "@/lib/order-service";
 import type { OrderInsert, Order } from "@/lib/db-types";
@@ -36,11 +43,11 @@ export default function AddOrderPage() {
   const { toast } = useToast();
   // Persist important text fields so they survive app/tab switches
   const recipientField = usePersistentField("add-order:recipient", "");
-  const senderField = usePersistentField("add-order:sender", "");
   const bookedByField = usePersistentField("add-order:bookedBy", "");
   const bookedMobileField = usePersistentField("add-order:bookedMobile", "");
   const courierField = usePersistentField("add-order:courier", "Professional");
   const [recipient, setRecipient] = useState("");
+  /** Shop FROM — filled from per-account cache, then hydrated from DB. */
   const [sender, setSender] = useState("");
   const [bookedBy, setBookedBy] = useState("");
   const [bookedMobile, setBookedMobile] = useState("");
@@ -58,15 +65,40 @@ export default function AddOrderPage() {
     if (!authLoading && !user) router.replace("/login/");
   }, [user, authLoading, router]);
 
+  // Instant local FROM for this account, then sync from Supabase profile.
   useEffect(() => {
     if (!user) return;
+    const local = readDefaultFromAddress(user.id);
+    if (local) {
+      defaultSenderSet.current = true;
+      setSender(local);
+    }
+    let cancelled = false;
+    void hydrateDefaultFromAddress(user.id).then((remote) => {
+      if (cancelled || !remote) return;
+      defaultSenderSet.current = true;
+      setSender(remote);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const applySenderSeed = (s: OrderSuggestions) => {
+      if (defaultSenderSet.current) return;
+      if (s.senders.length === 0) return;
+      const seeded = seedDefaultFromAddressIfEmpty(s.senders[0], user.id);
+      if (seeded) {
+        defaultSenderSet.current = true;
+        setSender(seeded);
+      }
+    };
     svcGetSuggestions(user.id, (fresh) => {
       const s = buildSuggestionsFromOrders(fresh as Order[]);
       setSuggestions(s);
-      if (!defaultSenderSet.current && s.senders.length > 0) {
-        defaultSenderSet.current = true;
-        setSender(s.senders[0]);
-      }
+      applySenderSeed(s);
       if (!defaultBookedBySet.current && s.bookedBy.length > 0) {
         defaultBookedBySet.current = true;
         if (!bookedByField.value.trim()) {
@@ -87,10 +119,7 @@ export default function AddOrderPage() {
       if (cached.length) {
         const s = buildSuggestionsFromOrders(cached as Order[]);
         setSuggestions(s);
-        if (!defaultSenderSet.current && s.senders.length > 0) {
-          defaultSenderSet.current = true;
-          setSender(s.senders[0]);
-        }
+        applySenderSeed(s);
         if (!defaultBookedBySet.current && s.bookedBy.length > 0) {
           defaultBookedBySet.current = true;
           if (!bookedByField.value.trim()) {
@@ -115,10 +144,6 @@ export default function AddOrderPage() {
   useEffect(() => {
     setRecipient(recipientField.value);
   }, [recipientField.value]);
-
-  useEffect(() => {
-    setSender(senderField.value);
-  }, [senderField.value]);
 
   useEffect(() => {
     setBookedBy(bookedByField.value);
@@ -174,10 +199,11 @@ export default function AddOrderPage() {
         quantity: quantity === "" ? 1 : Number(quantity),
       };
       await svcCreateOrder(user.id, insert);
+      writeDefaultFromAddress(sender, user.id);
+      await flushDefaultFromAddress(user.id);
       toast(t("Order saved"));
-      // Clear cached draft on successful save
+      // Clear TO draft only — keep shop FROM cached for the next order.
       recipientField.clear();
-      senderField.clear();
       bookedByField.clear();
       router.replace("/orders/");
     } catch (e) {
@@ -243,7 +269,7 @@ export default function AddOrderPage() {
                 value={sender}
                 onChange={(v) => {
                   setSender(v);
-                  senderField.setValue(v);
+                  if (user) writeDefaultFromAddress(v, user.id);
                 }}
                 suggestions={senderSuggestions}
                 placeholder={t("Sender address and details")}

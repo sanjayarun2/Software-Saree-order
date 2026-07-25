@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { ESCPOSPlugin } from "@albgen/capacitor-escpos-plugin";
 import type { Order } from "./db-types";
+import { resolveFromAddressForLabel } from "./default-from-address";
 import { prepareAddressForPdf } from "./pdf-utils";
 import { addPrinterLog } from "./printer-debug-log";
 
@@ -745,7 +746,11 @@ function formatOrderForEscPos(
   normalize: boolean,
   centerBrandLines: string[] = ["[C]<b>Saree Orders</b>"]
 ): string {
-  const from = prepareAddressForPdf(order.sender_details ?? "", normalize, "from");
+  const from = prepareAddressForPdf(
+    resolveFromAddressForLabel(order.sender_details, order.user_id),
+    normalize,
+    "from"
+  );
   const to = prepareAddressForPdf(
     order.recipient_details ?? "",
     normalize,

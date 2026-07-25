@@ -9,6 +9,12 @@ import { BentoCard } from "@/components/ui/BentoCard";
 import { InlineAutocompleteTextarea } from "@/components/ui/InlineAutocompleteTextarea";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { buildSuggestionsFromOrders, type OrderSuggestions } from "@/lib/order-suggestions";
+import {
+  readDefaultFromAddress,
+  writeDefaultFromAddress,
+  hydrateDefaultFromAddress,
+  flushDefaultFromAddress,
+} from "@/lib/default-from-address";
 import { usePersistentField } from "@/lib/usePersistentField";
 import {
   getOrderById as svcGetOrderById,
@@ -72,7 +78,8 @@ function EditOrderContent() {
         return;
       }
       const recipientFromDb = o.recipient_details ?? "";
-      const senderFromDb = o.sender_details ?? "";
+      const senderFromDb =
+        (o.sender_details ?? "").trim() || readDefaultFromAddress(user.id);
       setRecipient(recipientField.value || recipientFromDb);
       setSender(senderField.value || senderFromDb);
       setBookedBy(o.booked_by ?? "");
@@ -87,6 +94,11 @@ function EditOrderContent() {
       if (fresh) applyOrder(fresh);
     }).then(applyOrder);
   }, [user, orderId, recipientField.value, senderField.value]);
+
+  useEffect(() => {
+    if (!user) return;
+    void hydrateDefaultFromAddress(user.id);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -129,6 +141,8 @@ function EditOrderContent() {
         quantity: quantity === "" ? null : Number(quantity),
         ...(orderStatus === "DESPATCHED" && { tracking_number: trackingNumber.trim() || null }),
       });
+      writeDefaultFromAddress(sender, user.id);
+      await flushDefaultFromAddress(user.id);
       // Clear cached draft on successful save
       recipientField.clear();
       senderField.clear();
@@ -209,6 +223,7 @@ function EditOrderContent() {
                 onChange={(v) => {
                   setSender(v);
                   senderField.setValue(v);
+                  if (user) writeDefaultFromAddress(v, user.id);
                 }}
                 suggestions={senderSuggestions}
                 placeholder={t("Sender address and details")}

@@ -79,6 +79,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && !error) {
           setSession(session);
           setUser(session?.user ?? null);
+          if (session?.user?.id) {
+            void import("./default-from-address").then(({ hydrateDefaultFromAddress }) =>
+              hydrateDefaultFromAddress(session.user.id)
+            );
+          }
         }
         stopLoading();
       })
@@ -128,6 +133,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setSession(session);
         setUser(session.user);
+        void import("./default-from-address").then(({ hydrateDefaultFromAddress }) =>
+          hydrateDefaultFromAddress(session.user.id)
+        );
 
         localStorage.setItem("saree_app_returning", "1");
         const pendingMobile = getPendingMobileForGoogleAuth();

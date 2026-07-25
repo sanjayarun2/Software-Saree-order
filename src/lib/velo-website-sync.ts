@@ -231,21 +231,37 @@ function resolveExternalOrderId(order: VeloWebsiteOrderPayload): string | null {
 }
 
 async function getDefaultSenderAddress(userId: string): Promise<string> {
-  const cached = senderAddressCache.get(userId);
-  if (cached && Date.now() - cached.at < SENDER_CACHE_MS) {
-    return cached.address;
+  const {
+    resolveDefaultFromAddress,
+    readDefaultFromAddress,
+    writeDefaultFromAddress,
+    hydrateDefaultFromAddress,
+  } = await import("./default-from-address");
+
+  await hydrateDefaultFromAddress(userId);
+
+  const cachedLocal = readDefaultFromAddress(userId);
+  if (cachedLocal) {
+    senderAddressCache.set(userId, { at: Date.now(), address: cachedLocal });
+    return cachedLocal;
   }
+
+  const mem = senderAddressCache.get(userId);
+  if (mem && Date.now() - mem.at < SENDER_CACHE_MS && mem.address.trim()) {
+    writeDefaultFromAddress(mem.address, userId);
+    return mem.address;
+  }
+
   try {
     const suggestions = await getSuggestions(userId);
     const senders = buildSuggestionsFromOrders(suggestions).senders;
-    if (senders.length > 0) {
-      senderAddressCache.set(userId, { at: Date.now(), address: senders[0] });
-      return senders[0];
-    }
+    const resolved = resolveDefaultFromAddress(userId, ...senders);
+    senderAddressCache.set(userId, { at: Date.now(), address: resolved });
+    return resolved;
   } catch {
     /* use fallback below */
   }
-  const fallback = "Shop Address";
+  const fallback = resolveDefaultFromAddress(userId);
   senderAddressCache.set(userId, { at: Date.now(), address: fallback });
   return fallback;
 }
