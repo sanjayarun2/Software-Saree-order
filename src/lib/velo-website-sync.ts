@@ -8,6 +8,7 @@ import {
 } from "./api-settings-supabase";
 import { getAllOrders } from "./local-store";
 import { createOrder, getSuggestions, updateOrder } from "./order-service";
+import { hydrateDeletedExternalOrders } from "./deleted-website-orders";
 import { buildSuggestionsFromOrders } from "./order-suggestions";
 import { supabase } from "./supabase";
 import { normalizeShopBaseUrl } from "./shop-url-utils";
@@ -485,10 +486,17 @@ async function importOrdersForIntegration(
   let updated = 0;
   let skipped = 0;
   const newOrders: ImportedWebsiteOrderSummary[] = [];
+  const deletedExternalIds = await hydrateDeletedExternalOrders(userId);
 
   for (const raw of orders) {
     const externalId = resolveExternalOrderId(raw);
     if (!externalId) {
+      skipped++;
+      continue;
+    }
+
+    // User deleted this website order — do not re-import.
+    if (deletedExternalIds.has(externalId)) {
       skipped++;
       continue;
     }

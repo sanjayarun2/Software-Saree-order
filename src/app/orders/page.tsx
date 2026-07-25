@@ -508,7 +508,12 @@ export default function OrdersPage() {
       setOrders((prev) => prev.filter((o) => o.id !== id));
       void refreshPendingCount();
     } catch (e) {
-      setError((e as Error).message || "Delete failed");
+      const msg = (e as Error).message || "Delete failed";
+      setError(
+        /Failed to delete|network|fetch|offline|JWT|auth|permission|RLS/i.test(msg)
+          ? `Could not delete on the server (${msg}). The order was kept.`
+          : msg
+      );
     }
   };
 

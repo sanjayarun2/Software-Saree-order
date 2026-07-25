@@ -195,6 +195,18 @@ export async function removeOutboxEntry(userId: string, entryId: string): Promis
   await set(outboxKey(userId), filtered, store);
 }
 
+/** Drop pending outbox actions that match a predicate (e.g. cancel ops for a deleted order). */
+export async function removeOutboxEntriesMatching(
+  userId: string,
+  predicate: (entry: OutboxEntry) => boolean
+): Promise<number> {
+  const queue = await getOutbox(userId);
+  const filtered = queue.filter((e) => !predicate(e));
+  const removed = queue.length - filtered.length;
+  if (removed > 0) await set(outboxKey(userId), filtered, store);
+  return removed;
+}
+
 export async function clearOutbox(userId: string): Promise<void> {
   await del(outboxKey(userId), store);
 }

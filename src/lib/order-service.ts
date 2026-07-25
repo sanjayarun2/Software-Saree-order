@@ -16,15 +16,33 @@ import {
   getOutbox,
   pushOutbox,
   removeOutboxEntry,
+  removeOutboxEntriesMatching,
   getCachedSuggestions,
   setCachedSuggestions,
   type OutboxEntry,
 } from "./local-store";
+import { rememberDeletedExternalOrder } from "./deleted-website-orders";
 import {
   markDashboardSyncComplete,
   markFullSyncComplete,
   shouldSkipBackgroundDashboardSync,
 } from "./sync-coalesce";
+
+function isOnline(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine;
+}
+
+/** Cancel queued insert/update/status/delete for an order (by id or temp insert id). */
+async function cancelOutboxForOrder(userId: string, orderId: string): Promise<void> {
+  await removeOutboxEntriesMatching(userId, (entry) => {
+    const a = entry.action;
+    if (a.type === "insert") return a.tempId === orderId;
+    if (a.type === "update" || a.type === "delete" || a.type === "status") {
+      return a.orderId === orderId;
+    }
+    return false;
+  });
+}
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -150,6 +168,15 @@ export async function getPendingOrderCount(
   return list.length;
 }
 
+async function pendingDeleteOrderIds(userId: string): Promise<Set<string>> {
+  const queue = await getOutbox(userId);
+  const ids = new Set<string>();
+  for (const entry of queue) {
+    if (entry.action.type === "delete") ids.add(entry.action.orderId);
+  }
+  return ids;
+}
+
 async function revalidateOrders(
   userId: string,
   filters: OrderFilters,
@@ -161,6 +188,9 @@ async function revalidateOrders(
   lastRevalidateAt.set(userId, now);
 
   try {
+    // Apply queued deletes before merging server rows (prevents deleted orders reappearing).
+    await flushOutbox(userId);
+
     const data = await withAuthRefreshRetry(async () => {
       const dateColumn = filters.status === "PENDING" ? "booking_date" : "despatch_date";
       let query = supabase
@@ -184,9 +214,13 @@ async function revalidateOrders(
       if (error) throw error;
       return data;
     });
-    const orders = (data as Order[]) ?? [];
+    const pendingDeletes = await pendingDeleteOrderIds(userId);
+    const orders = ((data as Order[]) ?? []).filter((o) => !pendingDeletes.has(o.id));
 
     await mergeOrders(userId, orders);
+    for (const id of pendingDeletes) {
+      await removeOrder(userId, id);
+    }
     await touchAccess(userId, orders.map((o) => o.id));
 
     if (onFresh) {
@@ -287,7 +321,41 @@ export async function updateOrder(
 }
 
 export async function deleteOrder(userId: string, orderId: string): Promise<void> {
+  const snapshot = await getLocalOrder(userId, orderId);
+
+  // Never-synced optimistic rows: drop locally and cancel the pending insert.
+  if (orderId.startsWith("temp_")) {
+    await removeOrder(userId, orderId);
+    await cancelOutboxForOrder(userId, orderId);
+    return;
+  }
+
+  if (isOnline()) {
+    const { data, error } = await supabase
+      .from("orders")
+      .delete()
+      .eq("id", orderId)
+      .eq("user_id", userId)
+      .select("external_order_id");
+
+    if (error) {
+      throw new Error(error.message || "Failed to delete order on server");
+    }
+
+    await removeOrder(userId, orderId);
+    await cancelOutboxForOrder(userId, orderId);
+
+    const externalId =
+      String(data?.[0]?.external_order_id ?? snapshot?.external_order_id ?? "").trim();
+    if (externalId) {
+      await rememberDeletedExternalOrder(userId, externalId);
+    }
+    return;
+  }
+
+  // Offline: remove locally and queue a confirmed delete for later flush.
   await removeOrder(userId, orderId);
+  await cancelOutboxForOrder(userId, orderId);
 
   const entry: OutboxEntry = {
     id: uid(),
@@ -296,7 +364,10 @@ export async function deleteOrder(userId: string, orderId: string): Promise<void
   };
   await pushOutbox(userId, entry);
 
-  flushOutbox(userId);
+  const externalId = String(snapshot?.external_order_id ?? "").trim();
+  if (externalId) {
+    await rememberDeletedExternalOrder(userId, externalId);
+  }
 }
 
 export async function updateOrderStatus(
@@ -388,11 +459,17 @@ async function processOutboxEntry(userId: string, entry: OutboxEntry): Promise<v
       break;
     }
     case "delete": {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("orders")
         .delete()
-        .eq("id", action.orderId);
+        .eq("id", action.orderId)
+        .eq("user_id", userId)
+        .select("external_order_id");
       if (error) throw error;
+      const externalId = String(data?.[0]?.external_order_id ?? "").trim();
+      if (externalId) {
+        await rememberDeletedExternalOrder(userId, externalId);
+      }
       break;
     }
     case "status": {
@@ -430,6 +507,9 @@ export async function syncOrders(userId: string): Promise<boolean> {
   if (typeof navigator !== "undefined" && !navigator.onLine) return false;
 
   try {
+    await flushOutbox(userId);
+    const pendingDeletes = await pendingDeleteOrderIds(userId);
+
     const lastSync = await getLastSyncTimestamp(userId);
     let changed = false;
 
@@ -451,10 +531,16 @@ export async function syncOrders(userId: string): Promise<boolean> {
       return data;
     });
 
-    const deltaOrders = (deltaData as Order[]) ?? [];
+    const deltaOrders = ((deltaData as Order[]) ?? []).filter(
+      (o) => !pendingDeletes.has(o.id)
+    );
     if (deltaOrders.length > 0) {
       await mergeOrders(userId, deltaOrders);
       await touchAccess(userId, deltaOrders.map((o) => o.id));
+      changed = true;
+    }
+    for (const id of pendingDeletes) {
+      await removeOrder(userId, id);
       changed = true;
     }
 
@@ -511,6 +597,9 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
     if (idList.length === 0) idList = [userId];
     else if (!idList.includes(userId)) idList = [...idList, userId];
 
+    await flushOutbox(userId);
+    const pendingDeletes = await pendingDeleteOrderIds(userId);
+
     const lastSync = await getLastSyncTimestamp(userId);
     let changed = false;
 
@@ -531,10 +620,16 @@ export async function syncDashboardOrders(userId: string): Promise<boolean> {
       return data;
     });
 
-    const deltaOrders = (deltaData as Order[]) ?? [];
+    const deltaOrders = ((deltaData as Order[]) ?? []).filter(
+      (o) => !pendingDeletes.has(o.id)
+    );
     if (deltaOrders.length > 0) {
       await mergeOrders(userId, deltaOrders);
       await touchAccess(userId, deltaOrders.map((o) => o.id));
+      changed = true;
+    }
+    for (const id of pendingDeletes) {
+      await removeOrder(userId, id);
       changed = true;
     }
 
