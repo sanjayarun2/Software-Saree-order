@@ -46,6 +46,18 @@ function ApiIconOutlined({ className }: { className?: string }) {
   );
 }
 
+function WhatsAppIconOutlined({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H15.75m-6.75 3.75h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008zm-9.75 6.75a9 9 0 1115.182-6.535A8.966 8.966 0 0118 15.75c0 1.59-.413 3.083-1.137 4.378L18 21l-3.75-.75A8.968 8.968 0 019 20.25z"
+      />
+    </svg>
+  );
+}
+
 function ProductCodeIconOutlined({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -226,6 +238,21 @@ export default function SettingsPage() {
             </svg>
           </Link>
           <div className="border-t border-white/30 dark:border-white/10" />
+          {!isListedWorker ? (
+            <>
+              <Link
+                href="/settings/whatsapp"
+                className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"
+              >
+                <WhatsAppIconOutlined className="h-6 w-6 shrink-0 text-slate-600 dark:text-slate-400" />
+                <span className="flex-1 text-base font-medium">{t("WhatsApp")}</span>
+                <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <div className="border-t border-white/30 dark:border-white/10" />
+            </>
+          ) : null}
           <Link
             href="/settings/test-sound/"
             className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left text-slate-900 hover:bg-gray-50 active:bg-gray-100 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600"

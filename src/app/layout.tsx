@@ -15,6 +15,7 @@ import { SplashController } from "@/lib/SplashController";
 import { NativeOAuthBridge } from "@/components/NativeOAuthBridge";
 import { NativeGoogleAuthBootstrap } from "@/components/NativeGoogleAuthBootstrap";
 import { OrderNotificationBridge } from "@/components/OrderNotificationBridge";
+import { ShareAddressBridge } from "@/components/ShareAddressBridge";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -55,6 +56,7 @@ export default function RootLayout({
               <LanguageProvider>
                 <SplashController>
                   <ToastProvider>
+                    <ShareAddressBridge />
                     <DataProvider>
                       <SearchProvider>
                         <AppShell>

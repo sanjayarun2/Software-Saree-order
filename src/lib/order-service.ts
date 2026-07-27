@@ -22,6 +22,7 @@ import {
   type OutboxEntry,
 } from "./local-store";
 import { rememberDeletedExternalOrder } from "./deleted-website-orders";
+import { maybeSendWhatsAppConfirmation } from "./whatsapp-confirmation";
 import {
   markDashboardSyncComplete,
   markFullSyncComplete,
@@ -296,6 +297,8 @@ export async function createOrder(userId: string, insert: OrderInsert): Promise<
 
   flushOutbox(userId);
 
+  void maybeSendWhatsAppConfirmation(userId, "create", optimistic);
+
   return { tempId };
 }
 
@@ -407,6 +410,21 @@ export async function updateOrderStatus(
   await pushOutbox(userId, entry);
 
   flushOutbox(userId);
+
+  if (status === "DESPATCHED") {
+    const forWa = existing
+      ? {
+          ...existing,
+          status,
+          despatch_date: despatchDate,
+          despatched_at: despatchedAt,
+          tracking_number: trackingNumber ?? existing.tracking_number ?? null,
+        }
+      : await getLocalOrder(userId, orderId);
+    if (forWa) {
+      void maybeSendWhatsAppConfirmation(userId, "despatch", forWa);
+    }
+  }
 }
 
 // ─── Outbox flush ──────────────────────────────────────────────
