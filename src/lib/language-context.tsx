@@ -27,27 +27,6 @@ const TA: Record<string, string> = {
   "No mobile": "மொபைல் இல்லை",
   "Call": "கால்",
   "WhatsApp": "வாட்ஸ்அப்",
-  "Address loaded from share": "பகிர்வில் இருந்து முகவரி ஏற்றப்பட்டது",
-  "Create order": "ஆர்டர் உருவாக்கு",
-  "Shared address — set quantity and save.": "பகிர்ந்த முகவரி — அளவை அமைத்து சேமிக்கவும்.",
-  "Save order": "ஆர்டரை சேமி",
-  "Quantity": "அளவு",
-  "Floating snip": "மிதக்கும் ஸ்னிப்",
-  "Show a V bubble on all screens (home, WhatsApp, any app). Tap to snip address text. Share still works.":
-    "எல்லா திரைகளிலும் (முகப்பு, WhatsApp, எந்த ஆப்பும்) V பட்டன். முகவரி ஸ்னிப் செய்ய தட்டவும். Share-ம் வேலை செய்யும்.",
-  "Show a V bubble over apps. Tap it, snip WhatsApp address text, then save order. Share still works.":
-    "ஆப்ஸ் மேல் V பட்டன். தட்டி WhatsApp முகவரியை ஸ்னிப் செய்து ஆர்டர் சேமிக்கவும். Share-ம் வேலை செய்யும்.",
-  "Floating snip works on the Android app only.": "மிதக்கும் ஸ்னிப் Android ஆப்பில் மட்டும்.",
-  "Floating snip off.": "மிதக்கும் ஸ்னிப் ஆஃப்.",
-  "Floating snip on. V bubble stays on all screens — tap to snip an address.":
-    "மிதக்கும் ஸ்னிப் ஆன். V பட்டன் எல்லா திரைகளிலும் — முகவரி ஸ்னிப் செய்ய தட்டவும்.",
-  "Floating snip on. Open WhatsApp and tap the V bubble.":
-    "மிதக்கும் ஸ்னிப் ஆன். WhatsApp திறந்து V பட்டனைத் தட்டவும்.",
-  "Allow display over other apps, then turn Floating snip on again.":
-    "மற்ற ஆப்ஸ் மேல் காட்ட அனுமதித்து, மீண்டும் Floating snip-ஐ இயக்கவும்.",
-  "Could not start floating snip.": "மிதக்கும் ஸ்னிப் தொடங்க முடியவில்லை.",
-  "Could not read a proper address. Snip the full address and try again.":
-    "சரியான முகவரி படிக்க முடியவில்லை. முழு முகவரியை ஸ்னிப் செய்து மீண்டும் முயற்சிக்கவும்.",
   "Offer": "ஆஃபர்",
   "No offer": "ஆஃபர் இல்லை",
   "% off": "% தள்ளுபடி",

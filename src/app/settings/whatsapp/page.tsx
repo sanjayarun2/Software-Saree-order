@@ -14,12 +14,6 @@ import {
   upsertWhatsAppSettings,
   type WhatsAppSendWhen,
 } from "@/lib/whatsapp-settings-supabase";
-import { Capacitor } from "@capacitor/core";
-import {
-  SnipAddress,
-  readFloatSnipEnabled,
-  writeFloatSnipEnabled,
-} from "@/lib/snip-address";
 
 export default function WhatsAppSettingsPage() {
   const { user, loading } = useAuth();
@@ -39,8 +33,6 @@ export default function WhatsAppSettingsPage() {
   const [templateName, setTemplateName] = useState("");
   const [templateLanguage, setTemplateLanguage] = useState("en");
   const [sendWhen, setSendWhen] = useState<WhatsAppSendWhen>("create");
-  const [floatSnip, setFloatSnip] = useState(false);
-  const [floatBusy, setFloatBusy] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -74,62 +66,12 @@ export default function WhatsAppSettingsPage() {
     setTemplateName(row.template_name);
     setTemplateLanguage(row.template_language || "en");
     setSendWhen(row.send_when === "despatch" ? "despatch" : "create");
-    setFloatSnip(readFloatSnipEnabled());
     setLoadingRow(false);
   }, [user]);
 
   useEffect(() => {
     if (!checkingAccess && user) void load();
   }, [checkingAccess, user, load]);
-
-  const handleFloatToggle = async (next: boolean) => {
-    if (!Capacitor.isNativePlatform()) {
-      setError(t("Floating snip works on the Android app only."));
-      setFloatSnip(false);
-      writeFloatSnipEnabled(false);
-      return;
-    }
-    setFloatBusy(true);
-    setError(null);
-    setInfo(null);
-    try {
-      if (!next) {
-        await SnipAddress.stopOverlay();
-        writeFloatSnipEnabled(false);
-        setFloatSnip(false);
-        setInfo(t("Floating snip off."));
-        return;
-      }
-      const { granted } = await SnipAddress.hasOverlayPermission();
-      if (!granted) {
-        await SnipAddress.requestOverlayPermission();
-        setError(t("Allow display over other apps, then turn Floating snip on again."));
-        writeFloatSnipEnabled(false);
-        setFloatSnip(false);
-        return;
-      }
-      // Android 13+: ask notification permission for the always-on snip service notice
-      try {
-        const { LocalNotifications } = await import("@capacitor/local-notifications");
-        const current = await LocalNotifications.checkPermissions();
-        if (current.display !== "granted") {
-          await LocalNotifications.requestPermissions();
-        }
-      } catch {
-        /* older build / web */
-      }
-      await SnipAddress.startOverlay();
-      writeFloatSnipEnabled(true);
-      setFloatSnip(true);
-      setInfo(t("Floating snip on. V bubble stays on all screens — tap to snip an address."));
-    } catch (e) {
-      writeFloatSnipEnabled(false);
-      setFloatSnip(false);
-      setError((e as Error).message || t("Could not start floating snip."));
-    } finally {
-      setFloatBusy(false);
-    }
-  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -291,22 +233,6 @@ export default function WhatsAppSettingsPage() {
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {t("Template must have one body variable {{1}} (order summary).")}
             </p>
-
-            <div className="border-t border-slate-200 pt-4 dark:border-slate-600">
-              <label className="flex items-center justify-between gap-3 text-sm font-medium text-slate-800 dark:text-slate-100">
-                <span>{t("Floating snip")}</span>
-                <input
-                  type="checkbox"
-                  checked={floatSnip}
-                  disabled={floatBusy}
-                  onChange={(e) => void handleFloatToggle(e.target.checked)}
-                  className="h-5 w-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                />
-              </label>
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                {t("Show a V bubble on all screens (home, WhatsApp, any app). Tap to snip address text. Share still works.")}
-              </p>
-            </div>
 
             <button
               type="button"

@@ -19,16 +19,6 @@
         tools:targetApi="33" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Floating snip over other apps + screen capture OCR -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
-        tools:targetApi="34" />
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
-        tools:targetApi="34" />
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -72,40 +62,7 @@
                     android:pathPrefix="/callback" />
             </intent-filter>
 
-            <!-- Share address text into Velo (WhatsApp → Share → Velo) -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/*" />
-            </intent-filter>
-
         </activity>
-
-        <activity
-            android:name=".SnipRegionActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:theme="@style/AppTheme.SnipTranslucent"
-            android:launchMode="singleTop" />
-
-        <service
-            android:name=".SnipOverlayService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Floating address snip bubble for order entry" />
-        </service>
-
-        <service
-            android:name=".SnipMediaProjectionService"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
 
         <!-- Optional: backported Photo Picker on older Android 11/12 with Google Play -->
         <service

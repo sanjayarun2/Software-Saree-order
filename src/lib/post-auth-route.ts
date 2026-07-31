@@ -22,8 +22,7 @@ export async function resolvePostAuthRoute(userId: string): Promise<PostAuthPath
   return "/dashboard/";
 }
 
-/** Post-login destination: pending notification/deep link first, then mobile gate.
- * Shared address is handled by ShareAddressBridge popup (not a route). */
+/** Post-login destination: pending notification/deep link first, then mobile gate. */
 export async function resolvePostLoginRoute(userId: string): Promise<string> {
   const pending = consumePendingNavigation();
   if (pending) return pending;
