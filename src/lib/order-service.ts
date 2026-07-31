@@ -28,6 +28,7 @@ import {
   markFullSyncComplete,
   shouldSkipBackgroundDashboardSync,
 } from "./sync-coalesce";
+import { isBookingDayInRange } from "./order-filter-utils";
 
 function isOnline(): boolean {
   return typeof navigator === "undefined" || navigator.onLine;
@@ -135,14 +136,10 @@ export async function getOrdersLocal(userId: string, filters: OrderFilters): Pro
   }
 
   if (!filters.allOrders && filters.fromDate && filters.toDate) {
-    const dateColumn = filters.status === "PENDING" ? "booking_date" : "despatch_date";
-    list = list.filter((o) => {
-      const d = o[dateColumn as keyof Order] as string | null;
-      if (!d) return false;
-      // Compare date portion only (YYYY-MM-DD) for timestamp-safe matching.
-      const day = String(d).slice(0, 10);
-      return day >= filters.fromDate! && day <= filters.toDate!;
-    });
+    // Always booking_date — despatch must not move an order into "Today".
+    list = list.filter((o) =>
+      isBookingDayInRange(o.booking_date, filters.fromDate!, filters.toDate!)
+    );
   } else if (!filters.allOrders) {
     // Date-scoped request missing bounds → show nothing (never fall back to all).
     return [];
@@ -193,7 +190,7 @@ async function revalidateOrders(
     await flushOutbox(userId);
 
     const data = await withAuthRefreshRetry(async () => {
-      const dateColumn = filters.status === "PENDING" ? "booking_date" : "despatch_date";
+      // Same column for Pending and Despatched so day filters stay on booking day.
       let query = supabase
         .from("orders")
         .select("*")
@@ -206,7 +203,9 @@ async function revalidateOrders(
           // Refuse unbounded fetch when caller asked for a date window.
           return [];
         }
-        query = query.gte(dateColumn, filters.fromDate).lte(dateColumn, filters.toDate);
+        query = query
+          .gte("booking_date", filters.fromDate)
+          .lte("booking_date", filters.toDate);
       }
 
       query = query.order("created_at", { ascending: false }).limit(50_000);
@@ -723,20 +722,21 @@ export async function getStatsFromCache(
   for (const o of orders) {
     if (!isVisibleInOrdersList(o)) continue;
 
-    const bookDate = o.booking_date;
+    const inBookingRange = isBookingDayInRange(o.booking_date, from, to);
     const isOwn = o.user_id === userId;
 
-    if (bookDate >= from && bookDate <= to) {
+    if (inBookingRange) {
       total++;
       if (isOwn) ownTotal++;
     }
 
-    if (o.status === "DESPATCHED" && o.despatch_date && o.despatch_date >= from && o.despatch_date <= to) {
+    // Match Orders list: dispatched count is by booking day, not despatch day.
+    if (o.status === "DESPATCHED" && inBookingRange) {
       dispatched++;
       if (isOwn) ownDispatched++;
     }
 
-    if (o.status === "PENDING" && bookDate >= from && bookDate <= to) {
+    if (o.status === "PENDING" && inBookingRange) {
       pending++;
       if (isOwn) ownPending++;
     }

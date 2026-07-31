@@ -6,7 +6,10 @@
 export type PdfAddressRole = "from" | "to";
 
 export type SanitizePdfAddressOptions = {
-  /** Used when TO text has no mobile (e.g. order.booked_mobile_no from Velo). */
+  /**
+   * Used ONLY when TO address text has no detectable mobile.
+   * Never overrides a number pasted inside the address.
+   */
   fallbackMobile?: string | null;
 };
 
@@ -22,9 +25,16 @@ const GSTIN_LINE_RE =
 const GSTIN_INLINE_RE =
   /(?:GST\s*(?:IN|No\.?|Number|#)?|GSTIN)\s*[:.\-]?\s*[0-9A-Z]{15}/gi;
 
-/** Indian mobile: optional +91 / 91 / 0, then 10 digits starting 6–9 (spaces/dashes allowed). */
+/** Indian mobile: optional +91 / 91 / 0, then 10 digits starting 6–9 (spaces/dashes on same line only). */
 const MOBILE_RE =
-  /(?:\+?91[\s\-.]*)?0?([6-9](?:[\s\-.]*\d){9})/g;
+  /(?:\+?91[ \t\-.]*)?0?([6-9](?:[ \t\-.]*\d){9})/g;
+
+/** Labeled pincode: "Pincode : 641402" / "PIN-641402" / "Pin code 641402". */
+const PINCODE_LABELED_RE =
+  /\b(?:pin\s*code|pincode|pin)\s*[:.\-]?\s*([1-9]\d{5})\b/gi;
+
+/** Bare Indian PIN (6 digits, not starting with 0). */
+const PINCODE_BARE_RE = /\b([1-9]\d{5})\b/g;
 
 /** Web order markers that must never appear on TO labels. */
 const WEB_ORDER_LINE_RE =
@@ -52,6 +62,17 @@ export function formatMobNoLine(digits10: string): string {
   return `Mob No : ${d}`;
 }
 
+export function formatPincodeLine(pin6: string): string {
+  const d = String(pin6 ?? "").replace(/\D/g, "").slice(0, 6);
+  return `Pincode : ${d}`;
+}
+
+export function normalizePincodeDigits(raw: string): string | null {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (digits.length === 6 && /^[1-9]\d{5}$/.test(digits)) return digits;
+  return null;
+}
+
 export function normalizeMobileDigits(raw: string): string | null {
   const digits = String(raw ?? "").replace(/\D/g, "");
   if (digits.length === 10 && /^[6-9]/.test(digits)) return digits;
@@ -64,19 +85,78 @@ export function normalizeMobileDigits(raw: string): string | null {
   return null;
 }
 
+/** Every mobile match in document order (duplicates kept). */
+export function extractMobileOccurrences(text: string): string[] {
+  const found: string[] = [];
+  const re = new RegExp(MOBILE_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(String(text ?? ""))) !== null) {
+    const digits = normalizeMobileDigits(m[1] ?? m[0]);
+    if (digits) found.push(digits);
+  }
+  return found;
+}
+
+/** Unique mobiles, first-seen order. */
 export function extractMobiles(text: string): string[] {
   const found: string[] = [];
   const seen = new Set<string>();
-  const re = new RegExp(MOBILE_RE.source, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const digits = normalizeMobileDigits(m[1] ?? m[0]);
-    if (digits && !seen.has(digits)) {
+  for (const digits of extractMobileOccurrences(text)) {
+    if (!seen.has(digits)) {
       seen.add(digits);
       found.push(digits);
     }
   }
   return found;
+}
+
+/**
+ * Mobile for the TO `Mob No :` line.
+ * Address text always wins (last occurrence — typically what was pasted).
+ * Booked / fallback mobile is used only when the address has no number.
+ */
+export function resolveToMobileDigits(
+  addressText: string,
+  fallbackMobile?: string | null
+): string | null {
+  const fromAddress = extractMobileOccurrences(addressText);
+  if (fromAddress.length > 0) {
+    return fromAddress[fromAddress.length - 1] ?? null;
+  }
+  return normalizeMobileDigits(fallbackMobile ?? "");
+}
+
+/**
+ * Pincode occurrences in document order.
+ * Prefer labeled matches; also accept bare 6-digit PINs.
+ * Last occurrence wins (same rule as mobile).
+ */
+export function extractPincodeOccurrences(text: string): string[] {
+  const raw = String(text ?? "");
+  // Strip mobiles first so a 10-digit phone never contributes false PIN fragments.
+  const withoutMobile = raw.replace(new RegExp(MOBILE_RE.source, "g"), " ");
+  const found: string[] = [];
+
+  const labeled = new RegExp(PINCODE_LABELED_RE.source, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = labeled.exec(withoutMobile)) !== null) {
+    const pin = normalizePincodeDigits(m[1] ?? "");
+    if (pin) found.push(pin);
+  }
+
+  const bare = new RegExp(PINCODE_BARE_RE.source, "g");
+  while ((m = bare.exec(withoutMobile)) !== null) {
+    const pin = normalizePincodeDigits(m[1] ?? "");
+    if (pin) found.push(pin);
+  }
+
+  return found;
+}
+
+/** Last pincode found in address text, or null. */
+export function resolveToPincodeDigits(addressText: string): string | null {
+  const all = extractPincodeOccurrences(addressText);
+  return all.length ? all[all.length - 1]! : null;
 }
 
 function stripMobilesFromText(text: string): string {
@@ -85,6 +165,18 @@ function stripMobilesFromText(text: string): string {
     .replace(/\b(?:Mob(?:ile)?|Ph(?:one)?|Tel)\s*(?:No\.?|Number|#)?\s*[:.\-]?\s*/gi, " ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\(\s*\)/g, "")
+    .trim();
+}
+
+/** Remove labeled/bare pincode tokens so we re-append a single `Pincode :` line. */
+function stripPincodesFromText(text: string): string {
+  return text
+    .replace(PINCODE_LABELED_RE, " ")
+    .replace(PINCODE_BARE_RE, " ")
+    .replace(/\b(?:pin\s*code|pincode|pin)\s*[:.\-]*\s*$/gi, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/,\s*,/g, ",")
+    .replace(/^[,\-\s]+|[,\-\s]+$/g, "")
     .trim();
 }
 
@@ -143,7 +235,9 @@ export function stripWebOrderMentions(text: string): string {
  * Sanitize FROM/TO address blocks for PDF labels / stored TO text.
  * - Both: strip ® / (R)
  * - FROM: remove GSTIN
- * - TO: remove email, Web #, IN → India, phone last line as `Mob No : …`
+ * - TO: remove email, Web #, IN → India;
+ *   `Pincode : …` on its own line (before Mob No) when a PIN is present — no duplicate label;
+ *   `Mob No : …` as the final line when a mobile is present.
  */
 export function sanitizePdfAddress(
   text: string,
@@ -163,24 +257,30 @@ export function sanitizePdfAddress(
 
   // TO
   raw = stripWebOrderMentions(raw);
-  const mobilesFromText = extractMobiles(raw);
-  const fallback = normalizeMobileDigits(options?.fallbackMobile ?? "");
-  const mobile = mobilesFromText[0] ?? fallback ?? null;
+  const mobile = resolveToMobileDigits(raw, options?.fallbackMobile);
+  const pincode = resolveToPincodeDigits(raw);
 
   const lines = raw
     .split("\n")
     .filter(Boolean)
     .map((line) => stripEmailsFromText(line))
     .map((line) => stripMobilesFromText(line))
+    .map((line) => stripPincodesFromText(line))
     .map((line) => expandCountryInToIndia(line))
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
   const cleaned = lines.filter(
-    (line) => !/^(?:e-?mail|mob(?:ile)?|ph(?:one)?|tel|web\s*#?)\s*[:.\-]*$/i.test(line)
+    (line) =>
+      !/^(?:e-?mail|mob(?:ile)?|ph(?:one)?|tel|web\s*#?|pin(?:\s*code)?|pincode)\s*[:.\-]*$/i.test(
+        line
+      )
   );
 
-  // Mob No is mandatory on TO when any mobile is available (text or fallback).
+  // Pincode line comes immediately before Mob No (never duplicate the phrase).
+  if (pincode) {
+    cleaned.push(formatPincodeLine(pincode));
+  }
   if (mobile) {
     cleaned.push(formatMobNoLine(mobile));
   }
@@ -190,7 +290,7 @@ export function sanitizePdfAddress(
 
 /**
  * Build a clean TO block for Velo/website imports:
- * name + address lines, no Web # / items, mandatory Mob No last line when mobile exists.
+ * name + address lines, no Web # / items; Pincode then Mob No as trailing lines when present.
  */
 export function buildWebsiteToAddress(opts: {
   customerName?: string | null;
@@ -213,7 +313,7 @@ export function buildWebsiteToAddress(opts: {
   return cleaned.slice(0, max);
 }
 
-/** True when text still has ® / GSTIN / email / Web # / bare country IN / unformatted phone. */
+/** True when text still has ® / GSTIN / email / Web # / bare country IN / unformatted phone/pin. */
 export function pdfAddressNeedsCleanup(text: string, role: PdfAddressRole): boolean {
   const t = String(text ?? "");
   if (REGISTERED_MARK_RE.test(t)) return true;
@@ -229,11 +329,9 @@ export function pdfAddressNeedsCleanup(text: string, role: PdfAddressRole): bool
     EMAIL_RE.lastIndex = 0;
     if (/Web\s*#/i.test(t) || /\bwebsite\s+order\b/i.test(t)) return true;
     if (/,\s*IN\b|(?:^|[\s])IN(?:\s+\d{6}\b|$)/m.test(t)) return true;
-    const mobiles = extractMobiles(t);
-    if (mobiles.length) {
-      const currentLast = tidyLines(t).split("\n").pop() ?? "";
-      if (currentLast !== formatMobNoLine(mobiles[0])) return true;
-    }
+
+    const expected = sanitizePdfAddress(t, "to");
+    if (tidyLines(t) !== expected) return true;
   }
   return false;
 }

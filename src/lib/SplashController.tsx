@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 
 /**
  * Shows centered logo splash while auth loads; hides Capacitor native splash when ready.
- * Industry-standard: centered logo, proper size, subtle spinner.
+ * Industry-standard: keep splash until session restore finishes — never flash Login mid-bootstrap.
  */
 export function SplashController({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();

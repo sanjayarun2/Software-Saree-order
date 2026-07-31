@@ -603,9 +603,14 @@ export const LABEL_TO_ADDRESS_GAP_MM = 9;
 const MIN_GAP_TO_CENTER_MM = 2;
 
 const MOB_NO_LINE_RE = /^\(?\s*Mob No\s*:/i;
+const PINCODE_LINE_RE = /^\(?\s*Pincode\s*:/i;
 
 function isMobNoLine(line: string): boolean {
   return MOB_NO_LINE_RE.test(String(line ?? "").trim());
+}
+
+function isPincodeLine(line: string): boolean {
+  return PINCODE_LINE_RE.test(String(line ?? "").trim());
 }
 
 /** Remove blank lines (whitespace-only) from pasted/typed addresses before PDF render. */
@@ -679,8 +684,8 @@ function getBaseTypographyPt(settings: PdfRenderOptions["settings"]): {
 
 /**
  * Wrap every line to column width, then cap line count.
- * TO labels: always keep a full `Mob No : …` as the final line — never merge/truncate
- * into the previous address line (which produced visible "India (Mob").
+ * TO labels: keep trailing `Pincode : …` then `Mob No : …` intact — never merge/truncate
+ * into the previous address line.
  */
 export function fitAddressLinesToColumn(
   doc: { splitTextToSize: (s: string, w: number) => string[] },
@@ -691,22 +696,29 @@ export function fitAddressLinesToColumn(
   const wrapped = getPdfAddressLines(doc, text, maxW);
   if (wrapped.length <= maxLines) return wrapped;
 
-  const last = wrapped[wrapped.length - 1] ?? "";
-  const preserveMob = isMobNoLine(last) && maxLines >= 2;
+  const footer: string[] = [];
+  const body = [...wrapped];
+  if (body.length && isMobNoLine(body[body.length - 1]!)) {
+    footer.unshift(body.pop()!);
+  }
+  if (body.length && isPincodeLine(body[body.length - 1]!)) {
+    footer.unshift(body.pop()!);
+  }
 
-  if (preserveMob) {
-    const mobLine =
-      doc.splitTextToSize(softBreakLongRuns(last.trim()), maxW)[0] ?? last.trim();
-    const body = wrapped.slice(0, -1);
-    const bodyMax = maxLines - 1;
+  if (footer.length && maxLines > footer.length) {
+    const fittedFooter = footer.map(
+      (line) => doc.splitTextToSize(softBreakLongRuns(line.trim()), maxW)[0] ?? line.trim()
+    );
+    const bodyMax = maxLines - fittedFooter.length;
     if (body.length <= bodyMax) {
-      return [...body, mobLine];
+      return [...body, ...fittedFooter];
     }
+    if (bodyMax <= 0) return fittedFooter.slice(-maxLines);
     const head = body.slice(0, bodyMax - 1);
     const overflowSource = softBreakLongRuns(body.slice(bodyMax - 1).join(" "));
     const overflowFirst =
       doc.splitTextToSize(overflowSource, maxW)[0] ?? overflowSource;
-    return [...head, overflowFirst, mobLine];
+    return [...head, overflowFirst, ...fittedFooter];
   }
 
   const head = wrapped.slice(0, maxLines - 1);

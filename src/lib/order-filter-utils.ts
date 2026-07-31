@@ -25,6 +25,27 @@ export function localDateIso(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Booking calendar day (YYYY-MM-DD). Orders list/date presets always key off booking_date,
+ * never despatch_date — so a last-week booking despatched today stays under last week.
+ */
+export function orderBookingDay(bookingDate: string | null | undefined): string | null {
+  if (bookingDate == null) return null;
+  const day = String(bookingDate).trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+}
+
+/** True when booking_date’s calendar day is inside [fromDate, toDate] inclusive. */
+export function isBookingDayInRange(
+  bookingDate: string | null | undefined,
+  fromDate: string,
+  toDate: string
+): boolean {
+  const day = orderBookingDay(bookingDate);
+  if (!day) return false;
+  return day >= fromDate && day <= toDate;
+}
+
 /** Shift a YYYY-MM-DD local calendar day by `days` (can be negative). */
 export function shiftLocalDateIso(iso: string, days: number): string {
   const [y, m, d] = iso.split("-").map(Number);

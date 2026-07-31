@@ -38,6 +38,7 @@ import {
   dateScopeFromFilters,
   resolveOrderFilters,
   orderFiltersEqual,
+  localDateIso,
   type OrderFilterState,
 } from "@/lib/order-filter-utils";
 import {
@@ -48,7 +49,6 @@ import {
   OrderDetailSheet,
   orderDetailSheetLabels,
 } from "@/components/orders/OrderDetailSheet";
-import { supabase } from "@/lib/supabase";
 import {
   consumeFocusExternalOrderId,
   getOrdersSyncUi,
@@ -239,18 +239,9 @@ export default function OrdersPage() {
   };
 
   useEffect(() => {
+    // Industry standard: wait for auth bootstrap — never send to Login while restoring.
     if (authLoading) return;
-    if (user) return;
-
-    let cancelled = false;
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      if (cancelled) return;
-      if (!session?.user) router.replace("/login/");
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    if (!user) router.replace("/login/");
   }, [user, authLoading, router]);
 
   const refreshPendingCount = React.useCallback(async () => {
@@ -527,7 +518,7 @@ export default function OrdersPage() {
   const confirmDispatch = async () => {
     if (!user || !dispatchOrder) return;
     setDispatching(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateIso();
     const tn = trackingNumber.trim() || null;
     try {
       await svcUpdateOrderStatus(user.id, dispatchOrder.id, "DESPATCHED", today, tn);

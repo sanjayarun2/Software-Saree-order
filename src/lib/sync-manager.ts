@@ -11,6 +11,8 @@ import {
   scheduleResumeSync,
   wasWebsitePollRecent,
 } from "./sync-coalesce";
+import { seedOrderAlertDedupeFromDeliveredPushes } from "./push-registration-service";
+import { seedOrderAlertDedupeFromServer } from "./order-alert-service";
 
 let initialized = false;
 let userId: string | null = null;
@@ -35,11 +37,20 @@ function canRunWebsitePoll(): boolean {
   return appInForeground;
 }
 
+async function seedAlertDedupeBeforePoll(uid: string): Promise<void> {
+  await Promise.all([
+    seedOrderAlertDedupeFromDeliveredPushes(),
+    seedOrderAlertDedupeFromServer(uid),
+  ]);
+}
+
 async function safeWebsitePoll() {
   if (!userId) return;
   if (!canRunWebsitePoll()) return;
   if (wasWebsitePollRecent()) return;
   try {
+    // Mark tray/server FCM as already notified before poll can re-alert.
+    await seedAlertDedupeBeforePoll(userId);
     await pollVeloWebsiteOrders(userId);
   } catch (err) {
     console.warn("[SyncManager] website poll failed:", err);

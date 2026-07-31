@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { clearSession } from "./capacitor-storage";
@@ -27,6 +27,11 @@ function notifyDeviceSlotEvicted(r: ResolveDeviceResult): void {
   }
 }
 
+/**
+ * Industry standard auth gate:
+ * Keep `loading === true` until the initial session (and device check) fully settles.
+ * Never flash Login while Preferences restore / token refresh / device resolve is in flight.
+ */
 type AuthContextType = {
   user: User | null;
   session: Session | null;
@@ -39,127 +44,139 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Hard ceiling only — splash stays until bootstrap finishes or this fires. */
+const BOOTSTRAP_HARD_TIMEOUT_MS = 20_000;
+
+async function gateSessionDevice(session: Session | null): Promise<Session | null> {
+  if (!session?.user) return null;
+  if (typeof window === "undefined") return session;
+
+  const deviceId = getOrCreateDeviceId();
+  if (!deviceId) return session;
+
+  const r = await resolveDeviceForSessionOnce(session.user.id, deviceId);
+  if (!r.ok) {
+    markSessionEndedForDeviceLimit();
+    await supabase.auth.signOut();
+    await clearSession();
+    return null;
+  }
+  notifyDeviceSlotEvicted(r);
+  return session;
+}
+
+function persistReturningProfile(session: Session) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("saree_app_returning", "1");
+  } catch {
+    /* ignore */
+  }
+
+  const pendingMobile = getPendingMobileForGoogleAuth();
+  const payload: { user_id: string; mobile?: string; email?: string; updated_at: string } = {
+    user_id: session.user.id,
+    updated_at: new Date().toISOString(),
+  };
+  if (pendingMobile) payload.mobile = pendingMobile;
+  if (session.user.email) payload.email = session.user.email;
+  if (payload.mobile || payload.email) {
+    void supabase
+      .from("user_profiles")
+      .upsert(payload, { onConflict: "user_id" })
+      .then(() => {
+        clearPendingMobileForGoogleAuth();
+      })
+      .then(undefined, () => {});
+  }
+
+  void import("./default-from-address").then(({ hydrateDefaultFromAddress }) =>
+    hydrateDefaultFromAddress(session.user.id)
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const bootstrappedRef = useRef(false);
+  const bootstrapGenRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
 
-    const stopLoading = () => {
-      if (!cancelled) setLoading(false);
+    const publish = (next: Session | null) => {
+      if (cancelled) return;
+      setSession(next);
+      setUser(next?.user ?? null);
+      setLoading(false);
+      bootstrappedRef.current = true;
     };
 
-    const timeout = setTimeout(stopLoading, 5000);
-
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session }, error }) => {
-        if (cancelled) return;
-        clearTimeout(timeout);
-        if (!error && session?.user && typeof window !== "undefined") {
-          const deviceId = getOrCreateDeviceId();
-          if (deviceId) {
-            const r = await resolveDeviceForSessionOnce(session.user.id, deviceId);
-            if (!r.ok) {
-              markSessionEndedForDeviceLimit();
-              await supabase.auth.signOut();
-              await clearSession();
-              if (!cancelled) {
-                setSession(null);
-                setUser(null);
-              }
-              stopLoading();
-              return;
-            }
-            notifyDeviceSlotEvicted(r);
-          }
-        }
-        if (!cancelled && !error) {
-          setSession(session);
-          setUser(session?.user ?? null);
-          if (session?.user?.id) {
-            void import("./default-from-address").then(({ hydrateDefaultFromAddress }) =>
-              hydrateDefaultFromAddress(session.user.id)
-            );
-          }
-        }
-        stopLoading();
-      })
-      .catch(() => {
-        if (!cancelled) {
-          clearTimeout(timeout);
-          setSession(null);
-          setUser(null);
-          stopLoading();
-        }
-      });
+    const finishBootstrap = async (incoming: Session | null) => {
+      const gen = ++bootstrapGenRef.current;
+      try {
+        const gated = await gateSessionDevice(incoming);
+        if (cancelled || gen !== bootstrapGenRef.current) return;
+        if (gated?.user) persistReturningProfile(gated);
+        publish(gated);
+      } catch {
+        if (cancelled || gen !== bootstrapGenRef.current) return;
+        publish(null);
+      }
+    };
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (cancelled) return;
 
-      if (!session?.user) {
-        setSession(session);
-        setUser(null);
+      // Supabase emits INITIAL_SESSION after storage restore (incl. Capacitor Preferences).
+      if (event === "INITIAL_SESSION") {
+        void finishBootstrap(nextSession);
         return;
       }
 
-      if (typeof window === "undefined") {
-        setSession(session);
-        setUser(session.user);
+      // Until bootstrap completes, ignore other events (avoids null flash mid-restore).
+      if (!bootstrappedRef.current) return;
+
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setUser(null);
+        setLoading(false);
         return;
       }
+
+      // TOKEN_REFRESHED / SIGNED_IN / USER_UPDATED — never clear user on transient null.
+      if (!nextSession?.user) return;
 
       void (async () => {
-        const deviceId = getOrCreateDeviceId();
-        if (deviceId) {
-          const r = await resolveDeviceForSessionOnce(session.user.id, deviceId);
-          if (!r.ok) {
-            markSessionEndedForDeviceLimit();
-            await supabase.auth.signOut();
-            await clearSession();
-            if (!cancelled) {
-              setSession(null);
-              setUser(null);
-            }
-            return;
-          }
-          notifyDeviceSlotEvicted(r);
+        const gen = ++bootstrapGenRef.current;
+        const gated = await gateSessionDevice(nextSession);
+        if (cancelled || gen !== bootstrapGenRef.current) return;
+        if (!gated?.user) {
+          setSession(null);
+          setUser(null);
+          return;
         }
-        if (cancelled) return;
-
-        setSession(session);
-        setUser(session.user);
-        void import("./default-from-address").then(({ hydrateDefaultFromAddress }) =>
-          hydrateDefaultFromAddress(session.user.id)
-        );
-
-        localStorage.setItem("saree_app_returning", "1");
-        const pendingMobile = getPendingMobileForGoogleAuth();
-        const payload: { user_id: string; mobile?: string; email?: string; updated_at: string } = {
-          user_id: session.user.id,
-          updated_at: new Date().toISOString(),
-        };
-        if (pendingMobile) payload.mobile = pendingMobile;
-        if (session.user.email) payload.email = session.user.email;
-        if (payload.mobile || payload.email) {
-          supabase
-            .from("user_profiles")
-            .upsert(payload, { onConflict: "user_id" })
-            .then(() => {
-              clearPendingMobileForGoogleAuth();
-            })
-            .then(undefined, () => {});
-        }
+        setSession(gated);
+        setUser(gated.user);
+        persistReturningProfile(gated);
       })();
     });
 
+    // Safety net if INITIAL_SESSION is delayed (slow Preferences / network refresh).
+    const hardTimeout = setTimeout(() => {
+      if (cancelled || bootstrappedRef.current) return;
+      void supabase.auth.getSession().then(({ data }) => {
+        if (cancelled || bootstrappedRef.current) return;
+        void finishBootstrap(data.session ?? null);
+      });
+    }, BOOTSTRAP_HARD_TIMEOUT_MS);
+
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
+      clearTimeout(hardTimeout);
       subscription.unsubscribe();
     };
   }, []);
@@ -227,6 +244,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearDeviceResolveCache();
     setSession(null);
     setUser(null);
+    setLoading(false);
   };
 
   return (

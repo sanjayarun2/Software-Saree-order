@@ -9,7 +9,8 @@ import {
 import {
   notifyNewWebsiteOrders,
   ensureOrderNotificationChannel,
-  wasOrderRecentlyNotified,
+  markOrderNotified,
+  markOrdersNotified,
   type ImportedWebsiteOrderSummary,
 } from "./order-alert-service";
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
@@ -46,6 +47,27 @@ function orderFromPushData(data: Record<string, unknown>): ImportedWebsiteOrderS
   return { externalOrderId, customerName, quantity };
 }
 
+/**
+ * Seed client dedupe from FCM notifications already shown in the system tray.
+ * Background FCM never runs JS, so without this a resume poll re-alerts the same order.
+ */
+export async function seedOrderAlertDedupeFromDeliveredPushes(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const delivered = await PushNotifications.getDeliveredNotifications();
+    const ids: string[] = [];
+    for (const n of delivered.notifications ?? []) {
+      const data = (n.data ?? {}) as Record<string, unknown>;
+      const order = orderFromPushData(data);
+      if (order) ids.push(order.externalOrderId);
+    }
+    if (ids.length) markOrdersNotified(ids);
+  } catch (e) {
+    console.warn("[Push] seed dedupe from delivered failed:", e);
+  }
+}
+
 async function persistToken(userId: string, token: string): Promise<void> {
   currentToken = token;
   await upsertPushDeviceToken(userId, token, pushPlatform(), getOrCreateDeviceId());
@@ -63,7 +85,11 @@ export async function initPushRegistration(userId: string): Promise<void> {
     return;
   }
 
-  if (initialized) return;
+  if (initialized) {
+    // Re-seed on every call so a later app open still marks tray notifications.
+    void seedOrderAlertDedupeFromDeliveredPushes();
+    return;
+  }
 
   initialized = true;
 
@@ -101,6 +127,7 @@ export async function initPushRegistration(userId: string): Promise<void> {
         const data = (notification.data ?? {}) as Record<string, unknown>;
         const order = orderFromPushData(data);
         if (order) {
+          // Foreground delivery: in-app alert once (claim/dedupe inside notify).
           void notifyNewWebsiteOrders([order], { fromPush: true });
         }
       }
@@ -109,11 +136,10 @@ export async function initPushRegistration(userId: string): Promise<void> {
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
       (action) => {
+        // User already saw the OS/FCM notification — mark only, never re-alert.
         const data = (action.notification?.data ?? {}) as Record<string, unknown>;
         const order = orderFromPushData(data);
-        if (order && readOrderAlertsEnabled() && !wasOrderRecentlyNotified(order.externalOrderId)) {
-          void notifyNewWebsiteOrders([order], { fromPush: true });
-        }
+        if (order) markOrderNotified(order.externalOrderId);
         openOrdersPage(order?.externalOrderId);
       }
     );
@@ -126,6 +152,7 @@ export async function initPushRegistration(userId: string): Promise<void> {
     );
 
     await PushNotifications.register();
+    await seedOrderAlertDedupeFromDeliveredPushes();
   } catch (e) {
     console.warn("[Push] init failed (google-services.json may be missing):", e);
     initialized = false;

@@ -26,8 +26,6 @@ export type OrdersFilterModalProps = {
     title: string;
     bookingFrom: string;
     bookingTo: string;
-    dispatchFrom: string;
-    dispatchTo: string;
     today: string;
     yesterday: string;
     thisWeek: string;
@@ -136,8 +134,8 @@ export function OrdersFilterModal({
 
   if (!open) return null;
 
-  const fromLabel = status === "PENDING" ? labels.bookingFrom : labels.dispatchFrom;
-  const toLabel = status === "PENDING" ? labels.bookingTo : labels.dispatchTo;
+  const fromLabel = labels.bookingFrom;
+  const toLabel = labels.bookingTo;
 
   return (
     <div
@@ -284,8 +282,6 @@ export function ordersFilterModalLabels(t: (key: string) => string) {
     title: t("Filter orders"),
     bookingFrom: t("Booking From date"),
     bookingTo: t("Booking To date"),
-    dispatchFrom: t("Dispatch From date"),
-    dispatchTo: t("Dispatch To date"),
     today: t("Today"),
     yesterday: t("Yesterday"),
     thisWeek: t("This Week"),

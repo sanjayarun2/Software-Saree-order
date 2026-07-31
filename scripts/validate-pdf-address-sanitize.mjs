@@ -15,7 +15,10 @@ const GSTIN_LINE_RE =
   /^\s*(?:GST\s*(?:IN|No\.?|Number|#)?|GSTIN)\s*[:.\-]?\s*[0-9A-Z]{15}\s*$/i;
 const GSTIN_INLINE_RE =
   /(?:GST\s*(?:IN|No\.?|Number|#)?|GSTIN)\s*[:.\-]?\s*[0-9A-Z]{15}/gi;
-const MOBILE_RE = /(?:\+?91[\s\-.]*)?0?([6-9](?:[\s\-.]*\d){9})/g;
+const MOBILE_RE = /(?:\+?91[ \t\-.]*)?0?([6-9](?:[ \t\-.]*\d){9})/g;
+const PINCODE_LABELED_RE =
+  /\b(?:pin\s*code|pincode|pin)\s*[:.\-]?\s*([1-9]\d{5})\b/gi;
+const PINCODE_BARE_RE = /\b([1-9]\d{5})\b/g;
 const WEB_ORDER_LINE_RE =
   /^(?:web\s*#|web\s*order|website\s*order|order\s*#?\s*web)\b/i;
 
@@ -40,6 +43,17 @@ function formatMobNoLine(digits10) {
   return `Mob No : ${d}`;
 }
 
+function formatPincodeLine(pin6) {
+  const d = String(pin6 ?? "").replace(/\D/g, "").slice(0, 6);
+  return `Pincode : ${d}`;
+}
+
+function normalizePincodeDigits(raw) {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (digits.length === 6 && /^[1-9]\d{5}$/.test(digits)) return digits;
+  return null;
+}
+
 function normalizeMobileDigits(raw) {
   const digits = String(raw ?? "").replace(/\D/g, "");
   if (digits.length === 10 && /^[6-9]/.test(digits)) return digits;
@@ -52,19 +66,44 @@ function normalizeMobileDigits(raw) {
   return null;
 }
 
-function extractMobiles(text) {
+function extractMobileOccurrences(text) {
   const found = [];
-  const seen = new Set();
   const re = new RegExp(MOBILE_RE.source, "g");
   let m;
-  while ((m = re.exec(text)) !== null) {
+  while ((m = re.exec(String(text ?? ""))) !== null) {
     const digits = normalizeMobileDigits(m[1] ?? m[0]);
-    if (digits && !seen.has(digits)) {
-      seen.add(digits);
-      found.push(digits);
-    }
+    if (digits) found.push(digits);
   }
   return found;
+}
+
+/** Address paste wins (last occurrence); booked/fallback only if address has none. */
+function resolveToMobileDigits(addressText, fallbackMobile) {
+  const fromAddress = extractMobileOccurrences(addressText);
+  if (fromAddress.length > 0) return fromAddress[fromAddress.length - 1];
+  return normalizeMobileDigits(fallbackMobile ?? "");
+}
+
+function extractPincodeOccurrences(text) {
+  const withoutMobile = String(text ?? "").replace(new RegExp(MOBILE_RE.source, "g"), " ");
+  const found = [];
+  const labeled = new RegExp(PINCODE_LABELED_RE.source, "gi");
+  let m;
+  while ((m = labeled.exec(withoutMobile)) !== null) {
+    const pin = normalizePincodeDigits(m[1] ?? "");
+    if (pin) found.push(pin);
+  }
+  const bare = new RegExp(PINCODE_BARE_RE.source, "g");
+  while ((m = bare.exec(withoutMobile)) !== null) {
+    const pin = normalizePincodeDigits(m[1] ?? "");
+    if (pin) found.push(pin);
+  }
+  return found;
+}
+
+function resolveToPincodeDigits(addressText) {
+  const all = extractPincodeOccurrences(addressText);
+  return all.length ? all[all.length - 1] : null;
 }
 
 function stripMobilesFromText(text) {
@@ -73,6 +112,17 @@ function stripMobilesFromText(text) {
     .replace(/\b(?:Mob(?:ile)?|Ph(?:one)?|Tel)\s*(?:No\.?|Number|#)?\s*[:.\-]?\s*/gi, " ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\(\s*\)/g, "")
+    .trim();
+}
+
+function stripPincodesFromText(text) {
+  return text
+    .replace(PINCODE_LABELED_RE, " ")
+    .replace(PINCODE_BARE_RE, " ")
+    .replace(/\b(?:pin\s*code|pincode|pin)\s*[:.\-]*\s*$/gi, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/,\s*,/g, ",")
+    .replace(/^[,\-\s]+|[,\-\s]+$/g, "")
     .trim();
 }
 
@@ -132,23 +182,27 @@ function sanitizePdfAddress(text, role, options = {}) {
   }
 
   raw = stripWebOrderMentions(raw);
-  const mobilesFromText = extractMobiles(raw);
-  const fallback = normalizeMobileDigits(options.fallbackMobile ?? "");
-  const mobile = mobilesFromText[0] ?? fallback ?? null;
+  const mobile = resolveToMobileDigits(raw, options.fallbackMobile);
+  const pincode = resolveToPincodeDigits(raw);
 
   const lines = raw
     .split("\n")
     .filter(Boolean)
     .map((line) => stripEmailsFromText(line))
     .map((line) => stripMobilesFromText(line))
+    .map((line) => stripPincodesFromText(line))
     .map((line) => expandCountryInToIndia(line))
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
   const cleaned = lines.filter(
-    (line) => !/^(?:e-?mail|mob(?:ile)?|ph(?:one)?|tel|web\s*#?)\s*[:.\-]*$/i.test(line)
+    (line) =>
+      !/^(?:e-?mail|mob(?:ile)?|ph(?:one)?|tel|web\s*#?|pin(?:\s*code)?|pincode)\s*[:.\-]*$/i.test(
+        line
+      )
   );
 
+  if (pincode) cleaned.push(formatPincodeLine(pincode));
   if (mobile) cleaned.push(formatMobNoLine(mobile));
   return tidyLines(cleaned.join("\n"));
 }
@@ -207,6 +261,25 @@ check("TO uses fallback mobile when address has none", () => {
   assert.equal(out.split("\n").pop(), "Mob No : 9876543210");
 });
 
+check("pasted address mobile wins over booked/fallback", () => {
+  const out = sanitizePdfAddress(
+    "Anita\n12 Street, Chennai\n9999911111",
+    "to",
+    { fallbackMobile: "8888822222" }
+  );
+  assert.equal(out.split("\n").pop(), "Mob No : 9999911111");
+  assert.ok(!/8888822222/.test(out));
+});
+
+check("last pasted mobile wins when address has old Mob No + new number", () => {
+  const out = sanitizePdfAddress(
+    "Anita\nChennai\nMob No : 8888822222\n9999911111",
+    "to",
+    { fallbackMobile: "7777733333" }
+  );
+  assert.equal(out.split("\n").pop(), "Mob No : 9999911111");
+});
+
 check("Velo TO builder has no Web # / Items and ends with Mob No", () => {
   const out = buildWebsiteToAddress({
     customerName: "Anita",
@@ -216,12 +289,38 @@ check("Velo TO builder has no Web # / Items and ends with Mob No", () => {
   assert.ok(!/Web\s*#/i.test(out));
   assert.ok(!/Items:/i.test(out));
   assert.ok(out.startsWith("Anita"));
-  assert.equal(out.split("\n").pop(), "Mob No : 9876543210");
+  const lines = out.split("\n");
+  assert.equal(lines[lines.length - 1], "Mob No : 9876543210");
+  assert.equal(lines[lines.length - 2], "Pincode : 600001");
+});
+
+check("bare pincode becomes Pincode line before Mob No", () => {
+  const out = sanitizePdfAddress(
+    "Anita\n12 Street, Coimbatore 641402\n9876543210",
+    "to"
+  );
+  const lines = out.split("\n");
+  assert.equal(lines[lines.length - 1], "Mob No : 9876543210");
+  assert.equal(lines[lines.length - 2], "Pincode : 641402");
+  assert.ok(!/641402/.test(lines.slice(0, -2).join("\n")));
+});
+
+check("existing Pincode : phrase is not duplicated", () => {
+  const out = sanitizePdfAddress(
+    "Anita\nChennai\nPincode : 600001\nPincode : 600001\n9876543210",
+    "to"
+  );
+  const lines = out.split("\n");
+  const pinLines = lines.filter((l) => /^Pincode\s*:/i.test(l));
+  assert.equal(pinLines.length, 1);
+  assert.equal(pinLines[0], "Pincode : 600001");
+  assert.equal(lines[lines.length - 1], "Mob No : 9876543210");
+  assert.equal(lines[lines.length - 2], "Pincode : 600001");
 });
 
 check("idempotent sanitize", () => {
   const once = sanitizePdfAddress(
-    "Anita\nChennai, IN\nWeb # X\nanita@x.com\n+91-9876543210",
+    "Anita\nChennai, IN 600001\nWeb # X\nanita@x.com\n+91-9876543210",
     "to"
   );
   const twice = sanitizePdfAddress(once, "to");
@@ -239,6 +338,7 @@ check("source exports Web/Velo helpers", () => {
     "buildWebsiteToAddress",
     "stripWebOrderMentions",
     "formatMobNoLine",
+    "formatPincodeLine",
   ]) {
     assert.ok(src.includes(`export function ${name}`), `missing ${name}`);
   }
@@ -250,10 +350,11 @@ check("source exports Web/Velo helpers", () => {
   assert.ok(!/parts\.push\(`Web #/.test(velo));
 });
 
-check("PDF fit keeps full Mob No as last line when over cap", () => {
+check("PDF fit keeps Pincode + Mob No footer when over cap", () => {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const pdfSrc = readFileSync(resolve(__dirname, "../src/lib/pdf-utils.ts"), "utf8");
-  assert.ok(pdfSrc.includes("preserveMob"), "fitAddressLinesToColumn must preserve Mob line");
+  assert.ok(pdfSrc.includes("isMobNoLine"), "fit must detect Mob No footer");
+  assert.ok(pdfSrc.includes("isPincodeLine"), "fit must detect Pincode footer");
   assert.ok(
     pdfSrc.includes("LABEL_TO_ADDRESS_GAP_MM = 9"),
     "FROM/TO label gap should be 9mm"
@@ -263,7 +364,6 @@ check("PDF fit keeps full Mob No as last line when over cap", () => {
     "fitAddressLinesToColumn should be exported"
   );
 
-  // Mirror the preserve-Mob fit algorithm used in pdf-utils.
   function softBreakLongRuns(text, chunkSize = 14) {
     return text
       .split(/(\s+)/)
@@ -277,10 +377,13 @@ check("PDF fit keeps full Mob No as last line when over cap", () => {
   }
   function fit(wrapped, maxLines, maxW = 80) {
     if (wrapped.length <= maxLines) return wrapped;
-    const last = wrapped[wrapped.length - 1] ?? "";
-    const preserveMob = /^\(?\s*Mob No\s*:/i.test(last.trim()) && maxLines >= 2;
+    const isMob = (l) => /^\(?\s*Mob No\s*:/i.test(String(l ?? "").trim());
+    const isPin = (l) => /^\(?\s*Pincode\s*:/i.test(String(l ?? "").trim());
+    const footer = [];
+    const body = [...wrapped];
+    if (body.length && isMob(body[body.length - 1])) footer.unshift(body.pop());
+    if (body.length && isPin(body[body.length - 1])) footer.unshift(body.pop());
     const split = (s) => {
-      // crude width: ~chars
       const out = [];
       let cur = "";
       for (const word of softBreakLongRuns(s).split(/\s+/)) {
@@ -293,14 +396,13 @@ check("PDF fit keeps full Mob No as last line when over cap", () => {
       if (cur) out.push(cur);
       return out.length ? out : [s];
     };
-    if (preserveMob) {
-      const mobLine = split(last.trim())[0] ?? last.trim();
-      const body = wrapped.slice(0, -1);
-      const bodyMax = maxLines - 1;
-      if (body.length <= bodyMax) return [...body, mobLine];
+    if (footer.length && maxLines > footer.length) {
+      const fittedFooter = footer.map((l) => split(l.trim())[0] ?? l.trim());
+      const bodyMax = maxLines - fittedFooter.length;
+      if (body.length <= bodyMax) return [...body, ...fittedFooter];
       const head = body.slice(0, bodyMax - 1);
       const overflowFirst = split(body.slice(bodyMax - 1).join(" "))[0];
-      return [...head, overflowFirst, mobLine];
+      return [...head, overflowFirst, ...fittedFooter];
     }
     return wrapped.slice(0, maxLines);
   }
@@ -310,14 +412,16 @@ check("PDF fit keeps full Mob No as last line when over cap", () => {
     "AMEYA FOOD COMPANY,",
     "37, Amaravathy Nagar, 1st Street,",
     "Chinna Thottipalayam, Coimbatore, Tamil",
-    "Nadu, 641402, India",
+    "Nadu, India",
     "Extra area line that forces overflow",
     "Another overflow line",
+    "Pincode : 641402",
     "Mob No : 9876543210",
   ];
   const fitted = fit(longTo, 7);
   assert.equal(fitted.length, 7);
   assert.equal(fitted[fitted.length - 1], "Mob No : 9876543210");
+  assert.equal(fitted[fitted.length - 2], "Pincode : 641402");
   assert.ok(!fitted.some((l) => /\(Mob$/.test(l) || /^Mob$/.test(l)), "must not truncate mid Mob");
   assert.ok(
     !fitted.some((l) => /India\s*\(?\s*Mob/.test(l)),

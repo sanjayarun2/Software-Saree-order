@@ -1,5 +1,6 @@
 import type { PluginListenerHandle } from "@capacitor/core";
 import { Capacitor } from "@capacitor/core";
+import { supabase } from "./supabase";
 import { readOrderAlertsEnabled } from "./order-alert-preferences";
 import { requestOpenOrdersPage } from "./order-notification-navigation";
 
@@ -13,6 +14,8 @@ export type ImportedWebsiteOrderSummary = {
 
 /** Only alert on orders paid within this window during in-app poll sync. */
 const SYNC_ALERT_MAX_AGE_MS = 5 * 60 * 1000;
+/** Look back a bit past the sync alert window when seeding from server FCM dedupe. */
+const SERVER_DEDUPE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 const DEDUPE_KEY = "velo_order_alert_notified_v1";
 const DEDUPE_MAX = 400;
@@ -54,8 +57,51 @@ function wasRecentlyNotified(externalOrderId: string): boolean {
 }
 
 function markNotified(externalOrderId: string) {
-  const next = [{ id: externalOrderId, at: Date.now() }, ...readDedupe().filter((e) => e.id !== externalOrderId)];
+  const id = externalOrderId.trim();
+  if (!id) return;
+  const next = [{ id, at: Date.now() }, ...readDedupe().filter((e) => e.id !== id)];
   writeDedupe(next.slice(0, DEDUPE_MAX));
+}
+
+/** Persist that this order was already announced (FCM tray, local alert, or poll). */
+export function markOrderNotified(externalOrderId: string): void {
+  markNotified(externalOrderId);
+}
+
+/** Mark many order ids without alerting (e.g. seed from delivered FCM). */
+export function markOrdersNotified(externalOrderIds: string[]): void {
+  const ids = externalOrderIds.map((id) => id.trim()).filter(Boolean);
+  if (!ids.length) return;
+  const known = new Set(readDedupe().map((e) => e.id));
+  const now = Date.now();
+  const additions: DedupeEntry[] = [];
+  for (const id of ids) {
+    if (known.has(id)) continue;
+    known.add(id);
+    additions.push({ id, at: now });
+  }
+  if (!additions.length) return;
+  writeDedupe([...additions, ...readDedupe()].slice(0, DEDUPE_MAX));
+}
+
+/**
+ * Atomically claim orders that have not been notified yet.
+ * Prevents concurrent poll/push callers from double-alerting.
+ */
+function claimFreshOrders(orders: ImportedWebsiteOrderSummary[]): ImportedWebsiteOrderSummary[] {
+  const entries = readDedupe();
+  const known = new Set(entries.map((e) => e.id));
+  const fresh: ImportedWebsiteOrderSummary[] = [];
+  const now = Date.now();
+  for (const o of orders) {
+    const id = o.externalOrderId?.trim();
+    if (!id || known.has(id)) continue;
+    known.add(id);
+    entries.unshift({ id, at: now });
+    fresh.push({ ...o, externalOrderId: id });
+  }
+  if (fresh.length) writeDedupe(entries.slice(0, DEDUPE_MAX));
+  return fresh;
 }
 
 function notificationIdFor(externalOrderId: string): number {
@@ -134,6 +180,33 @@ async function ensureNativeChannel(): Promise<void> {
 
 export function wasOrderRecentlyNotified(externalOrderId: string): boolean {
   return wasRecentlyNotified(externalOrderId);
+}
+
+/**
+ * Seed local dedupe from server rows written when FCM was already sent.
+ * Covers reopen after the user cleared the tray notification.
+ */
+export async function seedOrderAlertDedupeFromServer(userId: string): Promise<void> {
+  if (!userId.trim()) return;
+  try {
+    const since = new Date(Date.now() - SERVER_DEDUPE_LOOKBACK_MS).toISOString();
+    const { data, error } = await supabase
+      .from("push_notified_orders")
+      .select("external_order_id")
+      .eq("user_id", userId)
+      .gte("notified_at", since)
+      .limit(DEDUPE_MAX);
+    if (error) {
+      console.warn("[OrderAlert] seed from server failed:", error.message);
+      return;
+    }
+    const ids = (data ?? [])
+      .map((r) => String((r as { external_order_id?: string }).external_order_id ?? "").trim())
+      .filter(Boolean);
+    if (ids.length) markOrdersNotified(ids);
+  } catch (e) {
+    console.warn("[OrderAlert] seed from server error:", e);
+  }
 }
 
 export async function ensureOrderNotificationChannel(): Promise<void> {
@@ -224,12 +297,9 @@ export async function notifyNewWebsiteOrders(
     ? orders
     : orders.filter(isRecentEnoughForSyncAlert);
 
-  const fresh = candidates.filter(
-    (o) => o.externalOrderId && !wasRecentlyNotified(o.externalOrderId)
-  );
+  // Claim+mark first so a concurrent resume poll cannot re-alert the same ids.
+  const fresh = claimFreshOrders(candidates);
   if (!fresh.length) return;
-
-  fresh.forEach((o) => markNotified(o.externalOrderId));
 
   const title =
     fresh.length === 1

@@ -98,6 +98,7 @@ const TA: Record<string, string> = {
   "Qty": "எண்ணிக்கை",
   "Qty (optional)": "எண்ணிக்கை",
   "Booked By": "ஆர்டர் எடுத்தவர் (நமது)",
+  "Order taken by": "ஆர்டர் எடுத்தவர்",
   "Booked mobile number": "ஆர்டர் எடுத்தவர் மொபைல்",
   "Booked Mobile No": "ஆர்டர் எடுத்தவர் மொபைல்",
   "Courier Name": "கூரியர்",

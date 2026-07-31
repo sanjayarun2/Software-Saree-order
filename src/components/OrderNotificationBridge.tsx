@@ -11,6 +11,8 @@ import {
 import { setOrdersSyncUi } from "@/lib/order-sync-ui";
 import { syncOrders } from "@/lib/order-service";
 import { pollVeloWebsiteOrders } from "@/lib/velo-website-sync";
+import { seedOrderAlertDedupeFromDeliveredPushes } from "@/lib/push-registration-service";
+import { seedOrderAlertDedupeFromServer } from "@/lib/order-alert-service";
 
 const ORDERS_PATH = "/orders/";
 
@@ -46,6 +48,11 @@ export function OrderNotificationBridge() {
 
       void (async () => {
         try {
+          // Seed FCM dedupe before poll so reopen sync cannot re-alert.
+          await Promise.all([
+            seedOrderAlertDedupeFromDeliveredPushes(),
+            seedOrderAlertDedupeFromServer(user!.id),
+          ]);
           // Always poll on notification path (ignore cooldown).
           await pollVeloWebsiteOrders(user!.id);
           await syncOrders(user!.id);

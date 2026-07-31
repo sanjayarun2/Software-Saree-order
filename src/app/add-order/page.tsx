@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 
 import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { BentoCard } from "@/components/ui/BentoCard";
@@ -20,6 +21,11 @@ import {
 import { usePersistentField } from "@/lib/usePersistentField";
 import { createOrder as svcCreateOrder, getSuggestions as svcGetSuggestions } from "@/lib/order-service";
 import type { OrderInsert, Order } from "@/lib/db-types";
+import { fetchIsListedWorker } from "@/lib/admin-workers-supabase";
+import {
+  resolveToMobileDigits,
+  sanitizePdfAddress,
+} from "@/lib/pdf-address-sanitize";
 
 const COURIERS = [
   "Professional",
@@ -36,34 +42,59 @@ const COURIERS = [
   "Other",
 ];
 
+/** Display name for “Order taken by” when a listed worker creates the order. */
+function workerTakenByName(user: User): string {
+  const meta = user.user_metadata ?? {};
+  const fromMeta = String(meta.full_name || meta.name || meta.display_name || "").trim();
+  if (fromMeta) return fromMeta;
+  const email = user.email?.trim() || "";
+  if (email.includes("@")) {
+    const local = email.split("@")[0]?.trim();
+    if (local) return local;
+  }
+  return email || "Worker";
+}
+
 export default function AddOrderPage() {
   const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
   const { toast } = useToast();
-  // Persist important text fields so they survive app/tab switches
   const recipientField = usePersistentField("add-order:recipient", "");
-  const bookedByField = usePersistentField("add-order:bookedBy", "");
-  const bookedMobileField = usePersistentField("add-order:bookedMobile", "");
   const courierField = usePersistentField("add-order:courier", "Professional");
   const [recipient, setRecipient] = useState("");
   /** Shop FROM — filled from per-account cache, then hydrated from DB. */
   const [sender, setSender] = useState("");
-  const [bookedBy, setBookedBy] = useState("");
-  const [bookedMobile, setBookedMobile] = useState("");
   const [courier, setCourier] = useState("Professional");
   const [quantity, setQuantity] = useState<number | "">(1);
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<OrderSuggestions | null>(null);
+  const [isWorker, setIsWorker] = useState(false);
+  const [workerName, setWorkerName] = useState("");
   const defaultSenderSet = React.useRef(false);
-  const defaultBookedBySet = React.useRef(false);
-  const defaultBookedMobileSet = React.useRef(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login/");
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!user) {
+      setIsWorker(false);
+      setWorkerName("");
+      return;
+    }
+    let cancelled = false;
+    void fetchIsListedWorker().then(({ isWorker: listed }) => {
+      if (cancelled) return;
+      setIsWorker(listed);
+      setWorkerName(listed ? workerTakenByName(user) : "");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // Instant local FROM for this account, then sync from Supabase profile.
   useEffect(() => {
@@ -99,59 +130,18 @@ export default function AddOrderPage() {
       const s = buildSuggestionsFromOrders(fresh as Order[]);
       setSuggestions(s);
       applySenderSeed(s);
-      if (!defaultBookedBySet.current && s.bookedBy.length > 0) {
-        defaultBookedBySet.current = true;
-        if (!bookedByField.value.trim()) {
-          const b = s.bookedBy[0];
-          bookedByField.setValue(b);
-          setBookedBy(b);
-        }
-      }
-      if (!defaultBookedMobileSet.current && s.bookedMobile.length > 0) {
-        defaultBookedMobileSet.current = true;
-        if (!bookedMobileField.value.trim()) {
-          const m = s.bookedMobile[0];
-          bookedMobileField.setValue(m);
-          setBookedMobile(m);
-        }
-      }
     }).then((cached) => {
       if (cached.length) {
         const s = buildSuggestionsFromOrders(cached as Order[]);
         setSuggestions(s);
         applySenderSeed(s);
-        if (!defaultBookedBySet.current && s.bookedBy.length > 0) {
-          defaultBookedBySet.current = true;
-          if (!bookedByField.value.trim()) {
-            const b = s.bookedBy[0];
-            bookedByField.setValue(b);
-            setBookedBy(b);
-          }
-        }
-        if (!defaultBookedMobileSet.current && s.bookedMobile.length > 0) {
-          defaultBookedMobileSet.current = true;
-          if (!bookedMobileField.value.trim()) {
-            const m = s.bookedMobile[0];
-            bookedMobileField.setValue(m);
-            setBookedMobile(m);
-          }
-        }
       }
     });
   }, [user]);
 
-  // Sync local persistent values into state after hooks are initialised
   useEffect(() => {
     setRecipient(recipientField.value);
   }, [recipientField.value]);
-
-  useEffect(() => {
-    setBookedBy(bookedByField.value);
-  }, [bookedByField.value]);
-
-  useEffect(() => {
-    setBookedMobile(bookedMobileField.value);
-  }, [bookedMobileField.value]);
 
   useEffect(() => {
     const v = courierField.value;
@@ -163,7 +153,6 @@ export default function AddOrderPage() {
     }
   }, [courierField.value]);
 
-  // Recently used couriers first, then the rest of COURIERS in fixed order.
   const courierOptions = useMemo(() => {
     const recent = (suggestions?.couriers ?? []).filter((c) => COURIERS.includes(c));
     const rest = COURIERS.filter((c) => !recent.includes(c));
@@ -187,11 +176,16 @@ export default function AddOrderPage() {
     setError(null);
     setLoading(true);
     try {
+      // Keep Mob No phrase; digits from pasted address (not a separate booked-mobile field).
+      const cleanedRecipient = sanitizePdfAddress(recipient, "to");
+      const mobileFromAddress = resolveToMobileDigits(cleanedRecipient) ?? "";
+      const takenBy = isWorker ? workerName || workerTakenByName(user) : "";
+
       const insert: OrderInsert = {
-        recipient_details: recipient,
+        recipient_details: cleanedRecipient || recipient,
         sender_details: sender,
-        booked_by: bookedBy,
-        booked_mobile_no: bookedMobile,
+        booked_by: takenBy,
+        booked_mobile_no: mobileFromAddress,
         courier_name: courier,
         booking_date: bookingDate,
         status: "PENDING",
@@ -202,9 +196,7 @@ export default function AddOrderPage() {
       writeDefaultFromAddress(sender, user.id);
       await flushDefaultFromAddress(user.id);
       toast(t("Order saved"));
-      // Clear TO draft only — keep shop FROM cached for the next order.
       recipientField.clear();
-      bookedByField.clear();
       router.replace("/orders/");
     } catch (e) {
       setError((e as Error).message || t("Save failed"));
@@ -315,45 +307,19 @@ export default function AddOrderPage() {
               </div>
             </div>
 
-            <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Booked By")}</label>
-              <input
-                type="text"
-                list="booked-by-list"
-                value={bookedBy}
-                onChange={(e) => {
-                  setBookedBy(e.target.value);
-                  bookedByField.setValue(e.target.value);
-                }}
-                placeholder={t("Name")}
-                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
-              />
-              <datalist id="booked-by-list">
-                {(suggestions?.bookedBy ?? []).map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Booked Mobile No")}</label>
-              <input
-                type="tel"
-                list="mobile-list"
-                value={bookedMobile}
-                onChange={(e) => {
-                  setBookedMobile(e.target.value);
-                  bookedMobileField.setValue(e.target.value);
-                }}
-                placeholder={t("Mobile number")}
-                className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
-              />
-              <datalist id="mobile-list">
-                {(suggestions?.bookedMobile ?? []).map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            </div>
+            {isWorker && workerName ? (
+              <div>
+                <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">
+                  {t("Order taken by")}
+                </label>
+                <p
+                  className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-slate-50 px-3 py-2.5 text-base text-gray-900 dark:border-slate-600 dark:bg-slate-900/50 dark:text-gray-100 md:min-h-[50px] md:rounded-[16px] md:px-4 md:py-3"
+                  aria-live="polite"
+                >
+                  {workerName}
+                </p>
+              </div>
+            ) : null}
 
             <div>
               <label className="mb-1 block text-base font-medium text-gray-900 dark:text-gray-100">{t("Courier Name")}</label>

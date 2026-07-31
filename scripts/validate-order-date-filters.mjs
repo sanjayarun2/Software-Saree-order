@@ -163,6 +163,54 @@ check("stale this_week resolves to live bounds", () => {
   assert.equal(resolved.toDate, week.to);
 });
 
+/** Mirrors src/lib/order-filter-utils orderBookingDay / isBookingDayInRange */
+function orderBookingDay(bookingDate) {
+  if (bookingDate == null) return null;
+  const day = String(bookingDate).trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+}
+
+function isBookingDayInRange(bookingDate, fromDate, toDate) {
+  const day = orderBookingDay(bookingDate);
+  if (!day) return false;
+  return day >= fromDate && day <= toDate;
+}
+
+function filterByBookingDay(orders, fromDate, toDate) {
+  return orders.filter((o) => isBookingDayInRange(o.booking_date, fromDate, toDate));
+}
+
+check("despatched today still filters by booking day (not despatch day)", () => {
+  const lastWeek = shiftLocalDateIso(today, -7);
+  const orders = [
+    {
+      id: "1",
+      status: "DESPATCHED",
+      booking_date: lastWeek,
+      despatch_date: today,
+    },
+    {
+      id: "2",
+      status: "DESPATCHED",
+      booking_date: today,
+      despatch_date: today,
+    },
+  ];
+
+  const onToday = filterByBookingDay(orders, today, today);
+  assert.equal(onToday.length, 1);
+  assert.equal(onToday[0].id, "2");
+
+  const onLastWeek = filterByBookingDay(orders, lastWeek, lastWeek);
+  assert.equal(onLastWeek.length, 1);
+  assert.equal(onLastWeek[0].id, "1");
+});
+
+check("booking_date timestamps compare on calendar day only", () => {
+  assert.equal(isBookingDayInRange(`${today}T18:30:00.000Z`, today, today), true);
+  assert.equal(orderBookingDay(null), null);
+});
+
 if (failed) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
