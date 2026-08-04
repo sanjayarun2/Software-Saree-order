@@ -9,6 +9,10 @@ import {
   type PdfAddressRole,
 } from "./pdf-address-sanitize";
 import { resolveFromAddressForLabel } from "./default-from-address";
+import {
+  ensurePdfFonts,
+  setPdfAddressFont,
+} from "./pdf-tamil-font";
 
 /** Options passed from fetchPdfSettingsForRendering; used for centre block and vertical position. */
 export type PdfRenderOptions = {
@@ -576,9 +580,8 @@ const centerColStart = leftColStart + LEFT_COL_W + MARGIN;
 const rightColStart = centerColStart + CENTER_COL_W + MARGIN;
 const centerX = centerColStart + CENTER_COL_W / 2;
 
-// Typography (Helvetica only = identical on Mobile, Android, Web)
+// Typography: Helvetica for English FROM/TO labels; address body may use Noto Sans Tamil.
 const FONT_HEADING = "helvetica";
-const FONT_BODY = "helvetica";
 const SIZE_LABEL = 14;       // TO / FROM labels — larger than address for emphasis
 const SIZE_ADDRESS = 12;     // address lines — larger and bold for print visibility
 const SIZE_THANKS_TITLE = 10;  // reduced for better balance
@@ -812,6 +815,8 @@ function measureCenterBlockHalfH(
   const customText = sanitizePdfBrandText(options.settings?.custom_text ?? "");
   if (contentType === "text" && customText && doc.splitTextToSize) {
     const maxCenterW = CENTER_COL_W - 8;
+    setPdfAddressFont(doc, customText, options.settings?.text_bold !== false);
+    doc.setFontSize(centerTextSizePt);
     const centerLines = doc.splitTextToSize(customText, maxCenterW);
     const centerLh = centerTextSizePt * 0.4;
     return (centerLines.length * centerLh) / 2;
@@ -845,10 +850,13 @@ function measureOrderSectionLayout(
   const maxWTo = getRightColumnMaxTextWidth(toShiftMm);
 
   const textBold = options.settings?.text_bold !== false;
-  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  ensurePdfFonts(doc);
   doc.setFontSize(addressSizePt);
 
+  // Measure with the same font used for drawing (Tamil → NotoSansTamil).
+  setPdfAddressFont(doc, fromSource, textBold);
   const fromLines = fitAddressLinesToColumn(doc, fromSource, maxWFrom, MAX_ADDRESS_LINES);
+  setPdfAddressFont(doc, toSource, textBold);
   const toLines = fitAddressLinesToColumn(doc, toSource, maxWTo, MAX_ADDRESS_LINES);
 
   const sectionH = SECTION_H;
@@ -896,6 +904,7 @@ export function resolveOrderLabelLayout(
   order: Order,
   options: PdfRenderOptions
 ): ResolvedLabelLayout {
+  ensurePdfFonts(doc);
   const base = getBaseTypographyPt(options.settings);
   let labelPt = base.labelPt;
   let addressPt = base.addressPt;
@@ -1178,12 +1187,13 @@ function computeToShiftMm(
   let toLines: string[] = [];
   for (let attempt = 0; attempt < 8; attempt++) {
     const maxWTo = getRightColumnMaxTextWidth(toShift);
-    toLines = getPdfAddressLines(doc, toSource, maxWTo);
     const textBold = options.settings?.text_bold !== false;
     if (typeof doc.getTextWidth !== "function") return toShift;
 
-    doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+    ensurePdfFonts(doc);
+    setPdfAddressFont(doc, toSource, textBold);
     doc.setFontSize(addressSizePt);
+    toLines = getPdfAddressLines(doc, toSource, maxWTo);
 
     let maxLineWidth = 0;
     for (const line of toLines) {
@@ -1233,7 +1243,7 @@ function drawOrderLabel(
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
   doc.text("FROM:", leftX, labelYFrom);
-  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  setPdfAddressFont(doc, fromLines.join("\n"), textBold);
   doc.setFontSize(addressSize);
   fromLines.forEach((line, i) => {
     doc.text(line, leftX, addressStartYFrom + i * lineHeightMm);
@@ -1242,7 +1252,7 @@ function drawOrderLabel(
   // Centre: logo or text at adjusted centerX / thanksCenterY
   if (contentType === "text" && customText && doc.splitTextToSize) {
     const textBoldInner = options.settings?.text_bold !== false;
-    doc.setFont(FONT_BODY, textBoldInner ? "bold" : "normal");
+    setPdfAddressFont(doc, customText, textBoldInner);
     doc.setFontSize(textSize);
     const maxCenterW = CENTER_COL_W - 8;
     const lines = doc.splitTextToSize(customText, maxCenterW);
@@ -1298,7 +1308,7 @@ function drawOrderLabel(
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
   doc.text("TO:", rightX, labelYTo);
-  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  setPdfAddressFont(doc, toLines.join("\n"), textBold);
   doc.setFontSize(addressSize);
   const maxWToDraw = getRightColumnMaxTextWidth(resolved.toShiftMm);
   const safeToLines = fitAddressLinesToColumn(
@@ -1355,6 +1365,7 @@ export async function downloadOrderPdf(order: Order) {
     const renderOptions = await fetchPdfSettingsForRendering(order.user_id);
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
+    ensurePdfFonts(doc);
     const d = doc as unknown as DocShape & Parameters<typeof drawSectionBorder>[0];
     const resolved = resolveOrderLabelLayout(d, order, renderOptions);
     console.log(
@@ -1393,6 +1404,7 @@ export async function downloadOrdersPdf(orders: Order[]) {
   try {
     console.log(`[PDF] Creating jsPDF document...`);
     const doc = new jsPDF({ unit: "mm", format: "a4" });
+    ensurePdfFonts(doc);
     const d = doc as unknown as DocShape & Parameters<typeof drawSectionBorder>[0];
     let page = 0;
     let slot = 0;

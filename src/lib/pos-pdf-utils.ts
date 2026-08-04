@@ -10,6 +10,10 @@ import {
 } from "./pdf-utils";
 import { sanitizePdfBrandText } from "./pdf-address-sanitize";
 import {
+  ensurePdfFonts,
+  setPdfAddressFont,
+} from "./pdf-tamil-font";
+import {
   getPosPrintMode,
   printPdfBase64ViaBluetooth,
 } from "./pos-bluetooth-print";
@@ -17,7 +21,6 @@ import { addPrinterLog } from "./printer-debug-log";
 
 // ─── Constants mirrored exactly from A4 pdf-utils.ts ────────────────────────
 const FONT_HEADING = "helvetica";
-const FONT_BODY = "helvetica";
 const SIZE_LABEL = 14;
 const SIZE_ADDRESS = 12;
 const ADDRESS_PADDING = 4;
@@ -295,7 +298,7 @@ function drawPosLabel(
   doc.setFontSize(labelSize);
   doc.text("FROM:", fromAnchorX, fromAnchorY, { angle: 90 });
 
-  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  setPdfAddressFont(doc, fromLines.join("\n"), textBold);
   doc.setFontSize(addressSize);
   fromLines.forEach((line, i) => {
     doc.text(line, posX(fromY + labelToAddressGap + i * lineHeightMm), fromAnchorY, { angle: 90 });
@@ -305,7 +308,7 @@ function drawPosLabel(
   const logoCenterPosY = posY(a4CenterX);
 
   if (contentType === "text" && customText) {
-    doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+    setPdfAddressFont(doc, customText, textBold);
     doc.setFontSize(textSize);
     const maxCenterW = CENTER_COL_W - 8;
     const lines = doc.splitTextToSize(customText, maxCenterW);
@@ -349,7 +352,7 @@ function drawPosLabel(
   doc.setFontSize(labelSize);
   doc.text("TO:", toAnchorX, toAnchorY, { angle: 90 });
 
-  doc.setFont(FONT_BODY, textBold ? "bold" : "normal");
+  setPdfAddressFont(doc, toLines.join("\n"), textBold);
   doc.setFontSize(addressSize);
   toLines.forEach((line, i) => {
     doc.text(line, posX(toY + labelToAddressGap + i * lineHeightMm), toAnchorY, { angle: 90 });
@@ -369,6 +372,7 @@ async function renderOrdersToPosPdfDoc(
   const options: PdfRenderOptions = { ...renderOptions, logoBase64 };
 
   const doc = new jsPDF({ unit: "mm", format: [POS_PAGE_W, POS_PAGE_H] });
+  ensurePdfFonts(doc);
   const d = doc as unknown as Parameters<typeof resolveOrderLabelLayout>[0];
   for (let i = 0; i < orders.length; i++) {
     if (i > 0) doc.addPage([POS_PAGE_W, POS_PAGE_H], "p");
