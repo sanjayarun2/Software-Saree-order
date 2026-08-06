@@ -26,6 +26,7 @@ const AUTO_COLLAPSE_MS = 5000;
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/orders": "Orders",
+  "/messages": "Messages",
   "/unpaid-orders": "Unpaid orders",
   "/add-order": "Add Order",
   "/edit-order": "Edit Order",
