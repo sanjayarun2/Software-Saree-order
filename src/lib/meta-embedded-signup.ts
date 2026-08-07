@@ -115,7 +115,8 @@ export function launchWhatsAppEmbeddedSignup(
       )
     );
   }
-  if (!window.FB) {
+  const FB = window.FB;
+  if (!FB) {
     return Promise.reject(new Error("Facebook SDK is not ready."));
   }
 
@@ -176,7 +177,7 @@ export function launchWhatsAppEmbeddedSignup(
       );
     }, 5 * 60 * 1000);
 
-    window.FB.login(
+    FB.login(
       (response) => {
         const code = response.authResponse?.code;
         if (!code) {
