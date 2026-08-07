@@ -126,6 +126,13 @@ export default function WhatsAppSettingsPage() {
           {t("Send order confirmation via WhatsApp Cloud API. Use an approved template.")}
         </p>
 
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+          {t("To receive customer chats, connect WhatsApp under Messages.")}{" "}
+          <Link href="/settings/messages/" className="font-semibold underline underline-offset-2">
+            {t("Open Messages settings")}
+          </Link>
+        </div>
+
         {error ? (
           <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
             {error}

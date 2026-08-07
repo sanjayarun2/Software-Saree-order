@@ -45,6 +45,12 @@ export interface InboxMessage {
   failed: boolean;
 }
 
+export interface InboxSummary {
+  id: number;
+  name: string;
+  channel: ChatwootChannel;
+}
+
 export interface ChatwootCredentials {
   base_url: string;
   access_token: string;
@@ -85,23 +91,44 @@ type RawConversation = {
   };
 };
 
-function invokeProxy<T>(body: Record<string, unknown>): Promise<T> {
-  return supabase.functions
-    .invoke(PROXY_FUNCTION, { body })
-    .then(({ data, error }) => {
-      if (error) {
-        if (/function not found|404|not deployed/i.test(error.message)) {
-          throw new Error(
-            "Messages proxy is not deployed. Deploy the chatwoot-proxy Supabase Edge Function."
-          );
-        }
-        throw new Error(formatProxyError(error.message));
+async function readInvokeErrorDetail(
+  error: { message?: string; context?: unknown },
+  data: unknown
+): Promise<string> {
+  // Prefer the JSON body from the Edge Function — supabase-js otherwise only
+  // surfaces the generic "non-2xx status code" message.
+  if (data && typeof data === "object" && "error" in data && (data as { error: unknown }).error) {
+    return String((data as { error: unknown }).error);
+  }
+  const ctx = error.context;
+  if (ctx && typeof ctx === "object" && typeof (ctx as Response).json === "function") {
+    try {
+      const payload = await (ctx as Response).clone().json();
+      if (payload && typeof payload === "object" && "error" in payload && payload.error) {
+        return String(payload.error);
       }
-      if (data && typeof data === "object" && "error" in data && (data as { error: unknown }).error) {
-        throw new Error(String((data as { error: unknown }).error));
-      }
-      return data as T;
-    });
+    } catch {
+      /* ignore parse failures */
+    }
+  }
+  return error.message || "Messages request failed";
+}
+
+async function invokeProxy<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(PROXY_FUNCTION, { body });
+  if (error) {
+    const detail = await readInvokeErrorDetail(error, data);
+    if (/function not found|404|not deployed/i.test(detail)) {
+      throw new Error(
+        "Messages proxy is not deployed. Deploy the chatwoot-proxy Supabase Edge Function."
+      );
+    }
+    throw new Error(formatProxyError(detail));
+  }
+  if (data && typeof data === "object" && "error" in data && (data as { error: unknown }).error) {
+    throw new Error(String((data as { error: unknown }).error));
+  }
+  return data as T;
 }
 
 function formatProxyError(message: string): string {
@@ -264,4 +291,33 @@ export async function testChatwootConnection(
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
+}
+
+type RawInbox = {
+  id?: number;
+  name?: string;
+  channel_type?: string;
+};
+
+/** Lists Chatwoot inboxes for the connected shop (channel badges on settings). */
+export async function listInboxes(): Promise<InboxSummary[]> {
+  const data = await invokeProxy<unknown>({ action: "list_inboxes" });
+  const rows = extractInboxPayload(data);
+  return rows
+    .map((raw) => ({
+      id: Number(raw.id ?? 0),
+      name: (raw.name ?? "").trim() || `Inbox ${raw.id ?? "?"}`,
+      channel: normalizeChannel(raw.channel_type),
+    }))
+    .filter((inbox) => inbox.id > 0);
+}
+
+function extractInboxPayload(data: unknown): RawInbox[] {
+  if (Array.isArray(data)) return data as RawInbox[];
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    if (Array.isArray(record.payload)) return record.payload as RawInbox[];
+    if (Array.isArray(record.data)) return record.data as RawInbox[];
+  }
+  return [];
 }

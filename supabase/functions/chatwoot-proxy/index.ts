@@ -7,6 +7,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
  * directly from the app fails CORS. Credentials also must never reach the
  * client, so the access token is resolved here from chatwoot_settings using
  * the service role and scoped to the calling user.
+ *
+ * Application errors are returned as HTTP 200 with `{ error: "..." }` so the
+ * Supabase JS client can surface the real message instead of only
+ * "Edge Function returned a non-2xx status code".
  */
 
 const corsHeaders = {
@@ -20,7 +24,8 @@ type Action =
   | "list_conversations"
   | "list_messages"
   | "send_message"
-  | "toggle_status";
+  | "toggle_status"
+  | "list_inboxes";
 
 const ALLOWED_ACTIONS = new Set<string>([
   "test",
@@ -28,6 +33,7 @@ const ALLOWED_ACTIONS = new Set<string>([
   "list_messages",
   "send_message",
   "toggle_status",
+  "list_inboxes",
 ]);
 
 const ALLOWED_CONVERSATION_STATUSES = new Set(["open", "pending", "resolved", "all"]);
@@ -42,7 +48,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return json({ error: "Unauthorized" }, 401);
+      return fail("Unauthorized. Sign in to Velo and try again.", 401);
     }
 
     const supabaseUser = createClient(
@@ -57,12 +63,11 @@ Deno.serve(async (req) => {
     } = await supabaseUser.auth.getUser();
 
     if (userError || !user) {
-      return json({ error: "Unauthorized" }, 401);
+      return fail("Unauthorized. Sign in to Velo and try again.", 401);
     }
 
     const body = (await req.json()) as {
       action?: string;
-      /** Inline credentials, used by the settings screen before saving. */
       base_url?: string;
       access_token?: string;
       account_id?: string;
@@ -76,7 +81,7 @@ Deno.serve(async (req) => {
 
     const action = (body.action ?? "").trim();
     if (!ALLOWED_ACTIONS.has(action)) {
-      return json({ error: `Unsupported action: ${action || "(missing)"}` }, 400);
+      return fail(`Unsupported action: ${action || "(missing)"}`);
     }
 
     let baseUrl = "";
@@ -104,10 +109,10 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (settingsError || !settings) {
-        return json({ error: "Messages are not connected yet." }, 404);
+        return fail("Messages are not connected yet.");
       }
       if (!settings.enabled) {
-        return json({ error: "Messages are turned off in settings." }, 400);
+        return fail("Messages are turned off in settings.");
       }
 
       baseUrl = (settings.base_url ?? "").trim();
@@ -117,39 +122,52 @@ Deno.serve(async (req) => {
     }
 
     if (!baseUrl || !accessToken || !accountId) {
-      return json({ error: "Chatwoot server URL, token and account id are required." }, 400);
+      return fail("Chatwoot server URL, token and account id are required.");
     }
 
     let origin: string;
     try {
       const parsed = new URL(baseUrl);
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-        return json({ error: "Chatwoot server URL must be http or https." }, 400);
+        return fail("Chatwoot server URL must be http or https.");
       }
       origin = parsed.origin;
     } catch {
-      return json({ error: "Chatwoot server URL is not a valid URL." }, 400);
+      return fail("Chatwoot server URL is not a valid URL.");
     }
 
     if (!/^\d+$/.test(accountId)) {
-      return json({ error: "Chatwoot account id must be a number." }, 400);
+      return fail("Chatwoot account id must be a number.");
     }
 
     const accountBase = `${origin}/api/v1/accounts/${accountId}`;
-    const upstream = buildUpstreamRequest(action as Action, accountBase, inboxId, body);
+    const upstream = buildUpstreamRequest(
+      action as Action,
+      origin,
+      accountBase,
+      inboxId,
+      body
+    );
     if ("error" in upstream) {
-      return json({ error: upstream.error }, 400);
+      return fail(upstream.error);
     }
 
-    const chatwootRes = await fetch(upstream.url, {
-      method: upstream.method,
-      headers: {
-        api_access_token: accessToken,
-        "Content-Type": "application/json",
-      },
-      body: upstream.payload ? JSON.stringify(upstream.payload) : undefined,
-      cache: "no-store",
-    });
+    let chatwootRes: Response;
+    try {
+      chatwootRes = await fetch(upstream.url, {
+        method: upstream.method,
+        headers: {
+          api_access_token: accessToken,
+          "Content-Type": "application/json",
+        },
+        body: upstream.payload ? JSON.stringify(upstream.payload) : undefined,
+        cache: "no-store",
+      });
+    } catch (e) {
+      return fail(
+        `Cannot reach Chatwoot at ${origin}. Is the tunnel running? ${(e as Error).message}`
+      );
+    }
 
     const text = await chatwootRes.text();
     let payload: unknown = text;
@@ -160,7 +178,7 @@ Deno.serve(async (req) => {
     }
 
     if (!chatwootRes.ok) {
-      return json({ error: describeUpstreamError(chatwootRes.status, payload) }, chatwootRes.status);
+      return fail(describeUpstreamError(chatwootRes.status, payload));
     }
 
     return new Response(JSON.stringify(payload), {
@@ -168,12 +186,13 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return json({ error: (e as Error).message || "Chatwoot proxy failed" }, 500);
+    return fail((e as Error).message || "Chatwoot proxy failed");
   }
 });
 
 function buildUpstreamRequest(
   action: Action,
+  origin: string,
   accountBase: string,
   inboxId: string,
   body: {
@@ -186,8 +205,13 @@ function buildUpstreamRequest(
 ):
   | { url: string; method: "GET" | "POST"; payload?: Record<string, unknown> }
   | { error: string } {
+  // Profile validates the access token without needing a conversation list.
   if (action === "test") {
-    return { url: `${accountBase}/conversations?status=open&page=1`, method: "GET" };
+    return { url: `${origin}/api/v1/profile`, method: "GET" };
+  }
+
+  if (action === "list_inboxes") {
+    return { url: `${accountBase}/inboxes`, method: "GET" };
   }
 
   if (action === "list_conversations") {
@@ -245,10 +269,13 @@ function buildUpstreamRequest(
 
 function describeUpstreamError(status: number, payload: unknown): string {
   if (status === 401 || status === 403) {
-    return "Chatwoot rejected the access token. Check the token and account id.";
+    return "Chatwoot rejected the access token. Copy a fresh Access Token from Chatwoot Profile Settings.";
   }
   if (status === 404) {
-    return "Chatwoot could not find that account or conversation.";
+    return "Chatwoot could not find that account. Check Account ID in the URL (/app/accounts/NUMBER/).";
+  }
+  if (status === 530 || status === 502 || status === 503) {
+    return "Chatwoot tunnel is down or restarting. Ask to revive the tunnel, then try again.";
   }
   if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>;
@@ -261,8 +288,9 @@ function describeUpstreamError(status: number, payload: unknown): string {
   return `Chatwoot returned ${status}`;
 }
 
-function json(body: unknown, status: number) {
-  return new Response(JSON.stringify(body), {
+/** App-level failures as HTTP 200 so the client can read `error` from the body. */
+function fail(message: string, status = 200) {
+  return new Response(JSON.stringify({ error: message }), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

@@ -233,14 +233,14 @@ export default function MessagesPage() {
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {t(
-              "Bring WhatsApp, Instagram and Facebook chats into one inbox. Connect your messaging server to get started."
+              "Bring WhatsApp chats into one inbox — like WhatsApp Business, inside Velo. Connect WhatsApp to get started."
             )}
           </p>
           <Link
             href="/settings/messages/"
             className="inline-block rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700"
           >
-            {t("Connect messages")}
+            {t("Connect WhatsApp")}
           </Link>
         </div>
       </ErrorBoundary>
