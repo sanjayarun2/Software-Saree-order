@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
     const code = (body.code ?? "").trim();
     let wabaId = (body.waba_id ?? "").trim();
     let phoneNumberId = (body.phone_number_id ?? "").trim();
+    const redirectUri = (body.redirect_uri ?? "").trim();
     if (!code) return fail("Missing Embedded Signup code. Try Connect WhatsApp again.");
     // WABA / phone IDs may be empty when postMessage was blocked; server resolves from token.
 
@@ -98,6 +99,7 @@ Deno.serve(async (req) => {
         waba_id: wabaId || null,
         phone_number_id: phoneNumberId || null,
         has_client_ids: Boolean(wabaId && phoneNumberId),
+        has_redirect_uri: Boolean(redirectUri),
       })
     );
 
@@ -107,6 +109,7 @@ Deno.serve(async (req) => {
         wabaId,
         phoneNumberId,
         phoneNumberHint: (body.phone_number ?? "").trim(),
+        redirectUri,
       });
       return ok(result);
     } catch (e) {
@@ -128,7 +131,13 @@ Deno.serve(async (req) => {
 async function completeConnect(
   admin: SupabaseClient,
   user: { id: string; email?: string | null },
-  input: { code: string; wabaId: string; phoneNumberId: string; phoneNumberHint: string }
+  input: {
+    code: string;
+    wabaId: string;
+    phoneNumberId: string;
+    phoneNumberHint: string;
+    redirectUri: string;
+  }
 ) {
   const metaAppId = (Deno.env.get("META_APP_ID") ?? Deno.env.get("FB_APP_ID") ?? "").trim();
   const metaAppSecret = (
@@ -149,7 +158,12 @@ async function completeConnect(
       ""
   );
 
-  const businessToken = await exchangeCodeForToken(metaAppId, metaAppSecret, input.code);
+  const businessToken = await exchangeCodeForToken(
+    metaAppId,
+    metaAppSecret,
+    input.code,
+    input.redirectUri
+  );
   const assets = await resolveWabaAndPhone(metaAppId, metaAppSecret, businessToken, {
     wabaId: input.wabaId,
     phoneNumberId: input.phoneNumberId,
@@ -727,17 +741,38 @@ async function upsertWhatsappInbox(
 async function exchangeCodeForToken(
   appId: string,
   appSecret: string,
-  code: string
+  code: string,
+  redirectUri: string
 ): Promise<string> {
-  const url = new URL(`${GRAPH}/oauth/access_token`);
-  url.searchParams.set("client_id", appId);
-  url.searchParams.set("client_secret", appSecret);
-  url.searchParams.set("code", code);
+  const defaultRedirect = "https://software-saree-order.vercel.app/settings/messages/";
+  const redirect = (redirectUri || defaultRedirect).trim();
 
-  const res = await fetch(url.toString(), { method: "GET" });
-  const json = await readJson(res);
+  const tryExchange = async (withRedirect: boolean) => {
+    const url = new URL(`${GRAPH}/oauth/access_token`);
+    url.searchParams.set("client_id", appId);
+    url.searchParams.set("client_secret", appSecret);
+    url.searchParams.set("code", code);
+    if (withRedirect) url.searchParams.set("redirect_uri", redirect);
+    const res = await fetch(url.toString(), { method: "GET" });
+    const json = await readJson(res);
+    return { res, json };
+  };
+
+  // Prefer exchange with the same redirect URI used in FB.login.
+  let { res, json } = await tryExchange(true);
   if (!res.ok) {
-    throw new Error(describeGraphError(json, "token exchange"));
+    const msg = describeGraphError(json, "token exchange");
+    // Some JS SDK popup flows omit redirect_uri; retry once without it.
+    if (/redirect.?uri|verification code/i.test(msg)) {
+      const second = await tryExchange(false);
+      res = second.res;
+      json = second.json;
+      if (!res.ok) {
+        throw new Error(describeGraphError(json, "token exchange"));
+      }
+    } else {
+      throw new Error(msg);
+    }
   }
   const token = String((json as { access_token?: string }).access_token ?? "").trim();
   if (!token) throw new Error("Meta did not return an access token from the signup code.");

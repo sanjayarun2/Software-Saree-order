@@ -68,6 +68,7 @@ export async function completeWhatsAppConnect(input: {
   waba_id?: string;
   phone_number_id?: string;
   phone_number?: string;
+  redirect_uri?: string;
 }): Promise<WhatsAppConnectState & { ok?: boolean }> {
   return invoke({
     action: "complete",
@@ -75,6 +76,7 @@ export async function completeWhatsAppConnect(input: {
     waba_id: input.waba_id ?? "",
     phone_number_id: input.phone_number_id ?? "",
     phone_number: input.phone_number ?? "",
+    redirect_uri: input.redirect_uri ?? "",
   });
 }
 

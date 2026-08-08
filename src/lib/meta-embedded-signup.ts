@@ -23,6 +23,8 @@ export type EmbeddedSignupSession = {
   waba_id: string;
   phone_number_id: string;
   phone_number?: string;
+  /** Must match the redirect URI used in FB.login / OAuth dialog. */
+  redirect_uri: string;
 };
 
 type SessionPartial = {
@@ -196,6 +198,7 @@ export function launchWhatsAppEmbeddedSignup(
   return new Promise((resolve, reject) => {
     const partial: SessionPartial = {};
     let settled = false;
+    const redirectUri = getEmbeddedSignupRedirectUri();
 
     const finishIfReady = (allowCodeOnly = false) => {
       if (settled) return;
@@ -208,6 +211,7 @@ export function launchWhatsAppEmbeddedSignup(
         waba_id: partial.waba_id ?? "",
         phone_number_id: partial.phone_number_id ?? "",
         phone_number: partial.phone_number,
+        redirect_uri: redirectUri,
       });
     };
 
@@ -254,8 +258,9 @@ export function launchWhatsAppEmbeddedSignup(
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        fallback_redirect_uri: getEmbeddedSignupRedirectUri(),
-        // Match Meta Embedded Signup docs (v4): extras.setup only.
+        // Same URI must be sent when exchanging the code server-side.
+        redirect_uri: redirectUri,
+        fallback_redirect_uri: redirectUri,
         extras: {
           setup: {},
         },
