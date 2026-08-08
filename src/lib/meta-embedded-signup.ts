@@ -48,8 +48,6 @@ let globalMessageHooked = false;
 /** Public Meta IDs (safe in the browser; not secrets). */
 const DEFAULT_META_APP_ID = "2190934024783640";
 const DEFAULT_WA_ES_CONFIG_ID = "1610415194046053";
-const PRODUCTION_SITE = "https://software-saree-order.vercel.app";
-const EMBEDDED_SIGNUP_RETURN_PATH = "/settings/messages/";
 /** Exact URI registered in Meta → Facebook Login → Valid OAuth Redirect URIs. */
 export const CANONICAL_ES_REDIRECT_URI =
   "https://software-saree-order.vercel.app/settings/messages/";
