@@ -3,6 +3,8 @@
  * Secrets stay server-side; only App ID + Configuration ID are public.
  */
 
+import { Capacitor } from "@capacitor/core";
+
 declare global {
   interface Window {
     FB?: {
@@ -35,12 +37,48 @@ let sdkPromise: Promise<void> | null = null;
 /** Public Meta IDs (safe in the browser; not secrets). */
 const DEFAULT_META_APP_ID = "2190934024783640";
 const DEFAULT_WA_ES_CONFIG_ID = "1610415194046053";
+/** Capacitor WebView origin is https://localhost — Meta must not redirect there. */
+const PRODUCTION_SITE = "https://software-saree-order.vercel.app";
+const EMBEDDED_SIGNUP_RETURN_PATH = "/settings/messages/";
 
 export function getPublicMetaConfig(): { appId: string; configId: string } {
   return {
     appId: (process.env.NEXT_PUBLIC_META_APP_ID ?? DEFAULT_META_APP_ID).trim(),
     configId: (process.env.NEXT_PUBLIC_WA_ES_CONFIG_ID ?? DEFAULT_WA_ES_CONFIG_ID).trim(),
   };
+}
+
+/** HTTPS page Meta should return to when the JS SDK falls back from a popup. */
+export function getEmbeddedSignupRedirectUri(): string {
+  const site = (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    PRODUCTION_SITE
+  )
+    .trim()
+    .replace(/\/$/, "");
+  return `${site}${EMBEDDED_SIGNUP_RETURN_PATH}`;
+}
+
+/** True when Embedded Signup cannot safely run in this WebView (Capacitor localhost). */
+export function shouldOpenEmbeddedSignupInSystemBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  if (Capacitor.isNativePlatform()) return true;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+/**
+ * Opens production Settings → Messages in the system browser so Meta OAuth
+ * returns to a real HTTPS domain instead of Capacitor's https://localhost.
+ */
+export async function openEmbeddedSignupInSystemBrowser(): Promise<void> {
+  const url = getEmbeddedSignupRedirectUri();
+  if (Capacitor.isNativePlatform()) {
+    const { Browser } = await import("@capacitor/browser");
+    await Browser.open({ url });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 export function loadFacebookSdk(appId: string): Promise<void> {
@@ -213,6 +251,9 @@ export function launchWhatsAppEmbeddedSignup(
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
+        // When Meta falls back from popup → full-page redirect (common on Android),
+        // never land on Capacitor https://localhost (ERR_CONNECTION_REFUSED).
+        fallback_redirect_uri: getEmbeddedSignupRedirectUri(),
         extras: {
           setup: {},
           featureType: "",

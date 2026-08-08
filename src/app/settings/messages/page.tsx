@@ -27,6 +27,8 @@ import {
   getPublicMetaConfig,
   launchWhatsAppEmbeddedSignup,
   loadFacebookSdk,
+  openEmbeddedSignupInSystemBrowser,
+  shouldOpenEmbeddedSignupInSystemBrowser,
 } from "@/lib/meta-embedded-signup";
 
 export default function MessagesSettingsPage() {
@@ -184,6 +186,17 @@ export default function MessagesSettingsPage() {
     setInfo(null);
     setConnecting(true);
     try {
+      // Android WebView is https://localhost — Meta redirect there fails in Chrome.
+      // Complete Connect on the live HTTPS site instead.
+      if (shouldOpenEmbeddedSignupInSystemBrowser()) {
+        await openEmbeddedSignupInSystemBrowser();
+        setInfo(
+          t(
+            "Finish Connect WhatsApp in the browser (sign in to Velo if asked), then return to the app."
+          )
+        );
+        return;
+      }
       const pub = getPublicMetaConfig();
       const appId = pub.appId || waState?.config?.meta_app_id || "";
       const configId = pub.configId || waState?.config?.config_id || "";
