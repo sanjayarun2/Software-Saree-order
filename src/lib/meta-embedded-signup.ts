@@ -32,10 +32,14 @@ type SessionPartial = {
 
 let sdkPromise: Promise<void> | null = null;
 
+/** Public Meta IDs (safe in the browser; not secrets). */
+const DEFAULT_META_APP_ID = "2190934024783640";
+const DEFAULT_WA_ES_CONFIG_ID = "1610415194046053";
+
 export function getPublicMetaConfig(): { appId: string; configId: string } {
   return {
-    appId: (process.env.NEXT_PUBLIC_META_APP_ID ?? "").trim(),
-    configId: (process.env.NEXT_PUBLIC_WA_ES_CONFIG_ID ?? "").trim(),
+    appId: (process.env.NEXT_PUBLIC_META_APP_ID ?? DEFAULT_META_APP_ID).trim(),
+    configId: (process.env.NEXT_PUBLIC_WA_ES_CONFIG_ID ?? DEFAULT_WA_ES_CONFIG_ID).trim(),
   };
 }
 
