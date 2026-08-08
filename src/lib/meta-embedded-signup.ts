@@ -50,7 +50,11 @@ const DEFAULT_META_APP_ID = "2190934024783640";
 const DEFAULT_WA_ES_CONFIG_ID = "1610415194046053";
 const PRODUCTION_SITE = "https://software-saree-order.vercel.app";
 const EMBEDDED_SIGNUP_RETURN_PATH = "/settings/messages/";
+/** Exact URI registered in Meta → Facebook Login → Valid OAuth Redirect URIs. */
+export const CANONICAL_ES_REDIRECT_URI =
+  "https://software-saree-order.vercel.app/settings/messages/";
 const GRAPH_SDK_VERSION = "v26.0";
+const PENDING_REDIRECT_KEY = "velo_wa_es_redirect_v1";
 
 export function getPublicMetaConfig(): { appId: string; configId: string } {
   return {
@@ -59,22 +63,12 @@ export function getPublicMetaConfig(): { appId: string; configId: string } {
   };
 }
 
-/** Canonical HTTPS return URL (must be listed in Meta Valid OAuth Redirect URIs). */
+/**
+ * Always the same HTTPS URI for FB.login fallback + token exchange.
+ * Must match Meta Valid OAuth Redirect URIs exactly (trailing slash included).
+ */
 export function getEmbeddedSignupRedirectUri(): string {
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host && host !== "localhost" && host !== "127.0.0.1") {
-      const path = window.location.pathname.endsWith("/")
-        ? window.location.pathname
-        : `${window.location.pathname}/`;
-      // Prefer current production path so redirect matches the page that started ES.
-      if (path.includes("/settings/messages")) {
-        return `${window.location.origin}${path}`;
-      }
-    }
-  }
-  const site = (process.env.NEXT_PUBLIC_SITE_URL || PRODUCTION_SITE).trim().replace(/\/$/, "");
-  return `${site}${EMBEDDED_SIGNUP_RETURN_PATH}`;
+  return CANONICAL_ES_REDIRECT_URI;
 }
 
 /** True only in Capacitor native WebView (https://localhost) — not on the live website. */
@@ -123,16 +117,26 @@ function clearPendingAssets(): void {
   try {
     sessionStorage.removeItem(PENDING_ASSETS_KEY);
     sessionStorage.removeItem(PENDING_FLOW_KEY);
+    sessionStorage.removeItem(PENDING_REDIRECT_KEY);
   } catch {
     /* ignore */
   }
 }
 
-function markFlowPending(): void {
+function markFlowPending(redirectUri: string): void {
   try {
     sessionStorage.setItem(PENDING_FLOW_KEY, String(Date.now()));
+    sessionStorage.setItem(PENDING_REDIRECT_KEY, redirectUri);
   } catch {
     /* ignore */
+  }
+}
+
+function readPendingRedirectUri(): string {
+  try {
+    return (sessionStorage.getItem(PENDING_REDIRECT_KEY) || CANONICAL_ES_REDIRECT_URI).trim();
+  } catch {
+    return CANONICAL_ES_REDIRECT_URI;
   }
 }
 
@@ -290,7 +294,7 @@ export function consumeEmbeddedSignupReturn(): EmbeddedSignupSession | null {
   if (!extracted) return null;
 
   const assets = readPendingAssets();
-  const redirectUri = getEmbeddedSignupRedirectUri();
+  const redirectUri = readPendingRedirectUri() || CANONICAL_ES_REDIRECT_URI;
   clearOAuthParamsFromUrl();
 
   return {
@@ -339,8 +343,8 @@ export function launchWhatsAppEmbeddedSignup(
   }
 
   ensureEmbeddedSignupMessageHook();
-  markFlowPending();
   const redirectUri = getEmbeddedSignupRedirectUri();
+  markFlowPending(redirectUri);
 
   return new Promise((resolve, reject) => {
     const partial: SessionPartial = { ...readPendingAssets() };
@@ -358,8 +362,8 @@ export function launchWhatsAppEmbeddedSignup(
         waba_id: partial.waba_id ?? "",
         phone_number_id: partial.phone_number_id ?? "",
         phone_number: partial.phone_number,
-        // Popup success: do not force redirect_uri on token exchange.
-        redirect_uri: "",
+        // Must match fallback_redirect_uri used in FB.login (Meta binds the code to it).
+        redirect_uri: redirectUri,
       });
     };
 
@@ -406,7 +410,7 @@ export function launchWhatsAppEmbeddedSignup(
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        // Only fallback — do NOT set redirect_uri (that turns popup into same-page redirect).
+        // Only fallback (keeps popup). Same URI must be used in token exchange.
         fallback_redirect_uri: redirectUri,
         extras: {
           setup: {},

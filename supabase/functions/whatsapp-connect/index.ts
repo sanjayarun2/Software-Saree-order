@@ -745,17 +745,15 @@ async function exchangeCodeForToken(
   code: string,
   redirectUri: string
 ): Promise<string> {
-  const defaultRedirect = "https://software-saree-order.vercel.app/settings/messages/";
-  const redirect = (redirectUri || defaultRedirect).trim();
-  // Codes are single-use — pick the correct mode once.
-  // Popup callback → no redirect_uri. Redirect fallback → must match fallback_redirect_uri.
-  const withRedirect = Boolean(redirectUri.trim());
+  // Must match FB.login fallback_redirect_uri / Valid OAuth Redirect URI exactly.
+  const redirect =
+    (redirectUri || "https://software-saree-order.vercel.app/settings/messages/").trim();
 
   const url = new URL(`${GRAPH}/oauth/access_token`);
   url.searchParams.set("client_id", appId);
   url.searchParams.set("client_secret", appSecret);
   url.searchParams.set("code", code);
-  if (withRedirect) url.searchParams.set("redirect_uri", redirect);
+  url.searchParams.set("redirect_uri", redirect);
 
   const res = await fetch(url.toString(), { method: "GET" });
   const json = await readJson(res);
