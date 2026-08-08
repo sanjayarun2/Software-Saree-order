@@ -1,6 +1,11 @@
 /**
  * Meta JS SDK + WhatsApp Embedded Signup helpers for the browser.
  * Secrets stay server-side; only App ID + Configuration ID are public.
+ *
+ * Robust flow:
+ * 1) Prefer FB.login popup (Meta docs) — no redirect_uri (that forces full-page redirect).
+ * 2) Persist WA_EMBEDDED_SIGNUP asset IDs in sessionStorage.
+ * 3) If Meta falls back to redirect, resume from ?code= on return and complete server-side.
  */
 
 import { Capacitor } from "@capacitor/core";
@@ -23,7 +28,7 @@ export type EmbeddedSignupSession = {
   waba_id: string;
   phone_number_id: string;
   phone_number?: string;
-  /** Must match the redirect URI used in FB.login / OAuth dialog. */
+  /** Empty when popup auth; set when Meta used redirect fallback. */
   redirect_uri: string;
 };
 
@@ -34,12 +39,15 @@ type SessionPartial = {
   phone_number?: string;
 };
 
+const PENDING_ASSETS_KEY = "velo_wa_es_assets_v1";
+const PENDING_FLOW_KEY = "velo_wa_es_pending_v1";
+
 let sdkPromise: Promise<void> | null = null;
+let globalMessageHooked = false;
 
 /** Public Meta IDs (safe in the browser; not secrets). */
 const DEFAULT_META_APP_ID = "2190934024783640";
 const DEFAULT_WA_ES_CONFIG_ID = "1610415194046053";
-/** Capacitor WebView origin is https://localhost — Meta must not redirect there. */
 const PRODUCTION_SITE = "https://software-saree-order.vercel.app";
 const EMBEDDED_SIGNUP_RETURN_PATH = "/settings/messages/";
 const GRAPH_SDK_VERSION = "v26.0";
@@ -51,32 +59,132 @@ export function getPublicMetaConfig(): { appId: string; configId: string } {
   };
 }
 
-/** HTTPS page Meta should return to when the JS SDK falls back from a popup. */
+/** Canonical HTTPS return URL (must be listed in Meta Valid OAuth Redirect URIs). */
 export function getEmbeddedSignupRedirectUri(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      const path = window.location.pathname.endsWith("/")
+        ? window.location.pathname
+        : `${window.location.pathname}/`;
+      // Prefer current production path so redirect matches the page that started ES.
+      if (path.includes("/settings/messages")) {
+        return `${window.location.origin}${path}`;
+      }
+    }
+  }
   const site = (process.env.NEXT_PUBLIC_SITE_URL || PRODUCTION_SITE).trim().replace(/\/$/, "");
   return `${site}${EMBEDDED_SIGNUP_RETURN_PATH}`;
 }
 
-/** True when Embedded Signup cannot safely run in this WebView (Capacitor localhost). */
+/** True only in Capacitor native WebView (https://localhost) — not on the live website. */
 export function shouldOpenEmbeddedSignupInSystemBrowser(): boolean {
   if (typeof window === "undefined") return false;
   if (Capacitor.isNativePlatform()) return true;
   const host = window.location.hostname;
+  // Dev localhost browser: also send to production HTTPS for Meta JS SDK domains.
   return host === "localhost" || host === "127.0.0.1";
 }
 
 /**
- * Opens production Settings → Messages in the system browser so Meta OAuth
- * returns to a real HTTPS domain instead of Capacitor's https://localhost.
+ * Opens production Settings → Messages so Connect runs on an allowed Meta domain.
  */
 export async function openEmbeddedSignupInSystemBrowser(): Promise<void> {
-  const url = getEmbeddedSignupRedirectUri();
+  const url = `${getEmbeddedSignupRedirectUri()}?wa_connect=1`;
   if (Capacitor.isNativePlatform()) {
     const { Browser } = await import("@capacitor/browser");
     await Browser.open({ url });
     return;
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.location.assign(url);
+}
+
+function readPendingAssets(): SessionPartial {
+  try {
+    const raw = sessionStorage.getItem(PENDING_ASSETS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as SessionPartial;
+  } catch {
+    return {};
+  }
+}
+
+function writePendingAssets(partial: SessionPartial): void {
+  try {
+    const prev = readPendingAssets();
+    const next = { ...prev, ...partial };
+    sessionStorage.setItem(PENDING_ASSETS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearPendingAssets(): void {
+  try {
+    sessionStorage.removeItem(PENDING_ASSETS_KEY);
+    sessionStorage.removeItem(PENDING_FLOW_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function markFlowPending(): void {
+  try {
+    sessionStorage.setItem(PENDING_FLOW_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyEmbeddedSignupPayload(partial: SessionPartial, raw: unknown): void {
+  if (!raw || typeof raw !== "object") return;
+  const root = raw as Record<string, unknown>;
+  if (root.type && root.type !== "WA_EMBEDDED_SIGNUP") return;
+
+  const eventName = String(root.event ?? "").toUpperCase();
+  if (eventName === "CANCEL" || eventName === "ERROR") return;
+
+  const payload =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : root;
+
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      const v = payload[key];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+
+  const waba =
+    pick("waba_id", "wabaId", "sharedWabaId") ||
+    (Array.isArray(payload.waba_ids) && payload.waba_ids[0]
+      ? String(payload.waba_ids[0])
+      : "");
+  const phoneId = pick("phone_number_id", "phoneNumberId", "phone_id");
+  const phone = pick("phone_number", "display_phone_number", "phone");
+
+  if (waba) partial.waba_id = waba;
+  if (phoneId) partial.phone_number_id = phoneId;
+  if (phone) partial.phone_number = phone;
+  writePendingAssets(partial);
+}
+
+/** Keep a process-wide listener so asset IDs survive popup/redirect races. */
+export function ensureEmbeddedSignupMessageHook(): void {
+  if (typeof window === "undefined" || globalMessageHooked) return;
+  globalMessageHooked = true;
+  window.addEventListener("message", (event: MessageEvent) => {
+    if (!isMetaOrigin(event.origin)) return;
+    try {
+      const data =
+        typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      applyEmbeddedSignupPayload({}, data);
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 export function loadFacebookSdk(appId: string): Promise<void> {
@@ -88,6 +196,7 @@ export function loadFacebookSdk(appId: string): Promise<void> {
       new Error("NEXT_PUBLIC_META_APP_ID is not set. Ask an admin to configure Meta Embedded Signup.")
     );
   }
+  ensureEmbeddedSignupMessageHook();
   if (window.FB) return Promise.resolve();
   if (sdkPromise) return sdkPromise;
 
@@ -140,45 +249,79 @@ export function loadFacebookSdk(appId: string): Promise<void> {
   return sdkPromise;
 }
 
-function applyEmbeddedSignupPayload(partial: SessionPartial, raw: unknown): void {
-  if (!raw || typeof raw !== "object") return;
-  const root = raw as Record<string, unknown>;
-  if (root.type && root.type !== "WA_EMBEDDED_SIGNUP") return;
+function extractCodeFromLocation(): { code: string; usedRedirect: boolean } | null {
+  if (typeof window === "undefined") return null;
+  const fromSearch = new URLSearchParams(window.location.search).get("code");
+  if (fromSearch) return { code: fromSearch, usedRedirect: true };
 
-  const eventName = String(root.event ?? "").toUpperCase();
-  if (eventName === "CANCEL" || eventName === "ERROR") {
-    return;
+  const hash = window.location.hash.replace(/^#/, "");
+  if (hash.includes("code=")) {
+    const params = new URLSearchParams(hash.startsWith("?") ? hash.slice(1) : hash);
+    const code = params.get("code");
+    if (code) return { code, usedRedirect: true };
   }
+  return null;
+}
 
-  const payload =
-    root.data && typeof root.data === "object"
-      ? (root.data as Record<string, unknown>)
-      : root;
-
-  const pick = (...keys: string[]) => {
-    for (const key of keys) {
-      const v = payload[key];
-      if (v != null && String(v).trim()) return String(v).trim();
-    }
-    return "";
-  };
-
-  const waba =
-    pick("waba_id", "wabaId", "sharedWabaId") ||
-    (Array.isArray(payload.waba_ids) && payload.waba_ids[0]
-      ? String(payload.waba_ids[0])
-      : "");
-  const phoneId = pick("phone_number_id", "phoneNumberId", "phone_id");
-  const phone = pick("phone_number", "display_phone_number", "phone");
-
-  if (waba) partial.waba_id = waba;
-  if (phoneId) partial.phone_number_id = phoneId;
-  if (phone) partial.phone_number = phone;
+/** Strip OAuth params from the URL after we consume them. */
+export function clearOAuthParamsFromUrl(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("code");
+    url.searchParams.delete("state");
+    url.searchParams.delete("error");
+    url.searchParams.delete("error_reason");
+    url.searchParams.delete("error_description");
+    url.hash = "";
+    window.history.replaceState({}, "", url.pathname + url.search);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
- * Launches Embedded Signup and resolves with code + WABA/phone ids when available.
- * IDs come from WA_EMBEDDED_SIGNUP postMessage; if missing, server can resolve from the code.
+ * If Meta redirected back with ?code=, build a session (merge sessionStorage asset IDs).
+ * Returns null when this page load is not an OAuth return.
+ */
+export function consumeEmbeddedSignupReturn(): EmbeddedSignupSession | null {
+  ensureEmbeddedSignupMessageHook();
+  const extracted = extractCodeFromLocation();
+  if (!extracted) return null;
+
+  const assets = readPendingAssets();
+  const redirectUri = getEmbeddedSignupRedirectUri();
+  clearOAuthParamsFromUrl();
+
+  return {
+    code: extracted.code,
+    waba_id: assets.waba_id ?? "",
+    phone_number_id: assets.phone_number_id ?? "",
+    phone_number: assets.phone_number,
+    redirect_uri: redirectUri,
+  };
+}
+
+export function wantsAutoConnectFromQuery(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("wa_connect") === "1";
+}
+
+export function clearAutoConnectQuery(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("wa_connect")) return;
+    url.searchParams.delete("wa_connect");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Launches Embedded Signup via popup (preferred). Asset IDs via postMessage;
+ * server can resolve IDs from the code if postMessage is missing.
  */
 export function launchWhatsAppEmbeddedSignup(
   configId: string
@@ -195,10 +338,13 @@ export function launchWhatsAppEmbeddedSignup(
     return Promise.reject(new Error("Facebook SDK is not ready."));
   }
 
+  ensureEmbeddedSignupMessageHook();
+  markFlowPending();
+  const redirectUri = getEmbeddedSignupRedirectUri();
+
   return new Promise((resolve, reject) => {
-    const partial: SessionPartial = {};
+    const partial: SessionPartial = { ...readPendingAssets() };
     let settled = false;
-    const redirectUri = getEmbeddedSignupRedirectUri();
 
     const finishIfReady = (allowCodeOnly = false) => {
       if (settled) return;
@@ -206,12 +352,14 @@ export function launchWhatsAppEmbeddedSignup(
       if (!allowCodeOnly && (!partial.waba_id || !partial.phone_number_id)) return;
       settled = true;
       window.removeEventListener("message", onMessage);
+      writePendingAssets(partial);
       resolve({
         code: partial.code,
         waba_id: partial.waba_id ?? "",
         phone_number_id: partial.phone_number_id ?? "",
         phone_number: partial.phone_number,
-        redirect_uri: redirectUri,
+        // Popup success: do not force redirect_uri on token exchange.
+        redirect_uri: "",
       });
     };
 
@@ -223,7 +371,7 @@ export function launchWhatsAppEmbeddedSignup(
         applyEmbeddedSignupPayload(partial, data);
         finishIfReady(false);
       } catch {
-        /* ignore non-JSON */
+        /* ignore */
       }
     };
 
@@ -250,23 +398,27 @@ export function launchWhatsAppEmbeddedSignup(
           return;
         }
         partial.code = code;
+        writePendingAssets(partial);
         finishIfReady(false);
-        // postMessage often arrives slightly after the login callback.
-        window.setTimeout(() => finishIfReady(true), 2500);
+        window.setTimeout(() => finishIfReady(true), 3000);
       },
       {
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        // Same URI must be sent when exchanging the code server-side.
-        redirect_uri: redirectUri,
+        // Only fallback — do NOT set redirect_uri (that turns popup into same-page redirect).
         fallback_redirect_uri: redirectUri,
         extras: {
           setup: {},
+          sessionInfoVersion: "3",
         },
       }
     );
   });
+}
+
+export function clearEmbeddedSignupPending(): void {
+  clearPendingAssets();
 }
 
 function isMetaOrigin(origin: string): boolean {

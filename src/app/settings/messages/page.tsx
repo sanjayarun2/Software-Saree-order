@@ -24,11 +24,16 @@ import {
   type WhatsAppConnectState,
 } from "@/lib/whatsapp-connect-api";
 import {
+  clearAutoConnectQuery,
+  clearEmbeddedSignupPending,
+  clearOAuthParamsFromUrl,
+  consumeEmbeddedSignupReturn,
   getPublicMetaConfig,
   launchWhatsAppEmbeddedSignup,
   loadFacebookSdk,
   openEmbeddedSignupInSystemBrowser,
   shouldOpenEmbeddedSignupInSystemBrowser,
+  wantsAutoConnectFromQuery,
 } from "@/lib/meta-embedded-signup";
 
 export default function MessagesSettingsPage() {
@@ -55,6 +60,7 @@ export default function MessagesSettingsPage() {
 
   const [waState, setWaState] = useState<WhatsAppConnectState | null>(null);
   const [inboxes, setInboxes] = useState<InboxSummary[]>([]);
+  const oauthReturnHandled = React.useRef(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login/");
@@ -123,6 +129,67 @@ export default function MessagesSettingsPage() {
     if (!checkingAccess && user) void load();
   }, [checkingAccess, user, load]);
 
+  const finishConnectSession = useCallback(
+    async (session: {
+      code: string;
+      waba_id?: string;
+      phone_number_id?: string;
+      phone_number?: string;
+      redirect_uri?: string;
+    }) => {
+      const result = await completeWhatsAppConnect(session);
+      clearEmbeddedSignupPending();
+      clearOAuthParamsFromUrl();
+      setInfo(t("WhatsApp connected. Open the inbox to reply to customers."));
+      await load();
+      if (result.chatwoot_inbox_id) {
+        setInboxId(result.chatwoot_inbox_id);
+        setEnabled(true);
+      }
+    },
+    [load, t]
+  );
+
+  // Resume after Meta redirect (?code=) or open Connect when landed with ?wa_connect=1
+  useEffect(() => {
+    if (checkingAccess || !user || loadingRow || oauthReturnHandled.current) return;
+
+    const returned = consumeEmbeddedSignupReturn();
+    if (returned?.code) {
+      oauthReturnHandled.current = true;
+      setConnecting(true);
+      setError(null);
+      setInfo(t("Finishing WhatsApp connection…"));
+      void finishConnectSession(returned)
+        .catch((e) => {
+          setError((e as Error).message || t("Could not connect WhatsApp."));
+        })
+        .finally(() => setConnecting(false));
+      return;
+    }
+
+    if (wantsAutoConnectFromQuery() && !shouldOpenEmbeddedSignupInSystemBrowser()) {
+      oauthReturnHandled.current = true;
+      clearAutoConnectQuery();
+      // Defer so UI is ready; user still taps if popup blockers require gesture —
+      // auto-start only when we have an explicit wa_connect deep link from the app.
+      void (async () => {
+        setConnecting(true);
+        setError(null);
+        try {
+          const pub = getPublicMetaConfig();
+          await loadFacebookSdk(pub.appId);
+          const session = await launchWhatsAppEmbeddedSignup(pub.configId);
+          await finishConnectSession(session);
+        } catch (e) {
+          setError((e as Error).message || t("Could not connect WhatsApp."));
+        } finally {
+          setConnecting(false);
+        }
+      })();
+    }
+  }, [checkingAccess, user, loadingRow, finishConnectSession, t]);
+
   const validate = (): string | null => {
     if (!normalizeChatwootBaseUrl(baseUrl)) return t("Enter your messaging server URL.");
     if (!accessToken.trim()) return t("Enter your access token.");
@@ -186,13 +253,12 @@ export default function MessagesSettingsPage() {
     setInfo(null);
     setConnecting(true);
     try {
-      // Android WebView is https://localhost — Meta redirect there fails in Chrome.
-      // Complete Connect on the live HTTPS site instead.
+      // Native app WebView is https://localhost — Meta JS SDK domains won't work there.
       if (shouldOpenEmbeddedSignupInSystemBrowser()) {
         await openEmbeddedSignupInSystemBrowser();
         setInfo(
           t(
-            "Finish Connect WhatsApp in the browser (sign in to Velo if asked), then return to the app."
+            "Opened Velo in your browser. Sign in if needed, then tap Connect WhatsApp there to finish."
           )
         );
         return;
@@ -202,13 +268,7 @@ export default function MessagesSettingsPage() {
       const configId = pub.configId || waState?.config?.config_id || "";
       await loadFacebookSdk(appId);
       const session = await launchWhatsAppEmbeddedSignup(configId);
-      const result = await completeWhatsAppConnect(session);
-      setInfo(t("WhatsApp connected. Open the inbox to reply to customers."));
-      await load();
-      if (result.chatwoot_inbox_id) {
-        setInboxId(result.chatwoot_inbox_id);
-        setEnabled(true);
-      }
+      await finishConnectSession(session);
     } catch (e) {
       setError((e as Error).message || t("Could not connect WhatsApp."));
     } finally {
