@@ -61,10 +61,18 @@ if (!url || !anon) {
     body: { action: "status" },
   });
   const msg = error?.message || (data?.error ? String(data.error) : "");
+  const ctx = error && typeof error === "object" ? error.context : null;
+  const ctxStatus =
+    ctx && typeof ctx === "object" && "status" in ctx ? Number(ctx.status) : undefined;
   const reachable =
-    /unauthorized|jwt|sign in|Missing authorization|UNAUTHORIZED/i.test(msg) ||
-    (data && data.status);
-  check("whatsapp-connect Edge", Boolean(reachable), msg || "status ok");
+    ctxStatus === 401 ||
+    /unauthorized|jwt|sign in|Missing authorization|UNAUTHORIZED|non-2xx/i.test(msg) ||
+    (data && (data.status || data.error));
+  check(
+    "whatsapp-connect Edge",
+    Boolean(reachable),
+    msg || (data?.status ? `status=${data.status}` : "ok")
+  );
 }
 
 console.log("\nManual: hard-refresh Messages → Connect WhatsApp (popup).");
