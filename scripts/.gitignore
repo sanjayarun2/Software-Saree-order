@@ -1,2 +1,2 @@
 # Local secrets — never commit
-scripts/fcm-service-account.json
+local/

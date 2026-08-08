@@ -101,13 +101,25 @@ Deno.serve(async (req) => {
       })
     );
 
-    const result = await completeConnect(admin, user, {
-      code,
-      wabaId,
-      phoneNumberId,
-      phoneNumberHint: (body.phone_number ?? "").trim(),
-    });
-    return ok(result);
+    try {
+      const result = await completeConnect(admin, user, {
+        code,
+        wabaId,
+        phoneNumberId,
+        phoneNumberHint: (body.phone_number ?? "").trim(),
+      });
+      return ok(result);
+    } catch (e) {
+      const message = (e as Error).message || "WhatsApp connect failed";
+      if (isMetaAuthError(message)) {
+        await markNeedsReauth(admin, user.id, message);
+        return fail(
+          "WhatsApp authorization expired or was revoked. Tap Connect WhatsApp again.",
+          200
+        );
+      }
+      throw e;
+    }
   } catch (e) {
     return fail((e as Error).message || "WhatsApp connect failed");
   }
@@ -130,6 +142,13 @@ async function completeConnect(
     );
   }
 
+  const verifyToken = platformWebhookVerifyToken();
+  const chatwootBase = normalizeBaseUrl(
+    Deno.env.get("CHATWOOT_BASE_URL") ??
+      Deno.env.get("NEXT_PUBLIC_CHATWOOT_BASE_URL") ??
+      ""
+  );
+
   const businessToken = await exchangeCodeForToken(metaAppId, metaAppSecret, input.code);
   await subscribeAppToWaba(input.wabaId, businessToken);
   await registerPhoneNumber(input.phoneNumberId, businessToken);
@@ -140,12 +159,22 @@ async function completeConnect(
     normalizePhone(phoneInfo.display_phone_number) ||
     `+${input.phoneNumberId}`;
 
+  if (chatwootBase) {
+    await overridePhoneWebhook({
+      phoneNumberId: input.phoneNumberId,
+      token: businessToken,
+      callbackUrl: `${chatwootBase}/webhooks/whatsapp/${displayPhone}`,
+      verifyToken,
+    });
+  }
+
   const chatwoot = await resolveChatwootCreds(admin, user);
   const inbox = await upsertWhatsappInbox(chatwoot, {
     phoneNumber: displayPhone,
     phoneNumberId: input.phoneNumberId,
     wabaId: input.wabaId,
     apiKey: businessToken,
+    webhookVerifyToken: verifyToken,
     existingInboxId: await getExistingInboxId(admin, user.id, input.phoneNumberId),
   });
 
@@ -442,6 +471,8 @@ async function resolveChatwootCreds(
   admin: SupabaseClient,
   user: { id: string; email?: string | null }
 ): Promise<ChatwootCreds> {
+  // Idempotent: always reuse an existing per-shop Chatwoot account if we already
+  // provisioned one (including after disconnect, which clears inbox_id only).
   const { data: settings } = await admin
     .from("chatwoot_settings")
     .select("base_url, access_token, account_id")
@@ -473,7 +504,21 @@ async function resolveChatwootCreds(
 
   const platformToken = (Deno.env.get("CHATWOOT_PLATFORM_TOKEN") ?? "").trim();
   if (platformToken) {
-    return await provisionChatwootAccount(baseUrl, platformToken, user);
+    const provisioned = await provisionChatwootAccount(baseUrl, platformToken, user);
+    // Persist immediately so a mid-connect failure does not create duplicate accounts.
+    await admin.from("chatwoot_settings").upsert(
+      {
+        user_id: user.id,
+        enabled: false,
+        base_url: provisioned.baseUrl,
+        access_token: provisioned.accessToken,
+        account_id: provisioned.accountId,
+        inbox_id: "",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+    return provisioned;
   }
 
   const defaultAccountId = (Deno.env.get("CHATWOOT_DEFAULT_ACCOUNT_ID") ?? "").trim();
@@ -545,6 +590,9 @@ async function provisionChatwootAccount(
   if (!/^\d+$/.test(platformUserId)) {
     throw new Error("Chatwoot Platform API did not return a user id.");
   }
+  const tokenFromCreate = String(
+    (userJson as { access_token?: string }).access_token ?? ""
+  ).trim();
 
   const linkRes = await fetch(
     `${baseUrl}/platform/api/v1/accounts/${accountId}/account_users`,
@@ -562,6 +610,7 @@ async function provisionChatwootAccount(
     throw new Error(describeChatwootError(linkRes.status, linkJson, "link account user"));
   }
 
+  let accessToken = tokenFromCreate;
   const tokenRes = await fetch(
     `${baseUrl}/platform/api/v1/users/${platformUserId}/login`,
     {
@@ -570,15 +619,13 @@ async function provisionChatwootAccount(
     }
   );
   const tokenJson = await readJson(tokenRes);
-  if (!tokenRes.ok) {
-    throw new Error(describeChatwootError(tokenRes.status, tokenJson, "issue login token"));
+  if (tokenRes.ok) {
+    accessToken = String(
+      (tokenJson as { access_token?: string }).access_token ??
+        (tokenJson as { data?: { access_token?: string } }).data?.access_token ??
+        accessToken
+    ).trim();
   }
-
-  const accessToken = String(
-    (tokenJson as { access_token?: string }).access_token ??
-      (tokenJson as { data?: { access_token?: string } }).data?.access_token ??
-      ""
-  ).trim();
   if (!accessToken) {
     throw new Error(
       "Chatwoot Platform login did not return an access token. Create an Agent API token manually or set CHATWOOT_DEFAULT_* secrets."
@@ -595,6 +642,7 @@ async function upsertWhatsappInbox(
     phoneNumberId: string;
     wabaId: string;
     apiKey: string;
+    webhookVerifyToken: string;
     existingInboxId: string;
   }
 ): Promise<{ id: number }> {
@@ -608,6 +656,7 @@ async function upsertWhatsappInbox(
         api_key: input.apiKey,
         phone_number_id: input.phoneNumberId,
         business_account_id: input.wabaId,
+        webhook_verify_token: input.webhookVerifyToken,
       },
     },
   };
@@ -716,6 +765,50 @@ async function registerPhoneNumber(phoneNumberId: string, token: string) {
       console.log(JSON.stringify({ event: "wa_register_warn", error: msg }));
     }
   }
+}
+
+/** Force phone-level webhook to our stable Chatwoot HTTPS host. */
+async function overridePhoneWebhook(input: {
+  phoneNumberId: string;
+  token: string;
+  callbackUrl: string;
+  verifyToken: string;
+}) {
+  const res = await fetch(`${GRAPH}/${input.phoneNumberId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      webhook_configuration: {
+        override_callback_uri: input.callbackUrl,
+        verify_token: input.verifyToken,
+      },
+    }),
+  });
+  const json = await readJson(res);
+  if (!res.ok) {
+    const msg = describeGraphError(json, "phone webhook override");
+    console.log(JSON.stringify({ event: "wa_webhook_override_warn", error: msg }));
+    // Non-fatal if app-level webhook already points at Chatwoot; still surface soft fail.
+    if (/190|session has expired|invalid.*token|oauth/i.test(msg)) {
+      throw new Error(msg);
+    }
+  }
+}
+
+function platformWebhookVerifyToken(): string {
+  const explicit = (Deno.env.get("WA_WEBHOOK_VERIFY_TOKEN") ?? "").trim();
+  if (explicit) return explicit;
+  // Must match Meta WhatsApp app webhook verify token used for Velo_ws.
+  return "2ef952bdcaaa3fcee36ea96c5bc8fe60";
+}
+
+function isMetaAuthError(message: string): boolean {
+  return /190|session has expired|error validating access token|oauthexception|invalid oauth/i.test(
+    message
+  );
 }
 
 async function fetchPhoneInfo(phoneNumberId: string, token: string) {

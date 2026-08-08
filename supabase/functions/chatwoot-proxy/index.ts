@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
     let accessToken = "";
     let accountId = "";
     let inboxId = "";
+    let requireInboxScope = false;
 
     const hasInlineCreds = Boolean(body.base_url && body.access_token && body.account_id);
 
@@ -119,6 +120,29 @@ Deno.serve(async (req) => {
       accessToken = (settings.access_token ?? "").trim();
       accountId = (settings.account_id ?? "").trim();
       inboxId = (settings.inbox_id ?? "").trim();
+
+      // Fail closed for Connected WhatsApp shops: never list across all inboxes.
+      const { data: waConn } = await admin
+        .from("whatsapp_channel_connections")
+        .select("status, chatwoot_inbox_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (waConn && waConn.status === "connected") {
+        requireInboxScope = true;
+        const scoped =
+          (inboxId && /^\d+$/.test(inboxId) && inboxId) ||
+          (waConn.chatwoot_inbox_id &&
+          /^\d+$/.test(String(waConn.chatwoot_inbox_id))
+            ? String(waConn.chatwoot_inbox_id)
+            : "");
+        if (!scoped) {
+          return fail(
+            "WhatsApp inbox is missing. Reconnect WhatsApp in Settings → Messages."
+          );
+        }
+        inboxId = scoped;
+      }
     }
 
     if (!baseUrl || !accessToken || !accountId) {
@@ -146,7 +170,8 @@ Deno.serve(async (req) => {
       origin,
       accountBase,
       inboxId,
-      body
+      body,
+      { requireInboxScope }
     );
     if ("error" in upstream) {
       return fail(upstream.error);
@@ -201,7 +226,8 @@ function buildUpstreamRequest(
     page?: number;
     content?: string;
     before?: number | string;
-  }
+  },
+  opts: { requireInboxScope?: boolean } = {}
 ):
   | { url: string; method: "GET" | "POST"; payload?: Record<string, unknown> }
   | { error: string } {
@@ -215,6 +241,11 @@ function buildUpstreamRequest(
   }
 
   if (action === "list_conversations") {
+    if (opts.requireInboxScope && !(/^\d+$/.test(inboxId))) {
+      return {
+        error: "WhatsApp inbox is missing. Reconnect WhatsApp in Settings → Messages.",
+      };
+    }
     const status = (body.status ?? "open").trim().toLowerCase();
     if (!ALLOWED_CONVERSATION_STATUSES.has(status)) {
       return { error: "Invalid status. Use open, pending, resolved or all." };
