@@ -40,6 +40,7 @@ const DEFAULT_WA_ES_CONFIG_ID = "1610415194046053";
 /** Capacitor WebView origin is https://localhost — Meta must not redirect there. */
 const PRODUCTION_SITE = "https://software-saree-order.vercel.app";
 const EMBEDDED_SIGNUP_RETURN_PATH = "/settings/messages/";
+const GRAPH_SDK_VERSION = "v26.0";
 
 export function getPublicMetaConfig(): { appId: string; configId: string } {
   return {
@@ -50,12 +51,7 @@ export function getPublicMetaConfig(): { appId: string; configId: string } {
 
 /** HTTPS page Meta should return to when the JS SDK falls back from a popup. */
 export function getEmbeddedSignupRedirectUri(): string {
-  const site = (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    PRODUCTION_SITE
-  )
-    .trim()
-    .replace(/\/$/, "");
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || PRODUCTION_SITE).trim().replace(/\/$/, "");
   return `${site}${EMBEDDED_SIGNUP_RETURN_PATH}`;
 }
 
@@ -93,15 +89,18 @@ export function loadFacebookSdk(appId: string): Promise<void> {
   if (window.FB) return Promise.resolve();
   if (sdkPromise) return sdkPromise;
 
+  const initOpts = {
+    appId,
+    autoLogAppEvents: true,
+    cookie: true,
+    xfbml: false,
+    version: GRAPH_SDK_VERSION,
+  };
+
   sdkPromise = new Promise((resolve, reject) => {
     window.fbAsyncInit = () => {
       try {
-        window.FB?.init({
-          appId,
-          cookie: true,
-          xfbml: false,
-          version: "v25.0",
-        });
+        window.FB?.init(initOpts);
         resolve();
       } catch (e) {
         reject(e);
@@ -109,16 +108,10 @@ export function loadFacebookSdk(appId: string): Promise<void> {
     };
 
     if (document.getElementById("facebook-jssdk")) {
-      // Script tag exists; fbAsyncInit may have already run or will soon.
       const started = Date.now();
       const wait = () => {
         if (window.FB) {
-          window.FB.init({
-            appId,
-            cookie: true,
-            xfbml: false,
-            version: "v25.0",
-          });
+          window.FB.init(initOpts);
           resolve();
           return;
         }
@@ -135,6 +128,8 @@ export function loadFacebookSdk(appId: string): Promise<void> {
     const script = document.createElement("script");
     script.id = "facebook-jssdk";
     script.async = true;
+    script.defer = true;
+    script.crossOrigin = "anonymous";
     script.src = "https://connect.facebook.net/en_US/sdk.js";
     script.onerror = () => reject(new Error("Could not load Facebook SDK."));
     document.body.appendChild(script);
@@ -143,9 +138,45 @@ export function loadFacebookSdk(appId: string): Promise<void> {
   return sdkPromise;
 }
 
+function applyEmbeddedSignupPayload(partial: SessionPartial, raw: unknown): void {
+  if (!raw || typeof raw !== "object") return;
+  const root = raw as Record<string, unknown>;
+  if (root.type && root.type !== "WA_EMBEDDED_SIGNUP") return;
+
+  const eventName = String(root.event ?? "").toUpperCase();
+  if (eventName === "CANCEL" || eventName === "ERROR") {
+    return;
+  }
+
+  const payload =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : root;
+
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      const v = payload[key];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+
+  const waba =
+    pick("waba_id", "wabaId", "sharedWabaId") ||
+    (Array.isArray(payload.waba_ids) && payload.waba_ids[0]
+      ? String(payload.waba_ids[0])
+      : "");
+  const phoneId = pick("phone_number_id", "phoneNumberId", "phone_id");
+  const phone = pick("phone_number", "display_phone_number", "phone");
+
+  if (waba) partial.waba_id = waba;
+  if (phoneId) partial.phone_number_id = phoneId;
+  if (phone) partial.phone_number = phone;
+}
+
 /**
- * Launches Embedded Signup and resolves with code + WABA/phone ids.
- * Meta may deliver ids via postMessage and the auth code via FB.login callback.
+ * Launches Embedded Signup and resolves with code + WABA/phone ids when available.
+ * IDs come from WA_EMBEDDED_SIGNUP postMessage; if missing, server can resolve from the code.
  */
 export function launchWhatsAppEmbeddedSignup(
   configId: string
@@ -166,18 +197,18 @@ export function launchWhatsAppEmbeddedSignup(
     const partial: SessionPartial = {};
     let settled = false;
 
-    const finishIfReady = () => {
+    const finishIfReady = (allowCodeOnly = false) => {
       if (settled) return;
-      if (partial.code && partial.waba_id && partial.phone_number_id) {
-        settled = true;
-        window.removeEventListener("message", onMessage);
-        resolve({
-          code: partial.code,
-          waba_id: partial.waba_id,
-          phone_number_id: partial.phone_number_id,
-          phone_number: partial.phone_number,
-        });
-      }
+      if (!partial.code) return;
+      if (!allowCodeOnly && (!partial.waba_id || !partial.phone_number_id)) return;
+      settled = true;
+      window.removeEventListener("message", onMessage);
+      resolve({
+        code: partial.code,
+        waba_id: partial.waba_id ?? "",
+        phone_number_id: partial.phone_number_id ?? "",
+        phone_number: partial.phone_number,
+      });
     };
 
     const onMessage = (event: MessageEvent) => {
@@ -185,22 +216,8 @@ export function launchWhatsAppEmbeddedSignup(
       try {
         const data =
           typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        if (!data || data.type !== "WA_EMBEDDED_SIGNUP") return;
-        const payload = data.data ?? data;
-        if (payload?.waba_id) partial.waba_id = String(payload.waba_id);
-        if (payload?.phone_number_id) {
-          partial.phone_number_id = String(payload.phone_number_id);
-        }
-        if (payload?.phone_number) {
-          partial.phone_number = String(payload.phone_number);
-        }
-        // Some payloads nest under event/data
-        const nested = payload?.data ?? payload?.event;
-        if (nested?.waba_id) partial.waba_id = String(nested.waba_id);
-        if (nested?.phone_number_id) {
-          partial.phone_number_id = String(nested.phone_number_id);
-        }
-        finishIfReady();
+        applyEmbeddedSignupPayload(partial, data);
+        finishIfReady(false);
       } catch {
         /* ignore non-JSON */
       }
@@ -213,9 +230,7 @@ export function launchWhatsAppEmbeddedSignup(
       settled = true;
       window.removeEventListener("message", onMessage);
       reject(
-        new Error(
-          "WhatsApp signup timed out. Complete the Meta popup, then try again."
-        )
+        new Error("WhatsApp signup timed out. Complete the Meta popup, then try again.")
       );
     }, 5 * 60 * 1000);
 
@@ -231,33 +246,18 @@ export function launchWhatsAppEmbeddedSignup(
           return;
         }
         partial.code = code;
-        finishIfReady();
-        // If message event already arrived, finishIfReady resolved.
-        // If not, wait a bit for WA_EMBEDDED_SIGNUP postMessage.
-        window.setTimeout(() => {
-          if (settled) return;
-          if (!partial.waba_id || !partial.phone_number_id) {
-            settled = true;
-            window.removeEventListener("message", onMessage);
-            reject(
-              new Error(
-                "Meta did not return WhatsApp account ids. Ensure Embedded Signup is configured and try again."
-              )
-            );
-          }
-        }, 8000);
+        finishIfReady(false);
+        // postMessage often arrives slightly after the login callback.
+        window.setTimeout(() => finishIfReady(true), 2500);
       },
       {
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        // When Meta falls back from popup → full-page redirect (common on Android),
-        // never land on Capacitor https://localhost (ERR_CONNECTION_REFUSED).
         fallback_redirect_uri: getEmbeddedSignupRedirectUri(),
+        // Match Meta Embedded Signup docs (v4): extras.setup only.
         extras: {
           setup: {},
-          featureType: "",
-          sessionInfoVersion: "3",
         },
       }
     );
@@ -272,5 +272,3 @@ function isMetaOrigin(origin: string): boolean {
     origin === "https://www.instagram.com"
   );
 }
-
-// redeploy trigger 2026-08-07T23:47:01.0130953+05:30

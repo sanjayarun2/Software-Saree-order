@@ -65,15 +65,15 @@ export async function getWhatsAppConnectStatus(): Promise<WhatsAppConnectState> 
 
 export async function completeWhatsAppConnect(input: {
   code: string;
-  waba_id: string;
-  phone_number_id: string;
+  waba_id?: string;
+  phone_number_id?: string;
   phone_number?: string;
 }): Promise<WhatsAppConnectState & { ok?: boolean }> {
   return invoke({
     action: "complete",
     code: input.code,
-    waba_id: input.waba_id,
-    phone_number_id: input.phone_number_id,
+    waba_id: input.waba_id ?? "",
+    phone_number_id: input.phone_number_id ?? "",
     phone_number: input.phone_number ?? "",
   });
 }

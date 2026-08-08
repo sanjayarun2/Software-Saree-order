@@ -13,7 +13,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const GRAPH_VERSION = "v25.0";
+const GRAPH_VERSION = "v26.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
 type Action = "complete" | "status" | "disconnect" | "health";
@@ -86,18 +86,18 @@ Deno.serve(async (req) => {
 
     // action === complete
     const code = (body.code ?? "").trim();
-    const wabaId = (body.waba_id ?? "").trim();
-    const phoneNumberId = (body.phone_number_id ?? "").trim();
+    let wabaId = (body.waba_id ?? "").trim();
+    let phoneNumberId = (body.phone_number_id ?? "").trim();
     if (!code) return fail("Missing Embedded Signup code. Try Connect WhatsApp again.");
-    if (!wabaId) return fail("Missing WhatsApp Business Account ID from Meta signup.");
-    if (!phoneNumberId) return fail("Missing phone number ID from Meta signup.");
+    // WABA / phone IDs may be empty when postMessage was blocked; server resolves from token.
 
     console.log(
       JSON.stringify({
         event: "whatsapp_connect_complete",
         user_id: user.id,
-        waba_id: wabaId,
-        phone_number_id: phoneNumberId,
+        waba_id: wabaId || null,
+        phone_number_id: phoneNumberId || null,
+        has_client_ids: Boolean(wabaId && phoneNumberId),
       })
     );
 
@@ -150,18 +150,25 @@ async function completeConnect(
   );
 
   const businessToken = await exchangeCodeForToken(metaAppId, metaAppSecret, input.code);
-  await subscribeAppToWaba(input.wabaId, businessToken);
-  await registerPhoneNumber(input.phoneNumberId, businessToken);
+  const assets = await resolveWabaAndPhone(metaAppId, metaAppSecret, businessToken, {
+    wabaId: input.wabaId,
+    phoneNumberId: input.phoneNumberId,
+  });
+  const wabaId = assets.wabaId;
+  const phoneNumberId = assets.phoneNumberId;
 
-  const phoneInfo = await fetchPhoneInfo(input.phoneNumberId, businessToken);
+  await subscribeAppToWaba(wabaId, businessToken);
+  await registerPhoneNumber(phoneNumberId, businessToken);
+
+  const phoneInfo = await fetchPhoneInfo(phoneNumberId, businessToken);
   const displayPhone =
     normalizePhone(input.phoneNumberHint) ||
     normalizePhone(phoneInfo.display_phone_number) ||
-    `+${input.phoneNumberId}`;
+    `+${phoneNumberId}`;
 
   if (chatwootBase) {
     await overridePhoneWebhook({
-      phoneNumberId: input.phoneNumberId,
+      phoneNumberId,
       token: businessToken,
       callbackUrl: `${chatwootBase}/webhooks/whatsapp/${displayPhone}`,
       verifyToken,
@@ -171,11 +178,11 @@ async function completeConnect(
   const chatwoot = await resolveChatwootCreds(admin, user);
   const inbox = await upsertWhatsappInbox(chatwoot, {
     phoneNumber: displayPhone,
-    phoneNumberId: input.phoneNumberId,
-    wabaId: input.wabaId,
+    phoneNumberId,
+    wabaId,
     apiKey: businessToken,
     webhookVerifyToken: verifyToken,
-    existingInboxId: await getExistingInboxId(admin, user.id, input.phoneNumberId),
+    existingInboxId: await getExistingInboxId(admin, user.id, phoneNumberId),
   });
 
   const now = new Date().toISOString();
@@ -196,8 +203,8 @@ async function completeConnect(
     {
       user_id: user.id,
       phone_number: displayPhone,
-      phone_number_id: input.phoneNumberId,
-      waba_id: input.wabaId,
+      phone_number_id: phoneNumberId,
+      waba_id: wabaId,
       chatwoot_inbox_id: String(inbox.id),
       status: "connected",
       connected_at: now,
@@ -209,14 +216,14 @@ async function completeConnect(
   );
 
   // Prefill order-confirmation phone number id; leave templates for Settings → WhatsApp.
-  await syncWhatsappSettingsPhone(admin, user.id, input.phoneNumberId);
+  await syncWhatsappSettingsPhone(admin, user.id, phoneNumberId);
 
   return {
     ok: true,
     status: "connected" as const,
     phone_number: maskPhone(displayPhone),
-    phone_number_id: input.phoneNumberId,
-    waba_id: input.wabaId,
+    phone_number_id: phoneNumberId,
+    waba_id: wabaId,
     chatwoot_inbox_id: String(inbox.id),
     account_id: chatwoot.accountId,
   };
@@ -735,6 +742,106 @@ async function exchangeCodeForToken(
   const token = String((json as { access_token?: string }).access_token ?? "").trim();
   if (!token) throw new Error("Meta did not return an access token from the signup code.");
   return token;
+}
+
+/**
+ * Prefer IDs from Embedded Signup postMessage; otherwise discover from the business token.
+ */
+async function resolveWabaAndPhone(
+  appId: string,
+  appSecret: string,
+  businessToken: string,
+  hints: { wabaId: string; phoneNumberId: string }
+): Promise<{ wabaId: string; phoneNumberId: string }> {
+  let wabaId = hints.wabaId.trim();
+  let phoneNumberId = hints.phoneNumberId.trim();
+
+  if (wabaId && phoneNumberId) {
+    return { wabaId, phoneNumberId };
+  }
+
+  // debug_token often lists WABA target ids under granular_scopes.
+  if (!wabaId) {
+    try {
+      const appToken = `${appId}|${appSecret}`;
+      const url = new URL(`${GRAPH}/debug_token`);
+      url.searchParams.set("input_token", businessToken);
+      url.searchParams.set("access_token", appToken);
+      const res = await fetch(url.toString());
+      const json = (await readJson(res)) as {
+        data?: {
+          granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
+        };
+      };
+      const scopes = json.data?.granular_scopes ?? [];
+      for (const s of scopes) {
+        if (
+          /whatsapp_business_management|whatsapp_business_messaging/i.test(String(s.scope ?? "")) &&
+          Array.isArray(s.target_ids) &&
+          s.target_ids[0]
+        ) {
+          wabaId = String(s.target_ids[0]).trim();
+          break;
+        }
+      }
+    } catch (e) {
+      console.log(
+        JSON.stringify({
+          event: "wa_debug_token_warn",
+          error: (e as Error).message,
+        })
+      );
+    }
+  }
+
+  // Owned / shared WABA edges on the token principal.
+  if (!wabaId) {
+    for (const path of [
+      "/me/whatsapp_business_accounts?limit=5",
+      "/me/client_whatsapp_business_accounts?limit=5",
+    ]) {
+      try {
+        const res = await fetch(`${GRAPH}${path}`, {
+          headers: { Authorization: `Bearer ${businessToken}` },
+        });
+        const json = (await readJson(res)) as { data?: Array<{ id?: string }> };
+        if (res.ok && json.data?.[0]?.id) {
+          wabaId = String(json.data[0].id).trim();
+          break;
+        }
+      } catch {
+        /* try next */
+      }
+    }
+  }
+
+  if (!wabaId) {
+    throw new Error(
+      "Could not determine WhatsApp Business Account ID after signup. Complete the full Meta Embedded Signup (including phone), then try Connect again."
+    );
+  }
+
+  if (!phoneNumberId) {
+    const res = await fetch(
+      `${GRAPH}/${wabaId}/phone_numbers?fields=id,display_phone_number&limit=10`,
+      { headers: { Authorization: `Bearer ${businessToken}` } }
+    );
+    const json = (await readJson(res)) as {
+      data?: Array<{ id?: string; display_phone_number?: string }>;
+    };
+    if (!res.ok) {
+      throw new Error(describeGraphError(json, "list WABA phone numbers"));
+    }
+    const first = json.data?.[0];
+    if (!first?.id) {
+      throw new Error(
+        "WhatsApp account has no phone number yet. Finish phone verification in Meta Embedded Signup, then Connect again."
+      );
+    }
+    phoneNumberId = String(first.id).trim();
+  }
+
+  return { wabaId, phoneNumberId };
 }
 
 async function subscribeAppToWaba(wabaId: string, token: string) {
