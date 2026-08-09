@@ -587,7 +587,8 @@ const SIZE_ADDRESS = 12;     // address lines — larger and bold for print visi
 const SIZE_THANKS_TITLE = 10;  // reduced for better balance
 const SIZE_THANKS_SUB = 10;
 const LINE_HEIGHT_ADDRESS = 6; // matches SIZE_ADDRESS for clean print
-const MAX_ADDRESS_LINES = 7;
+/** Soft hint only — real capacity comes from section height (see maxAddressLinesForY). */
+const MAX_ADDRESS_LINES_HINT = 12;
 
 // Layout spacing
 // ADDRESS_PADDING = distance from vertical border line to start of text inside a column.
@@ -685,19 +686,36 @@ function getBaseTypographyPt(settings: PdfRenderOptions["settings"]): {
   return { labelPt: SIZE_LABEL, addressPt: SIZE_ADDRESS, centerPt: 15 };
 }
 
+/** How many address lines fit from label Y down to the section bottom margin. */
+export function maxAddressLinesForY(
+  yBase: number,
+  lineHeightMm: number,
+  labelToAddressGap: number = LABEL_TO_ADDRESS_GAP_MM
+): number {
+  const topLimit = VERTICAL_OFFSET;
+  const bottomLimit = SECTION_H - VERTICAL_OFFSET;
+  const y = clamp(yBase, topLimit, bottomLimit);
+  const addressStart = y + labelToAddressGap;
+  if (lineHeightMm <= 0 || addressStart > bottomLimit) return 1;
+  return Math.max(1, Math.floor((bottomLimit - addressStart) / lineHeightMm) + 1);
+}
+
 /**
- * Wrap every line to column width, then cap line count.
- * TO labels: keep trailing `Pincode : …` then `Mob No : …` intact — never merge/truncate
- * into the previous address line.
+ * Wrap address to column width.
+ * Never drops characters (old maxLines path truncated "goregaon west, Mumbai").
+ * Optional maxLines only tries lossless compression (join + rewrap); if still too tall,
+ * returns the full wrap so the caller can shift up / shrink font.
  */
 export function fitAddressLinesToColumn(
   doc: { splitTextToSize: (s: string, w: number) => string[] },
   text: string,
   maxW: number,
-  maxLines: number
+  maxLines?: number
 ): string[] {
   const wrapped = getPdfAddressLines(doc, text, maxW);
-  if (wrapped.length <= maxLines) return wrapped;
+  if (maxLines == null || maxLines < 1 || wrapped.length <= maxLines) {
+    return wrapped;
+  }
 
   const footer: string[] = [];
   const body = [...wrapped];
@@ -708,30 +726,28 @@ export function fitAddressLinesToColumn(
     footer.unshift(body.pop()!);
   }
 
-  if (footer.length && maxLines > footer.length) {
-    const fittedFooter = footer.map(
-      (line) => doc.splitTextToSize(softBreakLongRuns(line.trim()), maxW)[0] ?? line.trim()
-    );
-    const bodyMax = maxLines - fittedFooter.length;
-    if (body.length <= bodyMax) {
-      return [...body, ...fittedFooter];
-    }
-    if (bodyMax <= 0) return fittedFooter.slice(-maxLines);
-    const head = body.slice(0, bodyMax - 1);
-    const overflowSource = softBreakLongRuns(body.slice(bodyMax - 1).join(" "));
-    const overflowFirst =
-      doc.splitTextToSize(overflowSource, maxW)[0] ?? overflowSource;
-    return [...head, overflowFirst, ...fittedFooter];
+  const footerBudget = footer.length;
+  const bodyBudget = Math.max(0, maxLines - footerBudget);
+  if (bodyBudget <= 0) {
+    // Prefer full address over dropping body for footer-only — caller will shrink font.
+    return wrapped;
   }
 
-  const head = wrapped.slice(0, maxLines - 1);
-  const tailSource = softBreakLongRuns(wrapped.slice(maxLines - 1).join(" "));
-  const tailWrapped = doc.splitTextToSize(tailSource, maxW);
-  const combined = [...head, ...tailWrapped];
-  if (combined.length <= maxLines) return combined;
+  if (body.length <= bodyBudget) {
+    return [...body, ...footer];
+  }
 
-  const lastChunk = doc.splitTextToSize(tailSource, maxW)[0] ?? tailSource;
-  return [...head, lastChunk];
+  // Lossless compress: reflow body as one stream, keep every character.
+  const reflowed = doc.splitTextToSize(
+    softBreakLongRuns(body.join(" ").replace(/[ \t]{2,}/g, " ").trim()),
+    maxW
+  );
+  if (reflowed.length <= bodyBudget) {
+    return [...reflowed, ...footer];
+  }
+
+  // Still too many lines — keep full text; vertical layout + font shrink must handle it.
+  return wrapped;
 }
 
 /** Keep FROM/TO/logo inside one split vertically (shift only; never trim lines). */
@@ -831,7 +847,9 @@ function measureOrderSectionLayout(
   toShiftMm: number,
   labelSizePt: number,
   addressSizePt: number,
-  centerTextSizePt: number
+  centerTextSizePt: number,
+  /** When set, force FROM/TO label Y (e.g. pin to top after expand-down failed). */
+  yOverride?: { fromY: number; toY: number }
 ): { fits: boolean; layout: SectionVerticalLayout; centerBlockHalfH: number } {
   const shouldNormalize = options.settings?.normalize_addresses === true;
   const fromSource = prepareAddressForPdf(
@@ -853,16 +871,25 @@ function measureOrderSectionLayout(
   ensurePdfFonts(doc);
   doc.setFontSize(addressSizePt);
 
-  // Measure with the same font used for drawing (Tamil → NotoSansTamil).
-  setPdfAddressFont(doc, fromSource, textBold);
-  const fromLines = fitAddressLinesToColumn(doc, fromSource, maxWFrom, MAX_ADDRESS_LINES);
-  setPdfAddressFont(doc, toSource, textBold);
-  const toLines = fitAddressLinesToColumn(doc, toSource, maxWTo, MAX_ADDRESS_LINES);
-
+  const lineHeightMm = addressSizePt * 0.5;
+  const labelToAddressGap = LABEL_TO_ADDRESS_GAP_MM;
   const sectionH = SECTION_H;
-  /** Label baseline; first address line is +LABEL_TO_ADDRESS_GAP_MM (default 8 → ~17 mm). */
-  const toYBase = options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8;
-  const fromYBase = options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 8;
+  const toYBase =
+    yOverride?.toY ??
+    (options.settings?.to_y_mm != null ? clamp(options.settings.to_y_mm, 0, sectionH) : 8);
+  const fromYBase =
+    yOverride?.fromY ??
+    (options.settings?.from_y_mm != null ? clamp(options.settings.from_y_mm, 0, sectionH) : 8);
+
+  // Capacity from preferred Y downward (expand into unused bottom space first).
+  const maxLinesFrom = maxAddressLinesForY(fromYBase, lineHeightMm, labelToAddressGap);
+  const maxLinesTo = maxAddressLinesForY(toYBase, lineHeightMm, labelToAddressGap);
+
+  setPdfAddressFont(doc, fromSource, textBold);
+  const fromLines = fitAddressLinesToColumn(doc, fromSource, maxWFrom, maxLinesFrom);
+  setPdfAddressFont(doc, toSource, textBold);
+  const toLines = fitAddressLinesToColumn(doc, toSource, maxWTo, maxLinesTo);
+
   const placement = options.settings?.placement ?? "bottom";
   const logoYSetting =
     options.settings?.logo_y_mm != null ? clamp(options.settings.logo_y_mm, 0, sectionH) : null;
@@ -880,9 +907,6 @@ function measureOrderSectionLayout(
     SECTION_H - VERTICAL_OFFSET - logoHalfH
   );
 
-  const lineHeightMm = addressSizePt * 0.5;
-  const labelToAddressGap = LABEL_TO_ADDRESS_GAP_MM;
-
   const layout = layoutBlocksInSection(
     fromYBase,
     toYBase,
@@ -898,7 +922,10 @@ function measureOrderSectionLayout(
   return { fits: layout.fits, layout, centerBlockHalfH };
 }
 
-/** Shrink fonts in small steps until the label fits; otherwise ask user to shorten text. */
+/**
+ * Fit label: (1) use space below at preferred Y, (2) shift blocks up to top,
+ * (3) shrink fonts. Never silently drop address text.
+ */
 export function resolveOrderLabelLayout(
   doc: DocShape,
   order: Order,
@@ -909,10 +936,13 @@ export function resolveOrderLabelLayout(
   let labelPt = base.labelPt;
   let addressPt = base.addressPt;
   let centerPt = base.centerPt;
+  const topY = VERTICAL_OFFSET;
 
   while (labelPt >= PDF_MIN_LABEL_PT && addressPt >= PDF_MIN_ADDRESS_PT) {
     const toShift = computeToShiftMm(doc, order, options, addressPt);
-    const measured = measureOrderSectionLayout(
+
+    // 1) Preferred Y — expand downward into free space under the address.
+    const atPreferred = measureOrderSectionLayout(
       doc,
       order,
       options,
@@ -921,22 +951,48 @@ export function resolveOrderLabelLayout(
       addressPt,
       Math.max(centerPt, PDF_MIN_CENTER_TEXT_PT)
     );
-
-    if (measured.fits) {
+    if (atPreferred.fits) {
       return {
         labelSizePt: labelPt,
         addressSizePt: addressPt,
         centerTextSizePt: Math.max(centerPt, PDF_MIN_CENTER_TEXT_PT),
         toShiftMm: toShift,
-        fromY: measured.layout.fromY,
-        toY: measured.layout.toY,
-        logoCenterYRel: measured.layout.logoCenterYRel,
-        fromLines: measured.layout.fromLines,
-        toLines: measured.layout.toLines,
-        centerBlockHalfH: measured.centerBlockHalfH,
+        fromY: atPreferred.layout.fromY,
+        toY: atPreferred.layout.toY,
+        logoCenterYRel: atPreferred.layout.logoCenterYRel,
+        fromLines: atPreferred.layout.fromLines,
+        toLines: atPreferred.layout.toLines,
+        centerBlockHalfH: atPreferred.centerBlockHalfH,
       };
     }
 
+    // 2) Move FROM/TO up to the top margin to reclaim vertical room.
+    const atTop = measureOrderSectionLayout(
+      doc,
+      order,
+      options,
+      toShift,
+      labelPt,
+      addressPt,
+      Math.max(centerPt, PDF_MIN_CENTER_TEXT_PT),
+      { fromY: topY, toY: topY }
+    );
+    if (atTop.fits) {
+      return {
+        labelSizePt: labelPt,
+        addressSizePt: addressPt,
+        centerTextSizePt: Math.max(centerPt, PDF_MIN_CENTER_TEXT_PT),
+        toShiftMm: toShift,
+        fromY: atTop.layout.fromY,
+        toY: atTop.layout.toY,
+        logoCenterYRel: atTop.layout.logoCenterYRel,
+        fromLines: atTop.layout.fromLines,
+        toLines: atTop.layout.toLines,
+        centerBlockHalfH: atTop.centerBlockHalfH,
+      };
+    }
+
+    // 3) Shrink typography and retry.
     labelPt -= PDF_FONT_SHRINK_STEP_PT;
     addressPt -= PDF_FONT_SHRINK_STEP_PT;
     centerPt -= PDF_FONT_SHRINK_STEP_PT;
@@ -1042,13 +1098,13 @@ export function normalizeAddressBlock(text: string): string {
     result.push(phoneLines[0]);
   }
 
-  // Hard cap: never exceed MAX_ADDRESS_LINES; keep phone / Mob No as its own last line.
-  if (result.length > MAX_ADDRESS_LINES) {
+  // Soft line budget for normalize only — join with commas, never delete words.
+  if (result.length > MAX_ADDRESS_LINES_HINT) {
     const last = result[result.length - 1] ?? "";
     const preservePhone =
       phoneRegex.test(last) || isMobNoLine(last) || /mob\s*no/i.test(last);
-    if (preservePhone && MAX_ADDRESS_LINES >= 2) {
-      const bodyMax = MAX_ADDRESS_LINES - 1;
+    if (preservePhone && MAX_ADDRESS_LINES_HINT >= 2) {
+      const bodyMax = MAX_ADDRESS_LINES_HINT - 1;
       const body = result.slice(0, -1);
       if (body.length <= bodyMax) {
         return [...body, last].join("\n");
@@ -1057,8 +1113,8 @@ export function normalizeAddressBlock(text: string): string {
       const tail = body.slice(bodyMax - 1).join(", ");
       return [...head, tail, last].join("\n");
     }
-    const head = result.slice(0, MAX_ADDRESS_LINES - 1);
-    const tail = result.slice(MAX_ADDRESS_LINES - 1).join(", ");
+    const head = result.slice(0, MAX_ADDRESS_LINES_HINT - 1);
+    const tail = result.slice(MAX_ADDRESS_LINES_HINT - 1).join(", ");
     head.push(tail);
     return head.join("\n");
   }
@@ -1304,20 +1360,13 @@ function drawOrderLabel(
     }
   }
 
-  // TO — right column, left-aligned within its column
+  // TO — use resolved lines as measured (do not re-cap; that dropped city/area text).
   doc.setFont(FONT_HEADING, textBold ? "bold" : "normal");
   doc.setFontSize(labelSize);
   doc.text("TO:", rightX, labelYTo);
   setPdfAddressFont(doc, toLines.join("\n"), textBold);
   doc.setFontSize(addressSize);
-  const maxWToDraw = getRightColumnMaxTextWidth(resolved.toShiftMm);
-  const safeToLines = fitAddressLinesToColumn(
-    doc,
-    toLines.join("\n"),
-    maxWToDraw,
-    MAX_ADDRESS_LINES
-  );
-  safeToLines.forEach((line, i) => {
+  toLines.forEach((line, i) => {
     doc.text(line, rightX, addressStartYTo + i * lineHeightMm);
   });
 }

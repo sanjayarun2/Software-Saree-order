@@ -363,6 +363,11 @@ check("PDF fit keeps Pincode + Mob No footer when over cap", () => {
     pdfSrc.includes("export function fitAddressLinesToColumn"),
     "fitAddressLinesToColumn should be exported"
   );
+  assert.ok(
+    pdfSrc.includes("maxAddressLinesForY") &&
+      pdfSrc.includes("Never drops characters"),
+    "TO fit should expand vertically / shrink font without dropping address text"
+  );
 
   function softBreakLongRuns(text, chunkSize = 14) {
     return text
