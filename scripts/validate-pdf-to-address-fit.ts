@@ -26,11 +26,15 @@ function makeOrder(to: string): Order {
     user_id: "validate",
     sender_details: "Dove silks\nEllampillai - 637502\nPh: 8122864829",
     recipient_details: to,
-    saree_count: 1,
+    booked_by: "validate",
+    booked_mobile_no: "7208574953",
+    courier_name: "",
+    booking_date: new Date().toISOString().slice(0, 10),
+    despatch_date: null,
     status: "PENDING",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  } as Order;
+  };
 }
 
 function assertKeepsCity(haystack: string) {
