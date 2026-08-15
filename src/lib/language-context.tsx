@@ -158,6 +158,12 @@ const TA: Record<string, string> = {
   "Syncing...": "புதுப்பிக்கப்படுகிறது...",
   "Not synced yet": "இன்னும் புதுப்பிக்கப்படவில்லை",
   "Product Code Settings": "புராடக்ட் கோட் செட்டிங்ஸ்",
+  "Stamp code on photos": "படங்களில் கோட் அச்சிடு",
+  "When off, bulk add uploads photos to the website immediately. When on, codes are stamped first, then you review the batch.":
+    "ஆஃப் ஆக இருந்தால் பல புராடக்ட் படங்கள் நேரடியாக வலைத்தளத்தில் அப்லோடு ஆகும். ஆன் ஆக இருந்தால் முதலில் கோட் அச்சிட்டு பேட்சை பார்க்கலாம்.",
+  "Photos upload straight to the website. Shop ST codes are assigned automatically. Turn on stamp in Product Code Settings if you want codes on the images.":
+    "படங்கள் நேரடியாக வலைத்தளத்தில் அப்லோடு ஆகும். கடை ST கோட் தானாக வழங்கப்படும். படத்தில் கோட் வேண்டுமானால் புராடக்ட் கோட் செட்டிங்ஸில் அச்சிடுதலை ஆன் செய்யவும்.",
+  "Upload to website": "வலைத்தளத்தில் அப்லோடு",
   "Preview": "முன்னோட்டம்",
   "Text Placement": "உரை இடம்",
   "Text Color": "உரை நிறம்",
@@ -395,6 +401,7 @@ const TA: Record<string, string> = {
   "Product List": "புராடக்ட் பட்டியல்",
   "Add Single Product": "ஒரு புராடக்ட் சேர்",
   "Add Bulk Products": "பல புராடக்ட் சேர்",
+  "Add product": "புராடக்ட் சேர்",
   Categories: "வகைகள்",
   "Create category": "வகை உருவாக்கு",
   "New category": "புதிய வகை",

@@ -108,8 +108,29 @@ export default function ProductCodeSettingsPage() {
           </h1>
         </div>
 
+        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-5 w-5"
+              checked={settings.overlayEnabled}
+              onChange={(e) => update({ overlayEnabled: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("Stamp code on photos")}
+              </span>
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                {t(
+                  "When off, bulk add uploads photos to the website immediately. When on, codes are stamped first, then you review the batch."
+                )}
+              </span>
+            </span>
+          </label>
+        </div>
+
         {/* Preview */}
-        <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+        <div className={`overflow-hidden rounded-2xl border border-white/20 bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] ${settings.overlayEnabled ? "" : "opacity-50"}`}>
           <div className="px-4 pt-3 pb-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               {t("Preview")}
@@ -117,6 +138,7 @@ export default function ProductCodeSettingsPage() {
           </div>
           <div className="relative mx-4 mb-4 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-900">
             <span className="text-sm text-slate-400 dark:text-slate-600">{t("Sample Image")}</span>
+            {settings.overlayEnabled ? (
             <span
               className="absolute font-bold"
               style={{
@@ -134,10 +156,12 @@ export default function ProductCodeSettingsPage() {
             >
               A12
             </span>
+            ) : null}
           </div>
         </div>
 
         {/* Placement */}
+        <fieldset disabled={!settings.overlayEnabled} className={settings.overlayEnabled ? "" : "pointer-events-none opacity-50"}>
         <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/80 px-4 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-slate-800/60 dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {t("Text Placement")}
@@ -218,6 +242,7 @@ export default function ProductCodeSettingsPage() {
             ))}
           </div>
         </div>
+        </fieldset>
 
         {/* Actions */}
         <div className="flex flex-col gap-3 pb-8">

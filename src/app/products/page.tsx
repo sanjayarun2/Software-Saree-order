@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BentoCard } from "@/components/ui/BentoCard";
 import { IconWhatsApp } from "@/components/ui/OrderIcons";
+import { AddProductFab, addProductFabLiftFromCart } from "@/components/products/AddProductFab";
 import { CategoriesTab } from "@/components/products/CategoriesTab";
 import { CollectionFieldWithAdd } from "@/components/products/CreateCollectionModal";
 import { BulkBatchList } from "@/components/products/BulkBatchList";
@@ -27,7 +28,9 @@ import {
   saveBulkProductDraft,
   saveSingleProductDraft,
 } from "@/lib/product-form-draft";
+import { uploadBulkOriginalsDirectToWebsite } from "@/lib/bulk-product-batch-upload";
 import { compressImageFile, recompressBase64Image, SINGLE_UPLOAD_PROFILE } from "@/lib/product-image-compress";
+import { isProductCodeOverlayEnabled } from "@/lib/product-code-settings";
 import { getVeloShopBaseUrl } from "@/lib/shop-base-url";
 import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useShareCart } from "@/lib/use-share-cart";
@@ -66,8 +69,6 @@ const MAX_BULK_FILES = 50;
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "list", label: "Product List" },
-  { id: "single", label: "Add Single Product" },
-  { id: "bulk", label: "Add Bulk Products" },
   { id: "categories", label: "Categories" },
 ];
 
@@ -152,6 +153,28 @@ export default function ProductsPage() {
           </Link>
         </div>
 
+        {(tab === "single" || tab === "bulk") && (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setInfo(null);
+                setTab("list");
+              }}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 text-slate-700 dark:border-slate-600 dark:text-slate-200"
+              aria-label={t("Back")}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {tab === "single" ? t("Add Single Product") : t("Add Bulk Products")}
+            </h2>
+          </div>
+        )}
+
         {(error || info) && (
           <div
             className={`rounded-xl border px-4 py-3 text-sm ${
@@ -164,6 +187,7 @@ export default function ProductsPage() {
           </div>
         )}
 
+        {(tab === "list" || tab === "categories") && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {TABS.map((item) => (
             <button
@@ -184,6 +208,7 @@ export default function ProductsPage() {
             </button>
           ))}
         </div>
+        )}
 
         <div className={tab === "list" ? undefined : "hidden"}>
           <ProductListTab
@@ -194,6 +219,16 @@ export default function ProductsPage() {
               window.dispatchEvent(
                 new CustomEvent("velo-edit-product", { detail: product })
               );
+            }}
+            onAddSingle={() => {
+              setError(null);
+              setInfo(null);
+              setTab("single");
+            }}
+            onAddBulk={() => {
+              setError(null);
+              setInfo(null);
+              setTab("bulk");
             }}
             setError={setError}
             setInfo={setInfo}
@@ -246,12 +281,16 @@ function ProductListTab({
   userId,
   refreshKey,
   onEdit,
+  onAddSingle,
+  onAddBulk,
   setError,
   setInfo,
 }: {
   userId: string;
   refreshKey: number;
   onEdit: (p: VeloProductListItem) => void;
+  onAddSingle: () => void;
+  onAddBulk: () => void;
   setError: (v: string | null) => void;
   setInfo: (v: string | null) => void;
 }) {
@@ -670,6 +709,18 @@ function ProductListTab({
         setError={setError}
         setInfo={setInfo}
       />
+
+      {searchFocused ? null : (
+        <AddProductFab
+          onAddSingle={onAddSingle}
+          onAddBulk={onAddBulk}
+          lift={addProductFabLiftFromCart({
+            lineCount: shareCart.lines.length,
+            compact: searchFocused,
+            expanded: cartExpanded && !searchFocused,
+          })}
+        />
+      )}
     </div>
   );
 }
@@ -988,6 +1039,7 @@ function ProductBulkTab({
   onRefreshCollections,
   setError,
   setInfo,
+  onDone,
 }: {
   userId: string;
   collections: VeloCollection[];
@@ -1003,7 +1055,11 @@ function ProductBulkTab({
   const [form, setForm] = useState<VeloBulkSharedForm>(() => loadBulkProductDraft() ?? { ...EMPTY_BULK_FORM });
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const overlayOn = isProductCodeOverlayEnabled();
 
   useEffect(() => {
     saveBulkProductDraft(form);
@@ -1055,11 +1111,79 @@ function ProductBulkTab({
     router.push("/products/bulk/process/");
   };
 
+  const uploadDirect = async () => {
+    setError(null);
+    setInfo(null);
+    const errors = validateBulkForm({
+      namePrefix: form.namePrefix,
+      collectionId: form.collectionId,
+      price: form.price,
+      stock: form.stock,
+      imageCount: pickedFiles.length,
+      sizeConfig: form.sizeConfig,
+    });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError(t("Please fix the highlighted fields."));
+      return;
+    }
+
+    setUploadBusy(true);
+    setUploadPhase(t("Uploading..."));
+    setUploadProgress(4);
+    try {
+      const res = await uploadBulkOriginalsDirectToWebsite(userId, form, pickedFiles, {
+        onProgress: (p) => {
+          setUploadProgress(p.percent);
+          setUploadPhase(
+            t("Uploading product {current}/{total}")
+              .replace("{current}", String(p.current))
+              .replace("{total}", String(p.total))
+          );
+        },
+        recompressImage: async (base64, fileName) => {
+          const smaller = await recompressBase64Image(base64, fileName);
+          return { base64: smaller.base64, fileName: smaller.fileName };
+        },
+      });
+      setUploadProgress(100);
+      const codes = res.websiteCodes.filter(Boolean).join(", ");
+      const created = t("Created {count} product(s).").replace("{count}", String(res.uploadedCount));
+      setInfo(codes ? `${created} ${codes}` : created);
+      if (res.failures.length > 0) {
+        setError(res.failures.slice(0, 4).join("\n"));
+      }
+      setPickedFiles([]);
+      clearBulkProductDraft();
+      onDone();
+    } catch (e) {
+      if (e instanceof VeloProductsApiError) {
+        setError(e.message);
+        setFieldErrors(e.fieldErrors);
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setUploadBusy(false);
+      setUploadPhase(null);
+      setUploadProgress(0);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      <UploadProgressOverlay
+        open={uploadBusy}
+        label={uploadPhase ?? t("Uploading...")}
+        progress={uploadProgress}
+      />
       <BentoCard className="space-y-4 p-4">
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
-          {t("Create a batch here. Saved batches appear in Product List.")}
+          {overlayOn
+            ? t("Create a batch here. Saved batches appear in Product List.")
+            : t(
+                "Photos upload straight to the website. Shop ST codes are assigned automatically. Turn on stamp in Product Code Settings if you want codes on the images."
+              )}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2">
@@ -1171,11 +1295,11 @@ function ProductBulkTab({
 
         <button
           type="button"
-          disabled={pickedFiles.length === 0}
-          onClick={goGenerate}
+          disabled={pickedFiles.length === 0 || uploadBusy}
+          onClick={overlayOn ? goGenerate : () => void uploadDirect()}
           className="min-h-[44px] w-full rounded-xl bg-primary-500 px-4 py-3 text-base font-semibold text-white disabled:opacity-50"
         >
-          {t("Generate batch")}
+          {overlayOn ? t("Generate batch") : t("Upload to website")}
         </button>
       </BentoCard>
     </div>

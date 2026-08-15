@@ -7,7 +7,7 @@ import {
 import type { StoredBulkBatchImage } from "./bulk-product-batch-images";
 import type { BulkProductBatchLine, BulkProductBatchRecord } from "./bulk-product-batch-storage";
 import { updateBulkProductBatch } from "./bulk-product-batch-storage";
-import { buildBulkProductName } from "./bulk-product-naming";
+import { buildBulkProductName, buildDirectBulkProductName } from "./bulk-product-naming";
 import { uploadProductReliable } from "./velo-products-api";
 import { invalidateProductsListCache, normalizeIsDraft, peekCollectionsCache } from "./velo-products-cache";
 import { saveProductShopMeta, slugifyProductName } from "./product-shop-meta-storage";
@@ -191,6 +191,96 @@ export async function uploadBulkProductBatchToWebsite(
   }
 
   return { uploadedCount, websiteCodes, failures };
+}
+
+/**
+ * Overlay-off path: compress original photos and create products on the shop.
+ * No product-code stamp, no batch/process page.
+ */
+export async function uploadBulkOriginalsDirectToWebsite(
+  userId: string,
+  form: BulkProductBatchRecord["form"],
+  files: File[],
+  opts?: {
+    onProgress?: (p: BulkBatchUploadProgress) => void;
+    recompressImage?: (
+      base64: string,
+      fileName: string
+    ) => Promise<{ base64: string; fileName: string }>;
+  }
+): Promise<{ uploadedCount: number; websiteCodes: string[]; failures: string[] }> {
+  if (!files.length) {
+    throw new Error("Select at least one image.");
+  }
+
+  const collections = peekCollectionsCache(userId) ?? [];
+  const collectionSlug =
+    collections.find((c) => c.id === form.collectionId)?.slug ?? null;
+
+  const failures: string[] = [];
+  const websiteCodes: string[] = [];
+  const total = files.length;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]!;
+    const name = buildDirectBulkProductName(form.namePrefix, i, total);
+    opts?.onProgress?.({
+      current: i + 1,
+      total,
+      percent: Math.round(5 + ((i + 0.4) / total) * 90),
+      label: `Uploading ${i + 1}/${total}`,
+    });
+
+    try {
+      const compressed = await compressImageFile(file, BULK_UPLOAD_PROFILE);
+      const res = await uploadProductReliable(
+        userId,
+        {
+          name,
+          description: form.description,
+          collectionId: form.collectionId,
+          tags: form.tags,
+          badge: form.badge,
+          rating: form.rating,
+          price: form.price,
+          stock: form.stock,
+          isDraft: normalizeIsDraft(form.isDraft),
+          sizeConfig: form.sizeConfig,
+          imageBase64: compressed.base64,
+          imageFileName: compressed.fileName,
+        },
+        {
+          deferCacheInvalidation: true,
+          recompressImage: opts?.recompressImage,
+        }
+      );
+
+      const shopCode = res.product?.productCode;
+      const productId = res.product?.productId;
+      const apiSlug = (res.product as { slug?: string } | undefined)?.slug;
+      if (shopCode) websiteCodes.push(shopCode);
+      if (productId) {
+        const slug = apiSlug || slugifyProductName(name);
+        await saveProductShopMeta(userId, {
+          productId,
+          slug,
+          collectionId: form.collectionId,
+          collectionSlug,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      failures.push(`${name}: ${(e as Error).message}`);
+    }
+  }
+
+  invalidateProductsListCache(userId);
+
+  if (websiteCodes.length === 0 && failures.length > 0) {
+    throw new Error(failures[0] ?? "Upload failed.");
+  }
+
+  return { uploadedCount: websiteCodes.length, websiteCodes, failures };
 }
 
 export function buildBulkBatchShareText(batch: BulkProductBatchRecord): string {

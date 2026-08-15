@@ -15,7 +15,7 @@ import jpegDecode from "@jsquash/jpeg/decode";
 import jpegEncode from "@jsquash/jpeg/encode";
 import pngDecode from "@jsquash/png/decode";
 import pngEncode from "@jsquash/png/encode";
-import { getProductCodeSettings } from "./product-code-settings";
+import { getProductCodeSettings, isProductCodeOverlayEnabled } from "./product-code-settings";
 
 // ─── Detect format ──────────────────────────────────────────────
 
@@ -156,6 +156,9 @@ function delay(ms: number): Promise<void> {
 const MAX_ATTEMPTS = 4;
 
 export async function stampProductCodeOnFile(file: File, code: string): Promise<Blob> {
+  if (!isProductCodeOverlayEnabled()) {
+    return file;
+  }
   const buffer = await file.arrayBuffer();
   const asPng = isPng(buffer);
   const mime = asPng ? "image/png" : "image/jpeg";

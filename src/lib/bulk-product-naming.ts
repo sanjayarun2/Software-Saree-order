@@ -6,3 +6,14 @@ export function buildBulkProductName(namePrefix: string, stampedCode: string): s
   if (!code) return prefix;
   return `${prefix} ${code}`;
 }
+
+/** Direct website upload (no overlay): keep prefix; number items when there are several. */
+export function buildDirectBulkProductName(
+  namePrefix: string,
+  index: number,
+  total: number
+): string {
+  const prefix = namePrefix.trim() || "Product";
+  if (total <= 1) return prefix;
+  return `${prefix} ${index + 1}`;
+}
