@@ -12,7 +12,9 @@ import { resolveFromAddressForLabel } from "./default-from-address";
 import {
   ensurePdfFonts,
   setPdfAddressFont,
+  textHasTamil,
 } from "./pdf-tamil-font";
+import { shapeTamilForPdf } from "./pdf-tamil-shape";
 
 /** Options passed from fetchPdfSettingsForRendering; used for centre block and vertical position. */
 export type PdfRenderOptions = {
@@ -650,12 +652,13 @@ function getLeftColumnMaxTextWidth(): number {
   return LEFT_COL_W - ADDRESS_PADDING - EDGE_SAFE_GAP;
 }
 
-/** Break long unbroken tokens (e.g. Web order IDs) so jsPDF can wrap inside columns. */
+/** Break long unbroken ASCII tokens (e.g. Web order IDs). Never slice Tamil words. */
 function softBreakLongRuns(text: string, chunkSize = 14): string {
   return text
     .split(/(\s+)/)
     .map((part) => {
       if (part.trim().length === 0 || part.length <= chunkSize) return part;
+      if (textHasTamil(part)) return part;
       const chunks: string[] = [];
       for (let i = 0; i < part.length; i += chunkSize) {
         chunks.push(part.slice(i, i + chunkSize));
@@ -1012,7 +1015,7 @@ export function getPdfAddressLines(
   const paragraphs = raw.split(/\r?\n/);
   const lines: string[] = [];
   for (const p of paragraphs) {
-    const trimmed = softBreakLongRuns(p.trim());
+    const trimmed = softBreakLongRuns(shapeTamilForPdf(p.trim()));
     if (!trimmed) continue;
     const wrapped = doc.splitTextToSize(trimmed, maxW);
     lines.push(...wrapped);

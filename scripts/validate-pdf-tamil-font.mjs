@@ -67,6 +67,7 @@ check("pdf-tamil-font.ts exports ensure/resolve helpers", () => {
     "export function resolvePdfBodyFont",
     "export function setPdfAddressFont",
     "PDF_FONT_NOTO_TAMIL",
+    'Identity-H',
   ]) {
     assert.ok(src.includes(name), `missing ${name}`);
   }
@@ -78,7 +79,7 @@ check("jsPDF embeds NotoSansTamil for Tamil text", () => {
   ).toString("base64");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   doc.addFileToVFS("NotoSansTamil-Regular.ttf", regular);
-  doc.addFont("NotoSansTamil-Regular.ttf", "NotoSansTamil", "normal");
+  doc.addFont("NotoSansTamil-Regular.ttf", "NotoSansTamil", "normal", "Identity-H");
   doc.setFont("NotoSansTamil", "normal");
   doc.setFontSize(12);
   doc.text("சுகுமார்", 10, 20);

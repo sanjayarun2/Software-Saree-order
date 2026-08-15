@@ -50,9 +50,9 @@ export function ensurePdfFonts(doc: JsPdfFontDoc): void {
     const already = list && Object.keys(list).some((k) => /notosanstamil/i.test(k));
     if (!already) {
       doc.addFileToVFS(VFS_REGULAR, NOTO_SANS_TAMIL_REGULAR_BASE64);
-      doc.addFont(VFS_REGULAR, PDF_FONT_NOTO_TAMIL, "normal");
+      doc.addFont(VFS_REGULAR, PDF_FONT_NOTO_TAMIL, "normal", "Identity-H");
       doc.addFileToVFS(VFS_BOLD, NOTO_SANS_TAMIL_BOLD_BASE64);
-      doc.addFont(VFS_BOLD, PDF_FONT_NOTO_TAMIL, "bold");
+      doc.addFont(VFS_BOLD, PDF_FONT_NOTO_TAMIL, "bold", "Identity-H");
     }
     registeredDocs.add(doc as object);
   } catch (e) {
