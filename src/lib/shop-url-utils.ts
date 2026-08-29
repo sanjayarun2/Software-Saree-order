@@ -1,11 +1,15 @@
-import { DEFAULT_VELO_WEBSITE_BASE_URL } from "./api-settings-supabase";
+/** Hosts that must never be used as a silent fallback (retired / disabled shops). */
+const BLOCKED_LEGACY_HOSTS = new Set([
+  "sakthi-textiles-shop.vercel.app",
+]);
+
+export const MISSING_SHOP_URL_MESSAGE =
+  "Add your website URL in Settings → API (e.g. https://www.your-shop.com).";
 
 /** Normalize storefront origin: trim, force scheme, drop trailing slash and query/hash. */
-export function normalizeShopBaseUrl(
-  input: string,
-  fallback = DEFAULT_VELO_WEBSITE_BASE_URL
-): string {
-  let raw = (input || "").trim() || fallback;
+export function tryNormalizeShopBaseUrl(input: string | null | undefined): string | null {
+  let raw = (input || "").trim();
+  if (!raw) return null;
 
   if (!/^https?:\/\//i.test(raw)) {
     raw = `https://${raw.replace(/^\/+/, "")}`;
@@ -13,14 +17,30 @@ export function normalizeShopBaseUrl(
 
   try {
     const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return normalizeShopBaseUrl(fallback, fallback);
-    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase();
+    if (!host || BLOCKED_LEGACY_HOSTS.has(host)) return null;
     const path = url.pathname.replace(/\/+$/, "");
-    return `${url.origin}${path}`;
+    return `${url.origin}${path === "/" ? "" : path}`;
   } catch {
-    return normalizeShopBaseUrl(fallback, fallback);
+    return null;
   }
+}
+
+/**
+ * Normalize a shop base URL. Returns "" when missing/invalid —
+ * never invents a default shop hostname.
+ */
+export function normalizeShopBaseUrl(input: string | null | undefined): string {
+  return tryNormalizeShopBaseUrl(input) ?? "";
+}
+
+export function requireShopBaseUrl(input: string | null | undefined): string {
+  const url = tryNormalizeShopBaseUrl(input);
+  if (!url) {
+    throw new Error(MISSING_SHOP_URL_MESSAGE);
+  }
+  return url;
 }
 
 export function encodeShopPathSegment(value: string): string {

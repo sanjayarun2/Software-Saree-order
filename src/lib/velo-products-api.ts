@@ -115,7 +115,7 @@ async function getPrimaryIntegration(userId: string): Promise<ApiIntegrationRow>
   const row = await getPrimaryEnabledIntegration(userId);
   if (!row) {
     throw new VeloProductsApiError(
-      "No API key configured. Add your Velo API key in Settings → API Settings."
+      "No API connection configured. Add your website URL and Velo API key in Settings → API."
     );
   }
   return row;

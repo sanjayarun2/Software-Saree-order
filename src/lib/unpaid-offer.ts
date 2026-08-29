@@ -175,10 +175,9 @@ export function mobileToWhatsAppDigits(
 
 function friendlyShopPlace(shopBaseUrl: string): string | null {
   try {
-    const host = new URL(normalizeShopBaseUrl(shopBaseUrl)).hostname.replace(
-      /^www\./i,
-      ""
-    );
+    const base = normalizeShopBaseUrl(shopBaseUrl);
+    if (!base) return null;
+    const host = new URL(base).hostname.replace(/^www\./i, "");
     return host || null;
   } catch {
     return null;

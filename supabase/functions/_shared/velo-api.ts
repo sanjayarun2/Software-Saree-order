@@ -24,9 +24,15 @@ export type VeloOrdersResponse = {
 
 export function normalizeBaseUrl(url: string): string {
   let raw = (url || "").trim();
-  if (!raw) return "https://sakthi-textiles-shop.vercel.app";
+  if (!raw) return "";
   if (!/^https?:\/\//i.test(raw)) {
     raw = `https://${raw.replace(/^\/+/, "")}`;
+  }
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    if (host === "sakthi-textiles-shop.vercel.app") return "";
+  } catch {
+    return "";
   }
   return raw.replace(/\/$/, "");
 }

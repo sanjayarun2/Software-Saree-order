@@ -1,8 +1,5 @@
-import {
-  DEFAULT_VELO_WEBSITE_BASE_URL,
-  getPrimaryEnabledIntegration,
-} from "./api-settings-supabase";
-import { normalizeShopBaseUrl } from "./shop-url-utils";
+import { getPrimaryEnabledIntegration } from "./api-settings-supabase";
+import { tryNormalizeShopBaseUrl } from "./shop-url-utils";
 
 const CACHE_MS = 60_000;
 const cache = new Map<string, { url: string; at: number }>();
@@ -15,6 +12,7 @@ export function invalidateVeloShopBaseUrlCache(userId?: string): void {
 /**
  * Storefront origin for customer share links.
  * Uses the same enabled Velo integration (with API key) as product API calls.
+ * Returns "" when the user has not configured a website URL yet.
  */
 export async function getVeloShopBaseUrl(
   userId: string,
@@ -26,8 +24,7 @@ export async function getVeloShopBaseUrl(
   }
 
   const row = await getPrimaryEnabledIntegration(userId);
-  const raw = row?.api_base_url?.trim() || DEFAULT_VELO_WEBSITE_BASE_URL;
-  const url = normalizeShopBaseUrl(raw);
+  const url = tryNormalizeShopBaseUrl(row?.api_base_url) ?? "";
   cache.set(userId, { url, at: Date.now() });
   return url;
 }

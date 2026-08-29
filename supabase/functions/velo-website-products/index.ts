@@ -1,11 +1,30 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const DEFAULT_BASE = "https://sakthi-textiles-shop.vercel.app";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MISSING_URL =
+  "Add your website URL in Settings → API (e.g. https://www.your-shop.com).";
+
+const BLOCKED_LEGACY_HOSTS = new Set(["sakthi-textiles-shop.vercel.app"]);
+
+function normalizeBaseUrl(input: string | null | undefined): string | null {
+  let raw = (input || "").trim();
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw.replace(/^\/+/, "")}`;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase();
+    if (!host || BLOCKED_LEGACY_HOSTS.has(host)) return null;
+    const path = url.pathname.replace(/\/+$/, "");
+    return `${url.origin}${path === "/" ? "" : path}`;
+  } catch {
+    return null;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -43,7 +62,7 @@ Deno.serve(async (req) => {
     };
 
     let apiKey = "";
-    let apiBaseUrl = DEFAULT_BASE;
+    let apiBaseUrl = "";
 
     if (body.integration_id) {
       const admin = createClient(
@@ -63,21 +82,25 @@ Deno.serve(async (req) => {
       }
 
       apiKey = integration.api_key?.trim() ?? "";
-      apiBaseUrl = integration.api_base_url?.trim() || DEFAULT_BASE;
+      apiBaseUrl = integration.api_base_url?.trim() ?? "";
     } else {
       apiKey = body.api_key?.trim() ?? "";
-      apiBaseUrl = body.api_base_url?.trim() || DEFAULT_BASE;
+      apiBaseUrl = body.api_base_url?.trim() ?? "";
     }
 
     if (!apiKey) {
       return json({ ok: false, error: "API key is required" }, 400);
     }
 
+    const base = normalizeBaseUrl(apiBaseUrl);
+    if (!base) {
+      return json({ ok: false, error: MISSING_URL }, 400);
+    }
+
     if (!body.action || !body.requestId) {
       return json({ ok: false, error: "action and requestId are required" }, 400);
     }
 
-    const base = apiBaseUrl.replace(/\/$/, "");
     const url = `${base}/api/velo/products`;
 
     const veloRes = await fetch(url, {
@@ -111,7 +134,6 @@ Deno.serve(async (req) => {
         veloRes.status === 413
           ? `Request payload too large (413). ${baseMessage}`
           : baseMessage;
-      // Always HTTP 200 so supabase.functions.invoke returns the real error body.
       return new Response(
         JSON.stringify({
           ok: false,

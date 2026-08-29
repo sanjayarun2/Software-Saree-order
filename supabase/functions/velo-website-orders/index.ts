@@ -1,18 +1,37 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const DEFAULT_BASE = "https://sakthi-textiles-shop.vercel.app";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
 
+const MISSING_URL =
+  "Add your website URL in Settings → API (e.g. https://www.your-shop.com).";
+
+const BLOCKED_LEGACY_HOSTS = new Set(["sakthi-textiles-shop.vercel.app"]);
+
 const ALLOWED_PAYMENT_STATUSES = new Set([
   "paid",
   "unpaid",
   "no_payment_required",
 ]);
+
+function normalizeBaseUrl(input: string | null | undefined): string | null {
+  let raw = (input || "").trim();
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw.replace(/^\/+/, "")}`;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase();
+    if (!host || BLOCKED_LEGACY_HOSTS.has(host)) return null;
+    const path = url.pathname.replace(/\/+$/, "");
+    return `${url.origin}${path === "/" ? "" : path}`;
+  } catch {
+    return null;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -44,13 +63,9 @@ Deno.serve(async (req) => {
       integration_id?: string;
       since?: string;
       limit?: number;
-      /** Single order id → GET /api/velo/orders/:orderId */
       order_id?: string;
-      /** Optional: paid | unpaid | no_payment_required */
       payment_status?: string;
-      /** Optional: asc (default) | desc */
       sort?: string;
-      /** Optional upper bound ISO for sort=desc pagination */
       before?: string;
       test_only?: boolean;
       api_key?: string;
@@ -58,7 +73,7 @@ Deno.serve(async (req) => {
     };
 
     let apiKey = "";
-    let apiBaseUrl = DEFAULT_BASE;
+    let apiBaseUrl = "";
 
     if (body.integration_id) {
       const admin = createClient(
@@ -78,17 +93,21 @@ Deno.serve(async (req) => {
       }
 
       apiKey = integration.api_key?.trim() ?? "";
-      apiBaseUrl = integration.api_base_url?.trim() || DEFAULT_BASE;
+      apiBaseUrl = integration.api_base_url?.trim() ?? "";
     } else {
       apiKey = body.api_key?.trim() ?? "";
-      apiBaseUrl = body.api_base_url?.trim() || DEFAULT_BASE;
+      apiBaseUrl = body.api_base_url?.trim() ?? "";
     }
 
     if (!apiKey) {
       return json({ error: "API key is required" }, 400);
     }
 
-    const base = apiBaseUrl.replace(/\/$/, "");
+    const base = normalizeBaseUrl(apiBaseUrl);
+    if (!base) {
+      return json({ error: MISSING_URL }, 400);
+    }
+
     const orderId = body.order_id?.trim() || "";
     const paymentStatus = body.payment_status?.trim().toLowerCase() || "";
     if (paymentStatus && !ALLOWED_PAYMENT_STATUSES.has(paymentStatus)) {
@@ -138,8 +157,16 @@ Deno.serve(async (req) => {
       const message =
         typeof payload === "object" && payload && "message" in payload
           ? String((payload as { message: string }).message)
-          : `Velo API returned ${veloRes.status}`;
-      return json({ error: message }, veloRes.status);
+          : typeof payload === "string" && payload.trim()
+            ? payload.trim().slice(0, 200)
+            : `Velo API returned ${veloRes.status}`;
+      return new Response(
+        JSON.stringify({ error: message, status: veloRes.status }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     return new Response(JSON.stringify(payload), {

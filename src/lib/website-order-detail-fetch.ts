@@ -3,7 +3,7 @@ import {
 } from "./api-settings-supabase";
 import type { WebsiteOrderLineItem } from "./db-types";
 import { lineItemsFromVeloApiItems } from "./website-order-line-items";
-import { normalizeShopBaseUrl } from "./shop-url-utils";
+import { requireShopBaseUrl } from "./shop-url-utils";
 import { supabase } from "./supabase";
 
 const VELO_PROXY_FUNCTION = "velo-website-orders";
@@ -106,7 +106,7 @@ async function fetchOrderDetailDirect(
   apiBaseUrl: string,
   externalOrderId: string
 ): Promise<WebsiteOrderDetailSnapshot | null> {
-  const base = normalizeShopBaseUrl(apiBaseUrl);
+  const base = requireShopBaseUrl(apiBaseUrl);
   const url = `${base}/api/velo/orders/${encodeURIComponent(externalOrderId)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);

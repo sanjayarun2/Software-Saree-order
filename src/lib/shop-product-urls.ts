@@ -7,7 +7,7 @@ import {
 import {
   encodeShopPathSegment,
   isUsableShopProductId,
-  normalizeShopBaseUrl,
+  requireShopBaseUrl,
 } from "./shop-url-utils";
 
 export type ShopProductLinkInput = {
@@ -70,7 +70,7 @@ export function buildShopCartUrl(
   lines: ShopCartLineInput[]
 ): string {
   const normalized = normalizeCartLines(lines);
-  const base = normalizeShopBaseUrl(shopBaseUrl);
+  const base = requireShopBaseUrl(shopBaseUrl);
   const itemsValue = normalized
     .map((l) => `${l.productId}:${l.quantity}`)
     .join(",");
@@ -88,7 +88,7 @@ export function buildShopProductLinks(input: ShopProductLinkInput): ShopProductL
     throw new Error("A valid product ID is required to build shop links.");
   }
 
-  const base = normalizeShopBaseUrl(input.shopBaseUrl);
+  const base = requireShopBaseUrl(input.shopBaseUrl);
   const slug = resolveSlug(input);
   const cartUrl = buildShopCartUrl(base, [{ productId, quantity: 1 }]);
 

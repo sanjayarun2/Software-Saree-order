@@ -1,9 +1,10 @@
 import { supabase } from "./supabase";
-import { normalizeShopBaseUrl } from "./shop-url-utils";
+import {
+  MISSING_SHOP_URL_MESSAGE,
+  tryNormalizeShopBaseUrl,
+} from "./shop-url-utils";
 
 export type ApiProvider = "velo_website";
-
-export const DEFAULT_VELO_WEBSITE_BASE_URL = "https://sakthi-textiles-shop.vercel.app";
 
 export interface ApiIntegrationRow {
   id: string;
@@ -17,6 +18,10 @@ export interface ApiIntegrationRow {
   last_sync_at: string | null;
   last_error: string | null;
   updated_at: string;
+}
+
+function hasUsableWebsiteUrl(row: ApiIntegrationRow): boolean {
+  return Boolean(tryNormalizeShopBaseUrl(row.api_base_url));
 }
 
 export async function listApiIntegrations(userId: string): Promise<ApiIntegrationRow[]> {
@@ -43,7 +48,7 @@ export async function getEnabledApiIntegrations(userId: string): Promise<ApiInte
     console.warn("[API Settings] getEnabledApiIntegrations error:", error);
     return [];
   }
-  return (data as ApiIntegrationRow[]) ?? [];
+  return ((data as ApiIntegrationRow[]) ?? []).filter(hasUsableWebsiteUrl);
 }
 
 /** Same integration used for Velo API calls and storefront share links. */
@@ -51,7 +56,7 @@ export async function getPrimaryEnabledIntegration(
   userId: string
 ): Promise<ApiIntegrationRow | null> {
   const rows = await getEnabledApiIntegrations(userId);
-  const withKey = rows.filter((r) => r.api_key.trim().length > 0);
+  const withKey = rows.filter((r) => r.api_key.trim().length > 0 && hasUsableWebsiteUrl(r));
   return withKey.find((i) => i.provider === "velo_website") ?? withKey[0] ?? null;
 }
 
@@ -69,14 +74,22 @@ export async function upsertApiIntegration(
     last_error?: string | null;
   }
 ): Promise<{ data: ApiIntegrationRow | null; error: Error | null }> {
+  const apiBaseUrl = tryNormalizeShopBaseUrl(row.api_base_url);
+  if (!apiBaseUrl) {
+    return { data: null, error: new Error(MISSING_SHOP_URL_MESSAGE) };
+  }
+
+  const apiKey = row.api_key.trim();
+  if (!apiKey) {
+    return { data: null, error: new Error("API key is required.") };
+  }
+
   const payload = {
     user_id: userId,
     provider: row.provider ?? "velo_website",
     label: row.label.trim() || "Velo Website",
-    api_key: row.api_key.trim(),
-    api_base_url: normalizeShopBaseUrl(
-      row.api_base_url?.trim() || DEFAULT_VELO_WEBSITE_BASE_URL
-    ),
+    api_key: apiKey,
+    api_base_url: apiBaseUrl,
     enabled: row.enabled ?? true,
     last_since: row.last_since ?? null,
     last_sync_at: row.last_sync_at ?? null,

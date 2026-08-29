@@ -75,6 +75,11 @@ export function ShareCartPanel({
     setError(null);
     try {
       const base = shopBaseUrl || (await getVeloShopBaseUrl(userId, { force: true }));
+      if (!base.trim()) {
+        throw new Error(
+          t("Add your website URL in Settings → API (e.g. https://www.your-shop.com).")
+        );
+      }
       const result = await shareCustomerShopCart({
         lines,
         shopBaseUrl: base,

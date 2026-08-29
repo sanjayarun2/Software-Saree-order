@@ -4,13 +4,13 @@ import {
   type ServiceAccount,
 } from "./_shared/fcm.ts";
 
-const DEFAULT_SHOP_BASE = "https://sakthi-textiles-shop.vercel.app";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-velo-push-secret",
 };
+
+const BLOCKED_LEGACY_HOSTS = new Set(["sakthi-textiles-shop.vercel.app"]);
 
 type PushRequest = {
   shopBaseUrl?: string;
@@ -42,7 +42,16 @@ Deno.serve(async (req) => {
       return json({ error: "orderId is required" }, 400);
     }
 
-    const shopBase = normalizeShopBaseUrl(body.shopBaseUrl ?? DEFAULT_SHOP_BASE);
+    const shopBase = normalizeShopBaseUrl(body.shopBaseUrl);
+    if (!shopBase) {
+      return json(
+        {
+          error:
+            "shopBaseUrl is required (your live shop origin, e.g. https://www.your-shop.com).",
+        },
+        400
+      );
+    }
     const customerName = body.customerName?.trim() || "Customer";
     const quantity =
       typeof body.quantity === "number" && body.quantity >= 1
@@ -70,7 +79,7 @@ Deno.serve(async (req) => {
           .filter(
             (row) =>
               row.enabled !== false &&
-              normalizeShopBaseUrl(row.api_base_url ?? DEFAULT_SHOP_BASE) === shopBase
+              normalizeShopBaseUrl(row.api_base_url) === shopBase
           )
           .map((row) => row.user_id as string)
           .filter(Boolean)
@@ -153,17 +162,21 @@ Deno.serve(async (req) => {
   }
 });
 
-function normalizeShopBaseUrl(input: string): string {
-  let raw = (input || "").trim() || DEFAULT_SHOP_BASE;
+function normalizeShopBaseUrl(input: string | null | undefined): string | null {
+  let raw = (input || "").trim();
+  if (!raw) return null;
   if (!/^https?:\/\//i.test(raw)) {
     raw = `https://${raw.replace(/^\/+/, "")}`;
   }
   try {
     const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase();
+    if (!host || BLOCKED_LEGACY_HOSTS.has(host)) return null;
     const path = url.pathname.replace(/\/+$/, "");
-    return `${url.origin}${path}`;
+    return `${url.origin}${path === "/" ? "" : path}`;
   } catch {
-    return DEFAULT_SHOP_BASE;
+    return null;
   }
 }
 

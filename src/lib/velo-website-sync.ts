@@ -2,7 +2,6 @@ import type { Order, OrderInsert } from "./db-types";
 import { normalizeWebsitePaymentStatus, isPaidOrderPayment } from "./order-payment-status";
 import {
   type ApiIntegrationRow,
-  DEFAULT_VELO_WEBSITE_BASE_URL,
   getEnabledApiIntegrations,
   updateApiIntegrationSyncState,
 } from "./api-settings-supabase";
@@ -11,7 +10,11 @@ import { createOrder, getSuggestions, updateOrder } from "./order-service";
 import { hydrateDeletedExternalOrders } from "./deleted-website-orders";
 import { buildSuggestionsFromOrders } from "./order-suggestions";
 import { supabase } from "./supabase";
-import { normalizeShopBaseUrl } from "./shop-url-utils";
+import {
+  MISSING_SHOP_URL_MESSAGE,
+  requireShopBaseUrl,
+  tryNormalizeShopBaseUrl,
+} from "./shop-url-utils";
 import {
   notifyNewWebsiteOrders,
   type ImportedWebsiteOrderSummary,
@@ -124,7 +127,7 @@ function formatFetchError(err: unknown): string {
 }
 
 function normalizeBaseUrl(url: string): string {
-  return normalizeShopBaseUrl(url || DEFAULT_VELO_WEBSITE_BASE_URL);
+  return requireShopBaseUrl(url);
 }
 
 function itemName(item: VeloLineItem): string {
@@ -428,7 +431,10 @@ export async function testVeloWebsiteConnection(
   const key = apiKey.trim();
   if (!key) return { ok: false, error: "API key is required." };
 
-  const base = normalizeBaseUrl(apiBaseUrl ?? DEFAULT_VELO_WEBSITE_BASE_URL);
+  const base = tryNormalizeShopBaseUrl(apiBaseUrl);
+  if (!base) {
+    return { ok: false, error: MISSING_SHOP_URL_MESSAGE };
+  }
 
   try {
     const data = await fetchVeloOrdersViaProxy({

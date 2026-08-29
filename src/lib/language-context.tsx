@@ -227,6 +227,13 @@ const TA: Record<string, string> = {
     "டெம்ப்ளேட்டில் ஒரு body மாறி {{1}} இருக்க வேண்டும் (ஆர்டர் சுருக்கம்).",
   "Velo API Key": "Velo API கீ",
   "API Base URL": "API Base URL",
+  "Website URL": "வெப்சைட் URL",
+  "Enter your live shop website. No default is assumed.":
+    "உங்கள் நேரடி கடை வெப்சைட்டை உள்ளிடவும். இயல்புநிலை இல்லை.",
+  "Add your website URL in Settings → API (e.g. https://www.your-shop.com).":
+    "Settings → API-ல் உங்கள் வெப்சைட் URL-ஐ சேர்க்கவும் (எ.கா. https://www.your-shop.com).",
+  "No API connection configured. Add your website URL and Velo API key in Settings → API.":
+    "API இணைப்பு இல்லை. Settings → API-ல் வெப்சைட் URL மற்றும் Velo API கீ சேர்க்கவும்.",
   "Test Connection": "இணைப்பை சோதிக்கவும்",
   "Testing…": "சோதிக்கப்படுகிறது…",
   "Connection successful.": "இணைப்பு வெற்றி.",

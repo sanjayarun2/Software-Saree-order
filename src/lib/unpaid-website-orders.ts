@@ -8,7 +8,10 @@ import {
   peekUnpaidWebsiteOrdersCache,
   writeUnpaidWebsiteOrdersCache,
 } from "./unpaid-orders-cache";
-import { normalizeShopBaseUrl } from "./shop-url-utils";
+import {
+  requireShopBaseUrl,
+  tryNormalizeShopBaseUrl,
+} from "./shop-url-utils";
 import { supabase } from "./supabase";
 import { lineItemsFromVeloApiItems } from "./website-order-line-items";
 
@@ -184,7 +187,8 @@ export function uniqueShopIntegrations(
   for (const row of rows) {
     const key = row.api_key?.trim();
     if (!key) continue;
-    const base = normalizeShopBaseUrl(row.api_base_url);
+    const base = tryNormalizeShopBaseUrl(row.api_base_url);
+    if (!base) continue;
     const dedupeKey = `${base}|${key}`;
     if (!map.has(dedupeKey)) map.set(dedupeKey, row);
   }
@@ -218,7 +222,7 @@ function mapShopOrder(
     addressLines: formatAddressLines(raw.address ?? null),
     items: lineItemsFromVeloApiItems(raw.items),
     shopLabel: integration.label?.trim() || "Website",
-    shopBaseUrl: normalizeShopBaseUrl(integration.api_base_url),
+    shopBaseUrl: requireShopBaseUrl(integration.api_base_url),
     integrationId: integration.id,
   };
 }
@@ -259,7 +263,7 @@ async function fetchPageViaProxy(opts: FetchPageOpts): Promise<ShopListResponse>
 }
 
 async function fetchPageDirect(opts: FetchPageOpts): Promise<ShopListResponse> {
-  const base = normalizeShopBaseUrl(opts.integration.api_base_url);
+  const base = requireShopBaseUrl(opts.integration.api_base_url);
   const params = new URLSearchParams({
     since: opts.since,
     limit: String(opts.limit),

@@ -7,13 +7,16 @@ import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
-  DEFAULT_VELO_WEBSITE_BASE_URL,
   deleteApiIntegration,
   listApiIntegrations,
   upsertApiIntegration,
   type ApiIntegrationRow,
 } from "@/lib/api-settings-supabase";
 import { invalidateVeloShopBaseUrlCache } from "@/lib/shop-base-url";
+import {
+  MISSING_SHOP_URL_MESSAGE,
+  tryNormalizeShopBaseUrl,
+} from "@/lib/shop-url-utils";
 import { pollVeloWebsiteOrders, testVeloWebsiteConnection } from "@/lib/velo-website-sync";
 import { ProductSyncLogsPanel } from "@/components/settings/ProductSyncLogsPanel";
 
@@ -32,7 +35,7 @@ export default function ApiSettingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [label, setLabel] = useState("Velo Website");
   const [apiKey, setApiKey] = useState("");
-  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_VELO_WEBSITE_BASE_URL);
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,7 +64,7 @@ export default function ApiSettingsPage() {
     setEditingId(null);
     setLabel("Velo Website");
     setApiKey("");
-    setApiBaseUrl(DEFAULT_VELO_WEBSITE_BASE_URL);
+    setApiBaseUrl("");
     setEnabled(true);
     setShowKey(false);
   };
@@ -70,7 +73,7 @@ export default function ApiSettingsPage() {
     setEditingId(row.id);
     setLabel(row.label);
     setApiKey(row.api_key);
-    setApiBaseUrl(row.api_base_url || DEFAULT_VELO_WEBSITE_BASE_URL);
+    setApiBaseUrl(tryNormalizeShopBaseUrl(row.api_base_url) ?? "");
     setEnabled(row.enabled);
     setError(null);
     setInfo(null);
@@ -87,18 +90,24 @@ export default function ApiSettingsPage() {
       return;
     }
 
+    const websiteUrl = tryNormalizeShopBaseUrl(apiBaseUrl);
+    if (!websiteUrl) {
+      setError(t(MISSING_SHOP_URL_MESSAGE));
+      return;
+    }
+
     setSaving(true);
     const { data, error: saveErr } = await upsertApiIntegration(user.id, {
       id: editingId ?? undefined,
       label,
       api_key: key,
-      api_base_url: apiBaseUrl,
+      api_base_url: websiteUrl,
       enabled,
     });
     setSaving(false);
 
     if (saveErr || !data) {
-      setError(t("Could not save API settings."));
+      setError(saveErr?.message ? t(saveErr.message) : t("Could not save API settings."));
       return;
     }
 
@@ -116,8 +125,13 @@ export default function ApiSettingsPage() {
       setError(t("API key is required."));
       return;
     }
+    const websiteUrl = tryNormalizeShopBaseUrl(apiBaseUrl);
+    if (!websiteUrl) {
+      setError(t(MISSING_SHOP_URL_MESSAGE));
+      return;
+    }
     setTesting(true);
-    const result = await testVeloWebsiteConnection(key, apiBaseUrl);
+    const result = await testVeloWebsiteConnection(key, websiteUrl);
     setTesting(false);
     if (!result.ok) {
       setError(result.error ?? t("Connection failed."));
@@ -247,13 +261,20 @@ export default function ApiSettingsPage() {
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t("API Base URL")}</span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t("Website URL")} <span className="text-red-500">*</span>
+              </span>
               <input
                 type="url"
                 value={apiBaseUrl}
                 onChange={(e) => setApiBaseUrl(e.target.value)}
+                required
                 className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                placeholder="https://www.your-shop.com"
               />
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                {t("Enter your live shop website. No default is assumed.")}
+              </span>
             </label>
 
             <label className="flex items-center gap-2">
