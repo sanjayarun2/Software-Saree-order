@@ -44,10 +44,10 @@ function dataUrlToFile(dataUrl: string, fileName: string): File | null {
 async function compressToDispatchPhoto(file: File): Promise<CapturedDispatchPhoto> {
   const compressed: CompressedImage = await compressImageFile(file, DISPATCH_PHOTO_PROFILE);
   const mime =
-    compressed.format === "png"
-      ? "image/png"
-      : compressed.format === "webp"
-        ? "image/webp"
+    compressed.format === "webp"
+      ? "image/webp"
+      : compressed.format === "gif"
+        ? "image/gif"
         : "image/jpeg";
   return {
     base64: compressed.base64,
