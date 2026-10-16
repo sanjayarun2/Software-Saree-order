@@ -57,9 +57,20 @@ export function sanitizePdfBrandText(text: string): string {
     .join("\n");
 }
 
-export function formatMobNoLine(digits10: string): string {
+/**
+ * One number → `Mob No : …`
+ * Two+ → `Mob No1 : …`, `Mob No2 : …`
+ */
+export function formatMobNoLine(
+  digits10: string,
+  index = 1,
+  total = 1
+): string {
   const d = digits10.replace(/\D/g, "").slice(-10);
-  return `Mob No : ${d}`;
+  const n = Math.max(1, Math.floor(index));
+  const count = Math.max(1, Math.floor(total));
+  if (count <= 1) return `Mob No : ${d}`;
+  return `Mob No${n} : ${d}`;
 }
 
 export function formatPincodeLine(pin6: string): string {
@@ -111,19 +122,30 @@ export function extractMobiles(text: string): string[] {
 }
 
 /**
- * Mobile for the TO `Mob No :` line.
- * Address text always wins (last occurrence — typically what was pasted).
- * Booked / fallback mobile is used only when the address has no number.
+ * Mobiles for TO `Mob No :` lines (unique, address order).
+ * Address text always wins. Fallback only when the address has no number.
+ */
+export function resolveToMobileDigitsList(
+  addressText: string,
+  fallbackMobile?: string | null
+): string[] {
+  const fromAddress = extractMobiles(addressText);
+  if (fromAddress.length > 0) return fromAddress;
+  const fallback = normalizeMobileDigits(fallbackMobile ?? "");
+  return fallback ? [fallback] : [];
+}
+
+/**
+ * Single mobile (last in address, else fallback) — booking / form helpers.
+ * Labels use {@link resolveToMobileDigitsList} so every number is kept.
  */
 export function resolveToMobileDigits(
   addressText: string,
   fallbackMobile?: string | null
 ): string | null {
-  const fromAddress = extractMobileOccurrences(addressText);
-  if (fromAddress.length > 0) {
-    return fromAddress[fromAddress.length - 1] ?? null;
-  }
-  return normalizeMobileDigits(fallbackMobile ?? "");
+  const all = resolveToMobileDigitsList(addressText, fallbackMobile);
+  if (all.length === 0) return null;
+  return all[all.length - 1] ?? null;
 }
 
 /**
@@ -162,7 +184,10 @@ export function resolveToPincodeDigits(addressText: string): string | null {
 function stripMobilesFromText(text: string): string {
   return text
     .replace(MOBILE_RE, " ")
-    .replace(/\b(?:Mob(?:ile)?|Ph(?:one)?|Tel)\s*(?:No\.?|Number|#)?\s*[:.\-]?\s*/gi, " ")
+    .replace(
+      /\b(?:Mob(?:ile)?|Ph(?:one)?|Tel|Cell)\s*(?:No\.?\d*|Number|#)?\s*[:.\-]?\s*/gi,
+      " "
+    )
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\(\s*\)/g, "")
     .trim();
@@ -237,7 +262,7 @@ export function stripWebOrderMentions(text: string): string {
  * - FROM: remove GSTIN
  * - TO: remove email, Web #, IN → India;
  *   `Pincode : …` on its own line (before Mob No) when a PIN is present — no duplicate label;
- *   `Mob No : …` as the final line when a mobile is present.
+ *   `Mob No1 : …`, `Mob No2 : …` per unique mobile (address order) when present.
  */
 export function sanitizePdfAddress(
   text: string,
@@ -257,7 +282,7 @@ export function sanitizePdfAddress(
 
   // TO
   raw = stripWebOrderMentions(raw);
-  const mobile = resolveToMobileDigits(raw, options?.fallbackMobile);
+  const mobiles = resolveToMobileDigitsList(raw, options?.fallbackMobile);
   const pincode = resolveToPincodeDigits(raw);
 
   const lines = raw
@@ -272,18 +297,18 @@ export function sanitizePdfAddress(
 
   const cleaned = lines.filter(
     (line) =>
-      !/^(?:e-?mail|mob(?:ile)?|ph(?:one)?|tel|web\s*#?|pin(?:\s*code)?|pincode)\s*[:.\-]*$/i.test(
+      !/^(?:e-?mail|mob(?:ile)?(?:\s*no\.?\d*)?|ph(?:one)?|tel|cell|web\s*#?|pin(?:\s*code)?|pincode)\s*[:.\-]*$/i.test(
         line
       )
   );
 
-  // Pincode line comes immediately before Mob No (never duplicate the phrase).
+  // Pincode then every Mob No (never drop the second number).
   if (pincode) {
     cleaned.push(formatPincodeLine(pincode));
   }
-  if (mobile) {
-    cleaned.push(formatMobNoLine(mobile));
-  }
+  mobiles.forEach((mobile, i) => {
+    cleaned.push(formatMobNoLine(mobile, i + 1, mobiles.length));
+  });
 
   return tidyLines(cleaned.join("\n"));
 }

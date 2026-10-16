@@ -13,6 +13,17 @@ import { BarcodeScannerModal } from "@/components/ui/BarcodeScannerModal";
 import FormatSelectionModal from "@/components/ui/FormatSelectionModal";
 import { PrintingStatusOverlay } from "@/components/ui/PrintingStatusOverlay";
 import { deferModalOpen } from "@/lib/use-backdrop-dismiss-guard";
+import {
+  captureDispatchPhotoFromFile,
+  captureDispatchPhotoNative,
+  isNativeDispatchPhotoCapture,
+  type CapturedDispatchPhoto,
+} from "@/lib/dispatch-photo-capture";
+import {
+  deleteDispatchPhoto,
+  saveDispatchPhoto,
+} from "@/lib/dispatch-photo-storage";
+import { resolveOrderDispatchWhatsAppUrl } from "@/lib/order-dispatch-whatsapp";
 import { downloadOrdersPdf, PdfAddressTooLongError } from "@/lib/pdf-utils";
 import { downloadOrdersPosPdf, printOrdersPosPdf } from "@/lib/pos-pdf-utils";
 import { useSearch } from "@/lib/search-context";
@@ -100,11 +111,14 @@ export default function OrdersPage() {
   const [pdfFallbackUrl, setPdfFallbackUrl] = useState<string | null>(null);
   const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null);
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [dispatchPhoto, setDispatchPhoto] = useState<CapturedDispatchPhoto | null>(null);
+  const [dispatchPhotoBusy, setDispatchPhotoBusy] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [showFormatModal, setShowFormatModal] = useState<"pdf" | "print" | null>(null);
   const [printing, setPrinting] = useState(false);
   const trackingInputRef = useRef<HTMLInputElement>(null);
+  const dispatchPhotoInputRef = useRef<HTMLInputElement>(null);
 
   /** Pending tab only: long-press an order to enter multi-select; then tap rows to toggle. PDF/Print use selection when active. */
   const [pendingSelectionActive, setPendingSelectionActive] = useState(false);
@@ -233,8 +247,8 @@ export default function OrdersPage() {
       lines.push("", "Tracking number:", consignment);
     }
 
-    const message = encodeURIComponent(lines.join("\n"));
-    const url = `https://wa.me/?text=${message}`;
+    const message = lines.join("\n");
+    const { url } = resolveOrderDispatchWhatsAppUrl(order, message);
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -496,6 +510,7 @@ export default function OrdersPage() {
     if (!confirm("Delete this order?")) return;
     try {
       await svcDeleteOrder(user.id, id);
+      await deleteDispatchPhoto(user.id, id);
       setOrders((prev) => prev.filter((o) => o.id !== id));
       void refreshPendingCount();
     } catch (e) {
@@ -512,7 +527,47 @@ export default function OrdersPage() {
     if (!user || order.status !== "PENDING") return;
     setDispatchOrder(order);
     setTrackingNumber("");
+    setDispatchPhoto(null);
     setTimeout(() => trackingInputRef.current?.focus(), 100);
+  };
+
+  const closeDispatchModal = () => {
+    if (dispatching) return;
+    setDispatchOrder(null);
+    setTrackingNumber("");
+    setDispatchPhoto(null);
+  };
+
+  const pickDispatchPhoto = async () => {
+    setError(null);
+    if (isNativeDispatchPhotoCapture()) {
+      setDispatchPhotoBusy(true);
+      try {
+        const shot = await captureDispatchPhotoNative();
+        if (shot) setDispatchPhoto(shot);
+      } catch (e) {
+        setError((e as Error).message || t("Could not add photo."));
+      } finally {
+        setDispatchPhotoBusy(false);
+      }
+      return;
+    }
+    dispatchPhotoInputRef.current?.click();
+  };
+
+  const onDispatchPhotoFile = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (dispatchPhotoInputRef.current) dispatchPhotoInputRef.current.value = "";
+    if (!file) return;
+    setDispatchPhotoBusy(true);
+    setError(null);
+    try {
+      setDispatchPhoto(await captureDispatchPhotoFromFile(file));
+    } catch (e) {
+      setError((e as Error).message || t("Could not add photo."));
+    } finally {
+      setDispatchPhotoBusy(false);
+    }
   };
 
   const confirmDispatch = async () => {
@@ -520,10 +575,19 @@ export default function OrdersPage() {
     setDispatching(true);
     const today = localDateIso();
     const tn = trackingNumber.trim() || null;
+    const orderId = dispatchOrder.id;
     try {
-      await svcUpdateOrderStatus(user.id, dispatchOrder.id, "DESPATCHED", today, tn);
-      setOrders((prev) => prev.filter((o) => o.id !== dispatchOrder.id));
+      await svcUpdateOrderStatus(user.id, orderId, "DESPATCHED", today, tn);
+      if (dispatchPhoto) {
+        await saveDispatchPhoto(user.id, orderId, {
+          base64: dispatchPhoto.base64,
+          mime: dispatchPhoto.mime,
+        });
+      }
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
       setDispatchOrder(null);
+      setTrackingNumber("");
+      setDispatchPhoto(null);
       void refreshPendingCount();
     } catch (e) {
       setError((e as Error).message || "Failed to mark as despatched");
@@ -537,6 +601,7 @@ export default function OrdersPage() {
     if (!confirm("Move this order back to Pending?")) return;
     try {
       await svcUpdateOrderStatus(user.id, order.id, "PENDING", null);
+      await deleteDispatchPhoto(user.id, order.id);
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
       void refreshPendingCount();
     } catch (e) {
@@ -869,7 +934,7 @@ export default function OrdersPage() {
       {dispatchOrder && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !dispatching) setDispatchOrder(null); }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeDispatchModal(); }}
         >
           <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-800">
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t("Move to Dispatch")}</h2>
@@ -918,10 +983,67 @@ export default function OrdersPage() {
               </div>
             </div>
 
+            <div className="mt-4">
+              <p className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                {t("Dispatch photo (optional)")}{" "}
+                <span className="font-normal text-slate-400">(optional)</span>
+              </p>
+              <input
+                ref={dispatchPhotoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => void onDispatchPhotoFile(e.target.files)}
+              />
+              {dispatchPhoto ? (
+                <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-2 dark:border-slate-600 dark:bg-slate-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={dispatchPhoto.previewUrl}
+                    alt=""
+                    className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {t("Photo added")}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={dispatching || dispatchPhotoBusy}
+                        onClick={() => void pickDispatchPhoto()}
+                        className="min-h-[40px] rounded-lg border border-gray-200 px-3 text-xs font-medium text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                      >
+                        {t("Retake")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={dispatching || dispatchPhotoBusy}
+                        onClick={() => setDispatchPhoto(null)}
+                        className="min-h-[40px] rounded-lg border border-red-200 px-3 text-xs font-medium text-red-600 dark:border-red-900 dark:text-red-300"
+                      >
+                        {t("Remove")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={dispatching || dispatchPhotoBusy}
+                  onClick={() => void pickDispatchPhoto()}
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  {dispatchPhotoBusy ? t("Working…") : t("Add photo")}
+                </button>
+              )}
+            </div>
+
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
-                onClick={() => setDispatchOrder(null)}
+                onClick={closeDispatchModal}
                 disabled={dispatching}
                 className="flex-1 min-h-[44px] rounded-xl border border-gray-200 bg-white font-medium text-slate-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
               >
@@ -930,7 +1052,7 @@ export default function OrdersPage() {
               <button
                 type="button"
                 onClick={confirmDispatch}
-                disabled={dispatching}
+                disabled={dispatching || dispatchPhotoBusy}
                 className="flex-1 min-h-[44px] rounded-xl bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50"
               >
                 {dispatching ? "Dispatching…" : "Dispatch"}

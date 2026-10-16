@@ -23,6 +23,10 @@ import {
 import { updateOrder } from "@/lib/order-service";
 import { useBackdropDismissGuard } from "@/lib/use-backdrop-dismiss-guard";
 import { formatOrderDateTimeIst } from "@/lib/order-datetime";
+import {
+  dispatchPhotoDataUrl,
+  getDispatchPhoto,
+} from "@/lib/dispatch-photo-storage";
 
 export type OrderDetailSheetProps = {
   open: boolean;
@@ -43,6 +47,7 @@ export type OrderDetailSheetProps = {
     despatchDate: string;
     courier: string;
     tracking: string;
+    dispatchPhoto: string;
     quantity: string;
     loading: string;
     webOrder: string;
@@ -211,6 +216,7 @@ export function OrderDetailSheet({
     src: string;
     alt: string;
   } | null>(null);
+  const [dispatchPhotoUrl, setDispatchPhotoUrl] = useState<string | null>(null);
 
   const parsed = useMemo(
     () => parseRecipientDetails(order?.recipient_details ?? ""),
@@ -232,12 +238,28 @@ export function OrderDetailSheet({
   }, [open, onClose]);
 
   useEffect(() => {
+    if (!open || !order || !userId || order.status !== "DESPATCHED") {
+      setDispatchPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void getDispatchPhoto(userId, order.id).then((rec) => {
+      if (cancelled) return;
+      setDispatchPhotoUrl(rec ? dispatchPhotoDataUrl(rec) : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, order, userId]);
+
+  useEffect(() => {
     if (!open || !order) {
       setLineItems([]);
       setExtraAddressLines([]);
       setExtraCustomerName("");
       setExtraMobile("");
       setPreviewPhoto(null);
+      setDispatchPhotoUrl(null);
       return;
     }
 
@@ -554,6 +576,33 @@ export function OrderDetailSheet({
                     </dd>
                   </div>
                 ) : null}
+                {dispatchPhotoUrl ? (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      {labels.dispatchPhoto}
+                    </dt>
+                    <dd className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewPhoto({
+                            src: dispatchPhotoUrl,
+                            alt: labels.dispatchPhoto,
+                          })
+                        }
+                        className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-600"
+                        aria-label={labels.expandPhoto}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={dispatchPhotoUrl}
+                          alt={labels.dispatchPhoto}
+                          className="h-28 w-28 object-cover"
+                        />
+                      </button>
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </section>
 
@@ -628,6 +677,7 @@ export function orderDetailSheetLabels(t: (key: string) => string) {
     despatchDate: t("Despatch date"),
     courier: t("Courier Name"),
     tracking: t("Tracking number"),
+    dispatchPhoto: t("Dispatch photo"),
     quantity: t("Qty"),
     loading: t("Loading items…"),
     webOrder: t("Web"),

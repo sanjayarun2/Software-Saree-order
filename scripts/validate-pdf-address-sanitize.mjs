@@ -38,9 +38,12 @@ function sanitizePdfBrandText(text) {
     .join("\n");
 }
 
-function formatMobNoLine(digits10) {
+function formatMobNoLine(digits10, index = 1, total = 1) {
   const d = digits10.replace(/\D/g, "").slice(-10);
-  return `Mob No : ${d}`;
+  const n = Math.max(1, Math.floor(index));
+  const count = Math.max(1, Math.floor(total));
+  if (count <= 1) return `Mob No : ${d}`;
+  return `Mob No${n} : ${d}`;
 }
 
 function formatPincodeLine(pin6) {
@@ -77,11 +80,29 @@ function extractMobileOccurrences(text) {
   return found;
 }
 
-/** Address paste wins (last occurrence); booked/fallback only if address has none. */
+function extractMobiles(text) {
+  const found = [];
+  const seen = new Set();
+  for (const digits of extractMobileOccurrences(text)) {
+    if (!seen.has(digits)) {
+      seen.add(digits);
+      found.push(digits);
+    }
+  }
+  return found;
+}
+
+/** Address mobiles in order; booked/fallback only if address has none. */
+function resolveToMobileDigitsList(addressText, fallbackMobile) {
+  const fromAddress = extractMobiles(addressText);
+  if (fromAddress.length > 0) return fromAddress;
+  const fallback = normalizeMobileDigits(fallbackMobile ?? "");
+  return fallback ? [fallback] : [];
+}
+
 function resolveToMobileDigits(addressText, fallbackMobile) {
-  const fromAddress = extractMobileOccurrences(addressText);
-  if (fromAddress.length > 0) return fromAddress[fromAddress.length - 1];
-  return normalizeMobileDigits(fallbackMobile ?? "");
+  const all = resolveToMobileDigitsList(addressText, fallbackMobile);
+  return all.length ? all[all.length - 1] : null;
 }
 
 function extractPincodeOccurrences(text) {
@@ -109,7 +130,10 @@ function resolveToPincodeDigits(addressText) {
 function stripMobilesFromText(text) {
   return text
     .replace(MOBILE_RE, " ")
-    .replace(/\b(?:Mob(?:ile)?|Ph(?:one)?|Tel)\s*(?:No\.?|Number|#)?\s*[:.\-]?\s*/gi, " ")
+    .replace(
+      /\b(?:Mob(?:ile)?|Ph(?:one)?|Tel|Cell)\s*(?:No\.?\d*|Number|#)?\s*[:.\-]?\s*/gi,
+      " "
+    )
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\(\s*\)/g, "")
     .trim();
@@ -182,7 +206,7 @@ function sanitizePdfAddress(text, role, options = {}) {
   }
 
   raw = stripWebOrderMentions(raw);
-  const mobile = resolveToMobileDigits(raw, options.fallbackMobile);
+  const mobiles = resolveToMobileDigitsList(raw, options.fallbackMobile);
   const pincode = resolveToPincodeDigits(raw);
 
   const lines = raw
@@ -197,13 +221,15 @@ function sanitizePdfAddress(text, role, options = {}) {
 
   const cleaned = lines.filter(
     (line) =>
-      !/^(?:e-?mail|mob(?:ile)?|ph(?:one)?|tel|web\s*#?|pin(?:\s*code)?|pincode)\s*[:.\-]*$/i.test(
+      !/^(?:e-?mail|mob(?:ile)?(?:\s*no\.?\d*)?|ph(?:one)?|tel|cell|web\s*#?|pin(?:\s*code)?|pincode)\s*[:.\-]*$/i.test(
         line
       )
   );
 
   if (pincode) cleaned.push(formatPincodeLine(pincode));
-  if (mobile) cleaned.push(formatMobNoLine(mobile));
+  mobiles.forEach((mobile, i) =>
+    cleaned.push(formatMobNoLine(mobile, i + 1, mobiles.length))
+  );
   return tidyLines(cleaned.join("\n"));
 }
 
@@ -271,13 +297,64 @@ check("pasted address mobile wins over booked/fallback", () => {
   assert.ok(!/8888822222/.test(out));
 });
 
-check("last pasted mobile wins when address has old Mob No + new number", () => {
+check("two mobiles labeled Mob No1 and Mob No2", () => {
+  const out = sanitizePdfAddress(
+    "Anita\nChennai\nCell: 8888822222, 9999911111\n600001",
+    "to",
+    { fallbackMobile: "7777733333" }
+  );
+  const lines = out.split("\n");
+  const mobLines = lines.filter((l) => /^Mob No\d*\s*:/i.test(l));
+  assert.deepEqual(mobLines, ["Mob No1 : 8888822222", "Mob No2 : 9999911111"]);
+  assert.equal(lines[lines.length - 3], "Pincode : 600001");
+  assert.ok(!/7777733333/.test(out));
+});
+
+check("old Mob No + new number becomes Mob No1 and Mob No2", () => {
   const out = sanitizePdfAddress(
     "Anita\nChennai\nMob No : 8888822222\n9999911111",
     "to",
     { fallbackMobile: "7777733333" }
   );
-  assert.equal(out.split("\n").pop(), "Mob No : 9999911111");
+  const mobLines = out.split("\n").filter((l) => /^Mob No\d*\s*:/i.test(l));
+  assert.deepEqual(mobLines, ["Mob No1 : 8888822222", "Mob No2 : 9999911111"]);
+});
+
+check("Cell: number moves to Mob No and empty Cell title is dropped", () => {
+  const out = sanitizePdfAddress(
+    `Indhu
+40, S1 golden flats,
+Sundaram colony 2nd
+Street
+Selaiyur
+Chennai
+Cell: 9087011288
+600073`,
+    "to"
+  );
+  const lines = out.split("\n");
+  assert.ok(!lines.some((l) => /^Cell\s*:?\s*$/i.test(l)), `leftover Cell title: ${out}`);
+  assert.ok(!/\bCell\b/i.test(out), `Cell label must not remain: ${out}`);
+  assert.equal(lines[lines.length - 1], "Mob No : 9087011288");
+  assert.equal(lines[lines.length - 2], "Pincode : 600073");
+  assert.ok(out.includes("Indhu"));
+  assert.ok(out.includes("Selaiyur"));
+});
+
+check("Murugesan Cell: does not leave blank Cell: on label", () => {
+  const out = sanitizePdfAddress(
+    `Murugesan , 247,
+street , rettaiyurani ,
+Ramanathapuram ,
+tamilnadu
+Cell: 8220091932
+623534`,
+    "to"
+  );
+  assert.ok(!/^Cell\s*:?\s*$/im.test(out), `empty Cell remains:\n${out}`);
+  assert.ok(!/\bCell\b/i.test(out));
+  assert.equal(out.split("\n").pop(), "Mob No : 8220091932");
+  assert.ok(out.includes("Pincode : 623534"));
 });
 
 check("Velo TO builder has no Web # / Items and ends with Mob No", () => {
@@ -342,6 +419,14 @@ check("source exports Web/Velo helpers", () => {
   ]) {
     assert.ok(src.includes(`export function ${name}`), `missing ${name}`);
   }
+  assert.ok(src.includes("Tel|Cell"), "source must strip Cell labels with Mob/Phone/Tel");
+  assert.ok(src.includes("tel|cell|web"), "source must drop empty Cell: title lines");
+  assert.ok(src.includes("resolveToMobileDigitsList"), "must export multi-mobile helper");
+  assert.ok(
+    src.includes("formatMobNoLine(mobile, i + 1, mobiles.length)"),
+    "sanitize must pass mobile count for Mob No vs Mob No1/2"
+  );
+  assert.ok(src.includes("count <= 1"), "single mobile stays Mob No without number");
   const velo = readFileSync(
     resolve(__dirname, "../src/lib/velo-website-sync.ts"),
     "utf8"
@@ -382,11 +467,11 @@ check("PDF fit keeps Pincode + Mob No footer when over cap", () => {
   }
   function fit(wrapped, maxLines, maxW = 80) {
     if (wrapped.length <= maxLines) return wrapped;
-    const isMob = (l) => /^\(?\s*Mob No\s*:/i.test(String(l ?? "").trim());
+    const isMob = (l) => /^\(?\s*Mob No\d*\s*:/i.test(String(l ?? "").trim());
     const isPin = (l) => /^\(?\s*Pincode\s*:/i.test(String(l ?? "").trim());
     const footer = [];
     const body = [...wrapped];
-    if (body.length && isMob(body[body.length - 1])) footer.unshift(body.pop());
+    while (body.length && isMob(body[body.length - 1])) footer.unshift(body.pop());
     if (body.length && isPin(body[body.length - 1])) footer.unshift(body.pop());
     const split = (s) => {
       const out = [];
@@ -412,6 +497,15 @@ check("PDF fit keeps Pincode + Mob No footer when over cap", () => {
     return wrapped.slice(0, maxLines);
   }
 
+  assert.ok(
+    pdfSrc.includes("while (body.length && isMobNoLine"),
+    "fit must peel every trailing Mob No line"
+  );
+  assert.ok(
+    pdfSrc.includes("Mob No\\d*") || pdfSrc.includes("Mob No\\d*\\s*:"),
+    "fit must recognize Mob No1 / Mob No2"
+  );
+
   const longTo = [
     "A. Priyanga",
     "AMEYA FOOD COMPANY,",
@@ -421,12 +515,14 @@ check("PDF fit keeps Pincode + Mob No footer when over cap", () => {
     "Extra area line that forces overflow",
     "Another overflow line",
     "Pincode : 641402",
-    "Mob No : 9876543210",
+    "Mob No1 : 9876543210",
+    "Mob No2 : 9087011288",
   ];
-  const fitted = fit(longTo, 7);
-  assert.equal(fitted.length, 7);
-  assert.equal(fitted[fitted.length - 1], "Mob No : 9876543210");
-  assert.equal(fitted[fitted.length - 2], "Pincode : 641402");
+  const fitted = fit(longTo, 8);
+  assert.equal(fitted.length, 8);
+  assert.equal(fitted[fitted.length - 1], "Mob No2 : 9087011288");
+  assert.equal(fitted[fitted.length - 2], "Mob No1 : 9876543210");
+  assert.equal(fitted[fitted.length - 3], "Pincode : 641402");
   assert.ok(!fitted.some((l) => /\(Mob$/.test(l) || /^Mob$/.test(l)), "must not truncate mid Mob");
   assert.ok(
     !fitted.some((l) => /India\s*\(?\s*Mob/.test(l)),

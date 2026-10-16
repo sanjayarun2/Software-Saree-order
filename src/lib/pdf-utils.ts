@@ -608,7 +608,7 @@ export const LABEL_TO_ADDRESS_GAP_MM = 9;
 /** Minimum gap between center column edge and FROM/TO text (prevents column overlap). */
 const MIN_GAP_TO_CENTER_MM = 2;
 
-const MOB_NO_LINE_RE = /^\(?\s*Mob No\s*:/i;
+const MOB_NO_LINE_RE = /^\(?\s*Mob No\d*\s*:/i;
 const PINCODE_LINE_RE = /^\(?\s*Pincode\s*:/i;
 
 function isMobNoLine(line: string): boolean {
@@ -722,7 +722,8 @@ export function fitAddressLinesToColumn(
 
   const footer: string[] = [];
   const body = [...wrapped];
-  if (body.length && isMobNoLine(body[body.length - 1]!)) {
+  // Peel every trailing Mob No line (labels may have 2+ numbers).
+  while (body.length && isMobNoLine(body[body.length - 1]!)) {
     footer.unshift(body.pop()!);
   }
   if (body.length && isPincodeLine(body[body.length - 1]!)) {

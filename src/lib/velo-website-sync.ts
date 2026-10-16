@@ -582,7 +582,7 @@ async function importOrdersForIntegration(
         (/Web\s*#/i.test(existing.recipient_details ?? "") ||
           /(?:^|\n)---\s*(?:\n|$)/.test(existing.recipient_details ?? "") ||
           /^Items:$/m.test(existing.recipient_details ?? "") ||
-          (mobile && !/\(?\s*Mob No\s*:/i.test(existing.recipient_details ?? "")))
+          (mobile && !/\(?\s*Mob No\d*\s*:/i.test(existing.recipient_details ?? "")))
       ) {
         patches.recipient_details = cleanTo;
       }
